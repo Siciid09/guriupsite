@@ -5,24 +5,20 @@ import {
   getLatestHotels 
 }  from '../lib/data';
 import type { Property, Hotel } from '@/types';
-
+import Image from 'next/image';
 import Link from 'next/link';
 import { 
   Building, Home, LandPlot, Store, Hotel as HotelIcon, Presentation, Briefcase, ShoppingCart, University, Building2, Warehouse, Tent,
   MapPin, Wallet, Search,
   ShieldCheck, Zap, Award,
-  Download, ChevronDown
+  Download
 } from 'lucide-react';
 import ListingCard from '@/components/shared/ListingCard';
 
-
-// =======================================================================
-//  1. HERO SECTION
-// =======================================================================
 const Hero = () => (
     <section className="relative h-[70vh] min-h-[500px] flex items-center justify-center text-white text-center">
         <div className="absolute inset-0 bg-black">
-            <img src="https://images.unsplash.com/photo-1582407947304-fd86f028f716?q=80" className="w-full h-full object-cover opacity-40" alt="Beautiful home in Somalia" />
+            <Image src="https://images.unsplash.com/photo-1582407947304-fd86f028f716?q=80" fill className="object-cover opacity-40" alt="Beautiful home in Somalia" priority />
         </div>
         <div className="absolute inset-0 bg-gradient-to-t from-[#0164E5]/60 to-transparent"></div>
         <div className="relative z-10 px-6">
@@ -32,10 +28,6 @@ const Hero = () => (
     </section>
 );
 
-
-// =======================================================================
-//  2. MAIN FILTER
-// =======================================================================
 const MainFilter = () => (
   <div className="bg-white rounded-full shadow-lg p-3 lg:p-4 max-w-4xl mx-auto -mt-12 relative z-20">
     <div className="grid grid-cols-1 md:grid-cols-4 items-center gap-4">
@@ -47,10 +39,6 @@ const MainFilter = () => (
   </div>
 );
 
-
-// =======================================================================
-//  3. FIND BY TYPE SECTION (only colors changed)
-// =======================================================================
 const FindByType = () => {
   const types = [
     { name: 'Villa', icon: <Home /> },
@@ -73,7 +61,6 @@ const FindByType = () => {
         <h2 className="text-3xl font-bold text-[#0164E5] text-center mb-10">
           Find By Type
         </h2>
-
         <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-12 gap-4">
           {types.map((type) => (
             <Link
@@ -96,16 +83,10 @@ const FindByType = () => {
   );
 };
 
-
-
-// =======================================================================
-//  4. UNIFORM LISTING SECTION (4 CARDS)
-// =======================================================================
 const ListingSection = ({ title, listings, viewAllLink }: { title: string; listings: (Property | Hotel)[]; viewAllLink: string }) => (
   <section className="py-16">
     <div className="container mx-auto px-6">
       <h2 className="text-3xl font-bold text-black mb-8">{title}</h2>
-      {/* DESIGN UPDATE: Simple 4-card grid, no more "1+4" layout */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
         {listings.slice(0, 4).map((listing) => (
           <ListingCard key={listing.id} listing={listing} />
@@ -120,10 +101,6 @@ const ListingSection = ({ title, listings, viewAllLink }: { title: string; listi
   </section>
 );
 
-
-// =======================================================================
-//  5. HOW IT WORKS SECTION
-// =======================================================================
 const HowItWorks = () => (
   <section className="py-20 bg-white">
     <div className="container mx-auto px-6 text-center">
@@ -149,10 +126,6 @@ const HowItWorks = () => (
   </section>
 );
 
-
-// =======================================================================
-//  6. WHY CHOOSE GURIUP SECTION
-// =======================================================================
 const WhyChooseGuriUp = () => (
   <section className="py-20 bg-slate-50">
     <div className="container mx-auto px-6">
@@ -178,10 +151,6 @@ const WhyChooseGuriUp = () => (
   </section>
 );
 
-
-// =======================================================================
-//  7. LIST YOUR PROPERTY / HOTEL SECTION
-// =======================================================================
 const ListYourProperty = () => (
     <section className="py-20 bg-white">
       <div className="container mx-auto px-6">
@@ -207,10 +176,6 @@ const ListYourProperty = () => (
     </section>
 );
 
-
-// =======================================================================
-//  8. DOWNLOAD APP SECTION
-// =======================================================================
 const DownloadApp = () => (
   <section className="bg-[#0164E5] text-white">
     <div className="container mx-auto px-6 py-20 text-center">
@@ -224,18 +189,14 @@ const DownloadApp = () => (
   </section>
 );
 
-
-// =======================================================================
-//  9. FAQ SECTION
-// =======================================================================
 const FAQ = () => (
   <section className="py-20 bg-white">
     <div className="container mx-auto px-6 max-w-4xl">
       <h2 className="text-3xl font-bold text-black text-center mb-10">Frequently Asked Questions</h2>
       <div className="space-y-4">
         <div className="p-6 bg-slate-50 rounded-lg">
-          <h3 className="font-bold text-lg text-black">How do I contact an agent?</h3>
-          <p className="text-gray-600 mt-2">On each property's detail page, you will find a "Contact Agent" button which will allow you to send a message directly.</p>
+          <h3 className="font-bold text-lg text-black">{`How do I contact an agent?`}</h3>
+          <p className="text-gray-600 mt-2">{`On each property's detail page, you will find a "Contact Agent" button which will allow you to send a message directly.`}</p>
         </div>
         <div className="p-6 bg-slate-50 rounded-lg">
           <h3 className="font-bold text-lg text-black">Is GuriUp available in my city?</h3>
@@ -243,17 +204,13 @@ const FAQ = () => (
         </div>
         <div className="p-6 bg-slate-50 rounded-lg">
           <h3 className="font-bold text-lg text-black">How do I list my own property?</h3>
-          <p className="text-gray-600 mt-2">Click on the "List Your Property" button on our homepage to start the simple registration process for agents and property owners.</p>
+          <p className="text-gray-600 mt-2">{`Click on the "List Your Property" button on our homepage to start the simple registration process for agents and property owners.`}</p>
         </div>
       </div>
     </div>
   </section>
 );
 
-
-// =======================================================================
-//  10. MAIN HOMEPAGE COMPONENT
-// =======================================================================
 export default async function HomePage() {
   const [
     featuredProperties,
@@ -272,16 +229,10 @@ export default async function HomePage() {
       <Hero />
       <MainFilter />
       <FindByType />
-      
-      {/* Property Sections */}
       <div className="bg-slate-50"><ListingSection title="Featured Properties" listings={featuredProperties} viewAllLink="/properties" /></div>
       <div className="bg-white"><ListingSection title="Latest Properties" listings={latestProperties} viewAllLink="/properties" /></div>
-
-      {/* Hotel Sections */}
       <div className="bg-slate-50"><ListingSection title="Featured Hotels" listings={featuredHotels} viewAllLink="/hotels" /></div>
       <div className="bg-white"><ListingSection title="Latest Hotels" listings={latestHotels} viewAllLink="/hotels" /></div>
-      
-      {/* New Sections in Order */}
       <HowItWorks />
       <WhyChooseGuriUp />
       <ListYourProperty />

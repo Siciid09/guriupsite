@@ -8,38 +8,39 @@ import {
   doc,
   getDoc,
   orderBy,
-  Timestamp, // Import to check instance type
-  GeoPoint,   // Import to check instance type
+  Timestamp,
+  GeoPoint,
+  DocumentData,
+  QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import type { Property, Hotel, Room, Review, Agent } from '@/types';
 
-// UPDATED HELPER FUNCTION TO SERIALIZE FIREBASE-SPECIFIC TYPES
-const transformDoc = <T>(document: any): T => {
+// =======================================================================
+// HELPER FUNCTION TO TRANSFORM FIRESTORE DOCUMENTS
+// =======================================================================
+const transformDoc = <T>(document: QueryDocumentSnapshot<DocumentData>): T => {
   const data = document.data();
 
-  // Iterate over the data keys to find and convert special Firebase types
   for (const key in data) {
     if (data[key] instanceof Timestamp) {
-      // Convert Timestamp to a simple ISO date string
       data[key] = data[key].toDate().toISOString();
     }
     if (data[key] instanceof GeoPoint) {
-      // Convert GeoPoint to a plain object
       data[key] = {
         latitude: data[key].latitude,
         longitude: data[key].longitude,
       };
     }
-    // Handle nested objects recursively (important for 'location' field)
+    // Recursively check nested objects for GeoPoint
     if (typeof data[key] === 'object' && data[key] !== null) {
-        for (const nestedKey in data[key]) {
-            if (data[key][nestedKey] instanceof GeoPoint) {
-                data[key][nestedKey] = {
-                    latitude: data[key][nestedKey].latitude,
-                    longitude: data[key][nestedKey].longitude,
-                };
-            }
+      for (const nestedKey in data[key]) {
+        if (data[key][nestedKey] instanceof GeoPoint) {
+          data[key][nestedKey] = {
+            latitude: data[key][nestedKey].latitude,
+            longitude: data[key][nestedKey].longitude,
+          };
         }
+      }
     }
   }
 
@@ -49,8 +50,9 @@ const transformDoc = <T>(document: any): T => {
   } as T;
 };
 
-
-// --- PROPERTY FETCHING FUNCTIONS ---
+// =======================================================================
+// PROPERTY FUNCTIONS
+// =======================================================================
 export async function getFeaturedProperties(): Promise<Property[]> {
   const q = query(collection(db, 'property'), where('featured', '==', true), limit(5));
   const snapshot = await getDocs(q);
@@ -71,11 +73,16 @@ export async function getAllProperties(): Promise<Property[]> {
 export async function getPropertyBySlug(slug: string): Promise<Property | null> {
   const docRef = doc(db, 'property', slug);
   const docSnap = await getDoc(docRef);
-  return docSnap.exists() ? transformDoc<Property>(docSnap) : null;
+  return docSnap.exists() ? transformDoc<Property>(docSnap as QueryDocumentSnapshot<DocumentData>) : null;
 }
 
 export async function getRelatedProperties(property: Property): Promise<Property[]> {
-  const q = query(collection(db, 'property'), where('location.city', '==', property.location.city), where('id', '!=', property.id), limit(4));
+  const q = query(
+    collection(db, 'property'),
+    where('location.city', '==', property.location.city),
+    where('id', '!=', property.id),
+    limit(4)
+  );
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => transformDoc<Property>(doc));
 }
@@ -86,7 +93,9 @@ export async function getPropertyTypes(): Promise<string[]> {
   return Array.from(types);
 }
 
-// --- HOTEL FETCHING FUNCTIONS ---
+// =======================================================================
+// HOTEL FUNCTIONS
+// =======================================================================
 export async function getFeaturedHotels(): Promise<Hotel[]> {
   const q = query(collection(db, 'hotels'), where('featured', '==', true), limit(5));
   const snapshot = await getDocs(q);
@@ -107,10 +116,12 @@ export async function getAllHotels(): Promise<Hotel[]> {
 export async function getHotelBySlug(slug: string): Promise<Hotel | null> {
   const docRef = doc(db, 'hotels', slug);
   const docSnap = await getDoc(docRef);
-  return docSnap.exists() ? transformDoc<Hotel>(docSnap) : null;
+  return docSnap.exists() ? transformDoc<Hotel>(docSnap as QueryDocumentSnapshot<DocumentData>) : null;
 }
 
-// --- HOTEL SUB-COLLECTION FUNCTIONS ---
+// =======================================================================
+// HOTEL SUB-COLLECTION FUNCTIONS
+// =======================================================================
 export async function getHotelRooms(hotelId: string): Promise<Room[]> {
   const snapshot = await getDocs(collection(db, 'hotels', hotelId, 'rooms'));
   return snapshot.docs.map(doc => transformDoc<Room>(doc));
@@ -122,22 +133,25 @@ export async function getHotelReviews(hotelId: string): Promise<Review[]> {
   return snapshot.docs.map(doc => transformDoc<Review>(doc));
 }
 
-// --- AGENT FETCHING FUNCTIONS ---
+// =======================================================================
+// AGENT FUNCTIONS
+// =======================================================================
 export async function getAgentDetails(agentId: string): Promise<Agent | null> {
   const docRef = doc(db, 'agents', agentId);
   const docSnap = await getDoc(docRef);
-  return docSnap.exists() ? transformDoc<Agent>(docSnap) : null;
+  return docSnap.exists() ? transformDoc<Agent>(docSnap as QueryDocumentSnapshot<DocumentData>) : null;
 }
 
-// ... add this function to your existing data.ts file
-
+// =======================================================================
+// RELATED HOTELS
+// =======================================================================
 export async function getRelatedHotels(hotel: Hotel): Promise<Hotel[]> {
   const hotelsRef = collection(db, 'hotels');
   const q = query(
     hotelsRef,
     where('location.city', '==', hotel.location.city),
     where('id', '!=', hotel.id),
-    limit(4) // Fetch 4 related hotels
+    limit(4)
   );
   const querySnapshot = await getDocs(q);
   if (querySnapshot.empty) return [];
