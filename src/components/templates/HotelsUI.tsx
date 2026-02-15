@@ -8,7 +8,18 @@ import {
   CheckCircle, Star, ArrowRight, ShieldCheck, 
   Wifi, Coffee, Award
 } from 'lucide-react';
-import type { Hotel } from '@/types'; // Ensure this path matches your project
+
+// --- FIX: Define types locally to ensure 'isPro' exists ---
+interface Hotel {
+  id: string;
+  name: string;
+  pricePerNight: number;
+  images: string[];
+  location: any; // Flexible for string or object
+  rating: number;
+  planTier?: string;
+  isPro?: boolean; // <--- This fixes the build error
+}
 
 interface HotelsUIProps {
   featuredHotels: Hotel[];
