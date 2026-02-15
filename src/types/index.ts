@@ -13,6 +13,9 @@ export interface User {
 }
 
 export interface Agent {
+  phone: any;
+  id: any;
+  name: any;
   uid: string;
   displayName: string;
   email: string;
@@ -42,6 +45,7 @@ export interface Property {
   discountPrice?: number;
   featured: boolean;
   location: {
+    address: string;
     city: string;
     area: string;
     gpsCoordinates: string;

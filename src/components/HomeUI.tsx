@@ -16,10 +16,10 @@ interface Property {
   price: number;
   images: string[];
   location: LocationData | string;
-  bedrooms?: number;   // Added ?
-  bathrooms?: number;  // Added ?
-  area?: number;       // Added ?
-  status: string; 
+  bedrooms?: number;
+  bathrooms?: number;
+  area?: number;
+  status: string;
   isForSale: boolean;
   planTier?: 'free' | 'pro' | 'premium';
   agentVerified?: boolean;
@@ -45,10 +45,19 @@ interface HomeUIProps {
 const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
   const [isNavOpen, setIsNavOpen] = useState(false);
   const [filterTab, setFilterTab] = useState('buy');
+  const [favorites, setFavorites] = useState<string[]>([]);
 
   const toggleNav = () => {
     setIsNavOpen(!isNavOpen);
   };
+
+  // --- 1. LOAD FAVORITES FROM LOCAL STORAGE ---
+  useEffect(() => {
+    const savedFavs = localStorage.getItem('guriup_favorites');
+    if (savedFavs) {
+      setFavorites(JSON.parse(savedFavs));
+    }
+  }, []);
 
   // --- SCROLL ANIMATION OBSERVER ---
   useEffect(() => {
@@ -79,6 +88,45 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
     if (location.area) parts.push(location.area);
     if (location.city) parts.push(location.city);
     return parts.length > 0 ? parts.join(', ') : (location.address || 'Unknown Location');
+  };
+
+  // --- 2. FAVORITE LOGIC ---
+  const toggleFavorite = (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation(); // Prevent card click
+    
+    let newFavs;
+    if (favorites.includes(id)) {
+      newFavs = favorites.filter(favId => favId !== id);
+    } else {
+      newFavs = [...favorites, id];
+    }
+    setFavorites(newFavs);
+    localStorage.setItem('guriup_favorites', JSON.stringify(newFavs));
+  };
+
+  // --- 3. SHARE LOGIC ---
+  const handleShare = async (e: React.MouseEvent, title: string, path: string) => {
+    e.preventDefault();
+    e.stopPropagation(); // Prevent card click
+
+    const fullUrl = `${window.location.origin}${path}`;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: title,
+          text: `Check out ${title} on GuriUp!`,
+          url: fullUrl,
+        });
+      } catch (err) {
+        console.log('Share canceled');
+      }
+    } else {
+      // Fallback
+      navigator.clipboard.writeText(fullUrl);
+      alert(`Link copied to clipboard: ${fullUrl}`);
+    }
   };
 
   // --- DATA ---
@@ -120,16 +168,16 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
           transform: translateY(0);
         }
 
-        /* --- HERO STYLES (FROM UPDATED SNIPPET) --- */
+        /* --- HERO STYLES --- */
         .hero-container {
           width: 100%;
-          height: 94vh;        /* Forces strictly 94% of viewport height */
-          min-height: 700px;   /* Prevents it from getting too squashed on small screens */
-          max-height: 950px;   /* Prevents it from getting too tall on huge screens */
+          height: 94vh;
+          min-height: 700px;
+          max-height: 950px;
           position: relative;
           display: flex;
           flex-direction: column;
-          justify-content: space-between; /* This balances the space evenly */
+          justify-content: space-between; 
           overflow: hidden;
         }
 
@@ -195,7 +243,7 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
             }
         }
 
-        /* --- NAV LINKS SIZE 4% BIGGER --- */
+        /* --- NAV LINKS --- */
         .nav-link { position: relative; font-weight: 700; font-size: 16.5px; letter-spacing: 0.3px; }
         .nav-link::after {
           content: '';
@@ -240,6 +288,7 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
             height: 100%;
             display: flex;
             flex-direction: column;
+            cursor: pointer; /* Indication it is clickable */
         }
         .modern-card:hover {
             transform: translateY(-8px);
@@ -285,6 +334,7 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
             color: #1f2937;
         }
         .action-btn:hover { background: #0065eb; color: white; }
+        .action-btn.active { background: #ef4444; color: white; } /* Heart active color */
 
         .price-badge {
             position: absolute;
@@ -303,7 +353,6 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
             position: absolute;
             top: 12px;
             left: 12px;
-            /* BG color is set dynamically inline or via utility classes */
             color: white;
             font-size: 0.65rem;
             font-weight: 800;
@@ -314,12 +363,11 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
             z-index: 5;
         }
         
-        /* NEW VERIFICATION BADGE STYLES */
         .verified-card {
             position: absolute;
             bottom: 12px;
             right: 12px;
-            background: #22c55e; /* Green */
+            background: #22c55e;
             padding: 4px 8px;
             border-radius: 8px;
             display: flex; align-items: center; gap: 4px;
@@ -331,7 +379,7 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
             position: absolute;
             bottom: 12px;
             right: 12px;
-            background: #e5e7eb; /* Gray */
+            background: #e5e7eb;
             padding: 4px 8px;
             border-radius: 8px;
             display: flex; align-items: center; gap: 4px;
@@ -346,6 +394,7 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
            overflow: hidden;
            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
            transition: all 0.4s ease;
+           cursor: pointer;
         }
         .hotel-card:hover { transform: translateY(-10px); box-shadow: 0 20px 50px rgba(0,0,0,0.1); }
         .hotel-features { display: flex; gap: 8px; margin-top: 12px; }
@@ -388,7 +437,7 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
              content: '';
              position: absolute;
              inset: 0;
-             background: rgba(0,0,0,0.75); /* Dark overlay */
+             background: rgba(0,0,0,0.75);
         }
 
         /* MODERN GROW SECTION */
@@ -417,7 +466,7 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
         }
         .modern-grow-card:hover .grow-content { transform: translateY(0); }
 
-        /* Phone App - ROTATED RIGHT */
+        /* Phone App */
         .app-phone {
             width: 300px;
             height: 600px;
@@ -427,7 +476,7 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
             position: relative;
             box-shadow: 0 0 0 2px #555, 0 30px 80px -10px rgba(0,101,235,0.3);
             z-index: 20;
-            transform: rotate(6deg); /* Rotated RIGHT */
+            transform: rotate(6deg); 
             transition: transform 0.5s ease;
         }
         .app-phone:hover {
@@ -454,11 +503,6 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
         }
         @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-15px); } 100% { transform: translateY(0px); } }
 
-        @media(max-width: 768px) {
-            .image-bg-card { height: 350px; }
-            .card-overlay { padding: 24px; }
-        }
-        
         select.modern-select {
             -webkit-appearance: none;
             -moz-appearance: none;
@@ -498,11 +542,8 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
 
         <div className="relative z-10 w-full max-w-[1600px] mx-auto px-6 md:px-10 flex flex-col h-full">
           
-          {/* NAVBAR */}
-         
-
-          {/* HERO CONTENT */}
-          <div className="flex flex-col lg:flex-row items-center justify-center pt-2 pb-10 reveal">
+          {/* HERO CONTENT - Moved content down approx 5% */}
+          <div className="flex flex-col lg:flex-row items-center justify-center pt-2 pb-10 reveal translate-y-[5vh]">
             
             {/* LEFT SIDE */}
             <div className="w-full lg:w-[55%] flex flex-col justify-center">
@@ -636,8 +677,8 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
             </div>
           </div>
 
-          {/* BOTTOM SCROLLING PILLS */}
-          <div className="flex items-center mt-12 lg:mt-0 pb-8 w-full translate-y-1">
+          {/* BOTTOM SCROLLING PILLS - Moved down approx 2% relative to previous position */}
+          <div className="flex items-center mt-12 lg:mt-0 pb-8 w-full translate-y-[4vh]">
             <div className="flex-1 overflow-hidden w-full mask-pills">
               <div className="animate-scroll">
                 {pillItems.map((item, index) => (
@@ -652,8 +693,9 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
         </div>
       </section>
 
-      {/* ================= SECTION 2: FEATURED PROPERTIES (REAL DB DATA) ================= */}
-      <section className="bg-[#fafbfc] py-20 relative z-20 reveal">
+      {/* ================= SECTION 2: FEATURED PROPERTIES ================= */}
+      {/* Reduced padding from py-20 to py-12 */}
+      <section className="bg-[#fafbfc] py-12 relative z-20 reveal">
         <div className="max-w-[1600px] mx-auto px-6">
           <div className="flex justify-between items-end mb-12">
             <div>
@@ -664,13 +706,10 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {featuredProperties.slice(0, 3).map((property) => {
-                // --- TRUTH DATA LOGIC ---
-                // Verification: Based on planTier ('pro'/'premium') OR explicit agentVerified flag
                 const isVerified = property.planTier === 'pro' || property.planTier === 'premium' || property.agentVerified;
                 
-                // Status Label Logic
                 let statusLabel = 'For Rent';
-                let statusColor = 'bg-black'; // Default black
+                let statusColor = 'bg-black';
 
                 if (property.status === 'rented_out') {
                     statusLabel = 'Rented';
@@ -680,23 +719,25 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
                     statusColor = 'bg-[#0065eb]';
                 }
 
-                // Location Formatting
                 const locationText = getLocationString(property.location);
+                const isFavorite = favorites.includes(property.id);
+                const propertyPath = `/properties/${property.id}`;
 
                 return (
                 <div key={property.id} className="modern-card group">
+                {/* --- CLICKABLE CARD OVERLAY --- */}
+                <Link href={propertyPath} className="absolute inset-0 z-0"></Link>
+
                 <div className="modern-img-wrapper">
                     <img 
                         src={property.images && property.images.length > 0 ? property.images[0] : "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1000"} 
                         alt={property.title} 
                     />
                     
-                    {/* STATUS BADGE */}
                     <div className={`status-badge ${statusColor}`}>
                         {statusLabel}
                     </div>
                     
-                    {/* VERIFIED BADGE LOGIC */}
                     {isVerified ? (
                         <div className="verified-card">
                             <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
@@ -714,12 +755,27 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
                         {!property.isForSale && <span className="text-sm font-normal text-gray-500">/mo</span>}
                     </div>
                     
+                    {/* BUTTONS WITH z-10 TO SIT ABOVE LINK */}
                     <div className="card-actions">
-                        <div className="action-btn"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg></div>
-                        <div className="action-btn"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg></div>
+                        <div 
+                            className={`action-btn ${isFavorite ? 'active' : ''}`}
+                            onClick={(e) => toggleFavorite(e, property.id)}
+                        >
+                            {isFavorite ? (
+                                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                            ) : (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
+                            )}
+                        </div>
+                        <div 
+                            className="action-btn"
+                            onClick={(e) => handleShare(e, property.title, propertyPath)}
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
+                        </div>
                     </div>
                 </div>
-                <div className="p-6 flex flex-col flex-grow">
+                <div className="p-6 flex flex-col flex-grow relative pointer-events-none">
                     <div className="flex justify-between items-start mb-2">
                     <h4 className="text-xl font-bold text-slate-900 group-hover:text-[#0065eb] transition-colors">{property.title}</h4>
                     {property.featured && <span className="text-[10px] font-black uppercase tracking-widest bg-yellow-400 text-black px-2 py-0.5 rounded">Featured</span>}
@@ -734,11 +790,11 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
                     <span className="w-1 h-1 bg-gray-300 rounded-full self-center"></span>
                     <span className="flex items-center gap-1"><span className="text-[#0065eb]">{property.area || 0}</span> Sqft</span>
                     </div>
-                    <div className="mt-auto flex justify-between pt-4 border-t border-gray-100 gap-2">
-                        <Link href={`/properties/${property.id}`} className="border border-gray-200 text-black px-6 py-2.5 rounded-xl text-xs font-black uppercase hover:border-black transition-colors w-full text-center">
+                    <div className="mt-auto flex justify-between pt-4 border-t border-gray-100 gap-2 pointer-events-auto">
+                        <Link href={propertyPath} className="border border-gray-200 text-black px-6 py-2.5 rounded-xl text-xs font-black uppercase hover:border-black transition-colors w-full text-center relative z-10">
                             Details
                         </Link>
-                        <button className="bg-black text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase hover:bg-[#0065eb] transition-colors w-full">
+                        <button className="bg-black text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase hover:bg-[#0065eb] transition-colors w-full relative z-10">
                             {property.status === 'rented_out' ? 'Rented' : 'Buy Now'}
                         </button>
                     </div>
@@ -749,19 +805,23 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
         </div>
       </section>
 
-      {/* ================= TRENDING HOTELS SECTION (REAL DB DATA) ================= */}
-      <section className="bg-white pb-24 reveal">
+      {/* ================= TRENDING HOTELS SECTION ================= */}
+      {/* Reduced padding from pb-24 to pb-12 */}
+      <section className="bg-white pb-12 reveal">
          <div className="max-w-[1600px] mx-auto px-6">
             <h2 className="text-slate-900 text-4xl font-black leading-tight tracking-tight mb-10">Trending Hotels</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {featuredHotels.slice(0, 4).map((hotel) => {
-                    // --- TRUTH DATA LOGIC ---
-                    // Verification for hotels: planTier == 'pro' || 'premium'
                     const isHotelVerified = hotel.planTier === 'pro' || hotel.planTier === 'premium' || hotel.isPro;
                     const hotelLocation = getLocationString(hotel.location);
+                    const hotelPath = `/hotels/${hotel.id}`;
+                    const isFavorite = favorites.includes(hotel.id);
 
                     return (
                     <div key={hotel.id} className="hotel-card group relative">
+                        {/* --- CLICKABLE CARD OVERLAY --- */}
+                        <Link href={hotelPath} className="absolute inset-0 z-0"></Link>
+
                         <div className="h-64 overflow-hidden relative">
                             <img 
                                 src={hotel.images && hotel.images.length > 0 ? hotel.images[0] : `https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=600&auto=format&fit=crop`} 
@@ -770,7 +830,6 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
                             />
                             <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">Top Rated</div>
                              
-                             {/* HOTEL VERIFICATION BADGE */}
                              {isHotelVerified ? (
                                 <div className="verified-card">
                                     <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
@@ -783,11 +842,20 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
                                 </div>
                              )}
 
-                            <div className="absolute top-4 right-4 flex flex-col gap-2">
-                                <button className="w-8 h-8 bg-white/90 rounded-full flex items-center justify-center text-black hover:bg-[#0065eb] hover:text-white transition-colors shadow-lg"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg></button>
+                            <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
+                                <button 
+                                    onClick={(e) => toggleFavorite(e, hotel.id)}
+                                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors shadow-lg ${isFavorite ? 'bg-red-500 text-white' : 'bg-white/90 text-black hover:bg-[#0065eb] hover:text-white'}`}
+                                >
+                                    {isFavorite ? (
+                                        <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                                    ) : (
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
+                                    )}
+                                </button>
                             </div>
                         </div>
-                        <div className="p-5">
+                        <div className="p-5 relative pointer-events-none">
                             <div className="flex justify-between items-start">
                                 <h3 className="text-lg font-bold text-slate-900 leading-tight mb-1">{hotel.name}</h3>
                                 <span className="flex items-center text-xs font-bold text-[#0065eb] gap-1">{hotel.rating || 5.0} <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></span>
@@ -802,9 +870,9 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
                                 <span className="hotel-feature">Pool</span>
                                 <span className="hotel-feature">Spa</span>
                             </div>
-                            <div className="mt-5 flex items-center justify-between">
+                            <div className="mt-5 flex items-center justify-between pointer-events-auto">
                                 <div className="text-slate-900 font-black text-lg">{formatPrice(hotel.pricePerNight || 120)}<span className="text-xs font-normal text-gray-400">/night</span></div>
-                                <Link href={`/hotels/${hotel.id}`} className="bg-[#0065eb] text-white px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-black transition-colors shadow-lg shadow-blue-500/20">
+                                <Link href={hotelPath} className="bg-[#0065eb] text-white px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-black transition-colors shadow-lg shadow-blue-500/20 relative z-10">
                                     Book Now
                                 </Link>
                             </div>
@@ -816,7 +884,8 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
       </section>
 
       {/* ================= SECTION 3: BENTO GRID ================= */}
-      <section className="py-20 px-6 relative reveal" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1470076892663-af684e5e15af?q=80&w=2000')", backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }}>
+      {/* Reduced padding from py-20 to py-12 */}
+      <section className="py-12 px-6 relative reveal" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1470076892663-af684e5e15af?q=80&w=2000')", backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }}>
         <div className="absolute inset-0 bg-[#0a0c10]/90 backdrop-blur-[4px]"></div>
 
         <div className="max-w-[1600px] mx-auto relative z-10">
@@ -874,46 +943,52 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
       </section>
 
       {/* ================= SECTION 4: GROW WITH GURIUP ================= */}
-      <section className="bg-white py-20 reveal">
+      {/* Reduced padding from py-20 to py-12 */}
+      <section className="bg-white py-12 reveal">
         <div className="max-w-[1600px] mx-auto px-6">
           <h2 className="text-4xl font-black text-slate-900 mb-10 tracking-tight">Grow With GuriUp</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* AGENT CARD - Tag Top Left */}
-            <div className="modern-grow-card group cursor-pointer">
-              <img src="https://images.unsplash.com/photo-1560518883-ce09059eeffa?q=80&w=1000" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt="Real Estate Agent" />
-              <div className="absolute top-6 left-6 z-20">
-                 <div className="bg-[#0065eb] w-fit px-4 py-1.5 rounded-full text-white text-[10px] font-black uppercase tracking-widest">For Agents</div>
-              </div>
-              <div className="grow-content">
-                <h3 className="text-white text-4xl font-black mb-2">Close Deals Faster</h3>
-                <p className="text-white/80 text-sm mb-6 max-w-md font-medium">Access our database of verified buyers and sellers. Use GuriUp's CRM tools to manage your portfolio efficiently.</p>
-                <div className="w-12 h-12 rounded-full border border-white flex items-center justify-center text-white group-hover:bg-white group-hover:text-black transition-colors">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+            {/* AGENT CARD - LINK TO /join/agent */}
+            <Link href="/join/agent">
+                <div className="modern-grow-card group cursor-pointer">
+                <img src="https://images.unsplash.com/photo-1560518883-ce09059eeffa?q=80&w=1000" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt="Real Estate Agent" />
+                <div className="absolute top-6 left-6 z-20">
+                    <div className="bg-[#0065eb] w-fit px-4 py-1.5 rounded-full text-white text-[10px] font-black uppercase tracking-widest">For Agents</div>
                 </div>
-              </div>
-            </div>
+                <div className="grow-content">
+                    <h3 className="text-white text-4xl font-black mb-2">Close Deals Faster</h3>
+                    <p className="text-white/80 text-sm mb-6 max-w-md font-medium">Access our database of verified buyers and sellers. Use GuriUp's CRM tools to manage your portfolio efficiently.</p>
+                    <div className="w-12 h-12 rounded-full border border-white flex items-center justify-center text-white group-hover:bg-white group-hover:text-black transition-colors">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </div>
+                </div>
+                </div>
+            </Link>
 
-            {/* HOTEL CARD - Tag Top Left */}
-            <div className="modern-grow-card group cursor-pointer">
-              <img src="https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?q=80&w=1000" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt="Hotel Lobby" />
-              <div className="absolute top-6 left-6 z-20">
-                 <div className="bg-white w-fit px-4 py-1.5 rounded-full text-black text-[10px] font-black uppercase tracking-widest">For Hotels</div>
-              </div>
-              <div className="grow-content">
-                <h3 className="text-white text-4xl font-black mb-2">Fill Every Room</h3>
-                <p className="text-white/80 text-sm mb-6 max-w-md font-medium">List your hotel on the fastest growing booking platform. Manage reservations and pricing in real-time.</p>
-                <div className="w-12 h-12 rounded-full border border-white flex items-center justify-center text-white group-hover:bg-white group-hover:text-black transition-colors">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+            {/* HOTEL CARD - LINK TO /join/hotel */}
+            <Link href="/join/hotel">
+                <div className="modern-grow-card group cursor-pointer">
+                <img src="https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?q=80&w=1000" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt="Hotel Lobby" />
+                <div className="absolute top-6 left-6 z-20">
+                    <div className="bg-white w-fit px-4 py-1.5 rounded-full text-black text-[10px] font-black uppercase tracking-widest">For Hotels</div>
                 </div>
-              </div>
-            </div>
+                <div className="grow-content">
+                    <h3 className="text-white text-4xl font-black mb-2">Fill Every Room</h3>
+                    <p className="text-white/80 text-sm mb-6 max-w-md font-medium">List your hotel on the fastest growing booking platform. Manage reservations and pricing in real-time.</p>
+                    <div className="w-12 h-12 rounded-full border border-white flex items-center justify-center text-white group-hover:bg-white group-hover:text-black transition-colors">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </div>
+                </div>
+                </div>
+            </Link>
           </div>
         </div>
       </section>
 
       {/* ================= NEW: REFERRAL PROGRAM SECTION ================= */}
-      <section className="bg-gradient-to-r from-[#0065eb] to-[#004bb5] py-20 reveal relative overflow-hidden">
+      {/* Reduced padding from py-20 to py-12 */}
+      <section className="bg-gradient-to-r from-[#0065eb] to-[#004bb5] py-12 reveal relative overflow-hidden">
         {/* Decorative elements */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-white opacity-10 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2"></div>
         <div className="absolute bottom-0 left-0 w-72 h-72 bg-white opacity-10 rounded-full blur-3xl transform -translate-x-1/3 translate-y-1/3"></div>
@@ -952,7 +1027,8 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
       </section>
 
       {/* ================= SECTION 5: MOBILE APP ================= */}
-      <section className="bg-[#050505] py-24 md:py-32 px-6 relative overflow-hidden reveal">
+      {/* Reduced padding from py-24 to py-12 */}
+      <section className="bg-[#050505] py-12 md:py-20 px-6 relative overflow-hidden reveal">
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[#0065eb] opacity-10 blur-[120px] rounded-full pointer-events-none"></div>
 
         <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row items-center justify-between gap-20">
@@ -1001,9 +1077,6 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
           </div>
         </div>
       </section>
-
-      {/* ================= SUPER COMPLETE MODERN FOOTER ================= */}
-     
 
       <svg width="0" height="0">
         <defs>
