@@ -44,10 +44,10 @@ export default async function PropertiesPage() {
     .filter(p => !featuredIds.has(p.id))
     .map(normalizeProperty);
 
-  return (
-    <PropertiesUI 
-      featuredProperties={featuredProperties} 
-      allProperties={otherProperties} 
-    />
-  );
+  //return (
+   // <PropertiesUI 
+//featuredProperties={featuredProperties} 
+  //    allProperties={otherProperties} 
+    ///>
+  //);
 }
