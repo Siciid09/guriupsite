@@ -13,5 +13,5 @@ export default async function HotelsPage() {
   const otherHotels = allHotels.filter(h => !featuredIds.has(h.id));
 
   // Render the Client UI with data
-  return <HotelsUI featuredHotels={featuredHotels} allHotels={otherHotels} />;
+ // return <HotelsUI featuredHotels={featuredHotels} allHotels={otherHotels} />;
 }
