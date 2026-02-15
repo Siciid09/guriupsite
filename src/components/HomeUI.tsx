@@ -1,8 +1,48 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 
-const HeroSection = () => {
+// --- TYPES BASED ON FLUTTER MODELS ---
+interface LocationData {
+  city?: string;
+  area?: string;
+  address?: string;
+}
+
+interface Property {
+  id: string;
+  title: string;
+  price: number;
+  images: string[];
+  location: LocationData | string;
+  bedrooms?: number;   // Added ?
+  bathrooms?: number;  // Added ?
+  area?: number;       // Added ?
+  status: string; 
+  isForSale: boolean;
+  planTier?: 'free' | 'pro' | 'premium';
+  agentVerified?: boolean;
+  featured?: boolean;
+}
+
+interface Hotel {
+  id: string;
+  name: string;
+  pricePerNight: number;
+  images: string[];
+  location: LocationData | string;
+  rating: number;
+  planTier?: 'free' | 'pro' | 'premium';
+  isPro?: boolean;
+}
+
+interface HomeUIProps {
+  featuredProperties: Property[];
+  featuredHotels: Hotel[];
+}
+
+const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
   const [isNavOpen, setIsNavOpen] = useState(false);
   const [filterTab, setFilterTab] = useState('buy');
 
@@ -25,6 +65,21 @@ const HeroSection = () => {
 
     return () => elements.forEach((el) => observer.unobserve(el));
   }, []);
+
+  // --- HELPER: FORMAT PRICE ---
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(price);
+  };
+
+  // --- HELPER: GET LOCATION STRING ---
+  const getLocationString = (location: LocationData | string) => {
+    if (typeof location === 'string') return location;
+    if (!location) return 'Unknown Location';
+    const parts = [];
+    if (location.area) parts.push(location.area);
+    if (location.city) parts.push(location.city);
+    return parts.length > 0 ? parts.join(', ') : (location.address || 'Unknown Location');
+  };
 
   // --- DATA ---
   const rawServices = [
@@ -65,18 +120,18 @@ const HeroSection = () => {
           transform: translateY(0);
         }
 
-        /* --- HERO STYLES --- */
+        /* --- HERO STYLES (FROM UPDATED SNIPPET) --- */
         .hero-container {
-  width: 100%;
-  height: 94vh;        /* Forces strictly 90% of viewport height */
-  min-height: 700px;   /* Prevents it from getting too squashed on small screens */
-  max-height: 950px;   /* Prevents it from getting too tall on huge screens */
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between; /* This balances the space evenly */
-  overflow: hidden;
-}
+          width: 100%;
+          height: 94vh;        /* Forces strictly 94% of viewport height */
+          min-height: 700px;   /* Prevents it from getting too squashed on small screens */
+          max-height: 950px;   /* Prevents it from getting too tall on huge screens */
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between; /* This balances the space evenly */
+          overflow: hidden;
+        }
 
         .hero-bg {
           position: absolute;
@@ -248,7 +303,7 @@ const HeroSection = () => {
             position: absolute;
             top: 12px;
             left: 12px;
-            background: #0065eb;
+            /* BG color is set dynamically inline or via utility classes */
             color: white;
             font-size: 0.65rem;
             font-weight: 800;
@@ -444,40 +499,10 @@ const HeroSection = () => {
         <div className="relative z-10 w-full max-w-[1600px] mx-auto px-6 md:px-10 flex flex-col h-full">
           
           {/* NAVBAR */}
-          <nav className="flex justify-between items-center py-6">
-            {/* LOGO WITH BOLD TEXT */}
-            <div className="cursor-pointer hover:opacity-80 transition-opacity flex items-center gap-2">
-                <img src="/android-chrome-512x512.png" alt="GuriUp" className="h-12 w-auto" />
-                <span className="text-white font-black text-2xl tracking-tight">GuriUp</span>
-            </div>
+         
 
-            <div className="hidden lg:flex gap-8 font-bold text-gray-400">
-              <a href="#" className="text-[#0065eb] nav-link">Home</a>
-              <a href="#" className="nav-link hover:text-white transition-colors">Properties</a>
-              <a href="#" className="nav-link hover:text-white transition-colors">Hotels</a>
-              <a href="#" className="nav-link hover:text-white transition-colors">Agents</a>
-              <a href="#" className="nav-link hover:text-white transition-colors">Contact</a>
-              <a href="#" className="nav-link hover:text-white transition-colors">About</a>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <a href="#" className="text-white text-sm font-bold hidden md:block hover:text-[#0065eb] transition-colors">Log In</a>
-              <div className="flex items-center gap-2">
-                <button className="bg-white/10 text-white rounded-full px-6 py-2.5 text-[14px] font-bold hover:bg-white hover:text-black transition-all">Sign Up</button>
-                <button className="bg-[#0065eb] text-white rounded-full px-5 py-2.5 text-[14px] font-bold hover:bg-[#0052c1] transition-all flex items-center gap-1">
-                  Download
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
-                </button>
-              </div>
-              <div className="lg:hidden cursor-pointer" onClick={toggleNav}>
-                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-              </div>
-            </div>
-          </nav>
-
-          {/* HERO CONTENT - MOVED DOWN 4% */}
-      {/* HERO CONTENT - FIXED SPACING */}
-<div className="flex flex-col lg:flex-row items-center justify-center pt-2 pb-10 reveal">
+          {/* HERO CONTENT */}
+          <div className="flex flex-col lg:flex-row items-center justify-center pt-2 pb-10 reveal">
             
             {/* LEFT SIDE */}
             <div className="w-full lg:w-[55%] flex flex-col justify-center">
@@ -528,7 +553,7 @@ const HeroSection = () => {
                   {/* Type Input */}
                   <div className="flex flex-1 items-center gap-3 px-4 py-5 w-full border-b md:border-b-0 md:border-r border-gray-200 hover:bg-white transition-colors group rounded-xl">
                     <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition-colors">
-                       <svg className="w-4 h-4 text-green-600 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+                        <svg className="w-4 h-4 text-green-600 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
                     </div>
                     <div className="flex flex-col w-full">
                       <span className="text-[9px] uppercase font-black text-gray-400 tracking-wider mb-0.5">
@@ -536,16 +561,16 @@ const HeroSection = () => {
                       </span>
                       <select className="modern-select text-xs font-bold text-slate-900 bg-transparent w-full">
                           {filterTab === 'hotel' ? (
-                             <>
+                            <>
                                 <option>1 Room, 2 Guests</option>
                                 <option>2 Rooms, 4 Guests</option>
-                             </>
+                            </>
                           ) : (
-                             <>
+                            <>
                                 <option>Apartment</option>
                                 <option>Villa</option>
                                 <option>Office</option>
-                             </>
+                            </>
                           )}
                       </select>
                     </div>
@@ -586,7 +611,7 @@ const HeroSection = () => {
 
             {/* RIGHT SIDE */}
             <div className="hidden lg:flex flex-col items-end w-[45%] h-full justify-center pl-10">
-           <div className="glass-card p-5 w-52 special-service-shape mb-6 self-end mr-20 mt-">
+           <div className="glass-card p-5 w-52 special-service-shape mb-6 self-end mr-20 mt-18">
                 <h3 className="text-white font-black text-lg">Our Special Service</h3>
               </div>
               
@@ -627,7 +652,7 @@ const HeroSection = () => {
         </div>
       </section>
 
-      {/* ================= SECTION 2: FEATURED PROPERTIES ================= */}
+      {/* ================= SECTION 2: FEATURED PROPERTIES (REAL DB DATA) ================= */}
       <section className="bg-[#fafbfc] py-20 relative z-20 reveal">
         <div className="max-w-[1600px] mx-auto px-6">
           <div className="flex justify-between items-end mb-12">
@@ -638,156 +663,154 @@ const HeroSection = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {/* Card 1 - Verified */}
-            <div className="modern-card group">
-              <div className="modern-img-wrapper">
-                <img src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1000" alt="House" />
-                <div className="status-badge bg-[#0065eb]">For Sale</div>
+            {featuredProperties.slice(0, 3).map((property) => {
+                // --- TRUTH DATA LOGIC ---
+                // Verification: Based on planTier ('pro'/'premium') OR explicit agentVerified flag
+                const isVerified = property.planTier === 'pro' || property.planTier === 'premium' || property.agentVerified;
                 
-                {/* VERIFIED GREEN CARD */}
-                <div className="verified-card">
-                   <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                   <span>Verified</span>
-                </div>
+                // Status Label Logic
+                let statusLabel = 'For Rent';
+                let statusColor = 'bg-black'; // Default black
 
-                <div className="price-badge">$2,450,000</div>
-                
-                <div className="card-actions">
-                    <div className="action-btn"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg></div>
-                    <div className="action-btn"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg></div>
-                </div>
-              </div>
-              <div className="p-6 flex flex-col flex-grow">
-                <div className="flex justify-between items-start mb-2">
-                  <h4 className="text-xl font-bold text-slate-900 group-hover:text-[#0065eb] transition-colors">Modern Glass Villa</h4>
-                  <span className="text-[10px] font-black uppercase tracking-widest bg-yellow-400 text-black px-2 py-0.5 rounded">Featured</span>
-                </div>
-                <p className="text-gray-500 text-sm font-medium mb-5">Beverly Hills, California</p>
-                <div className="flex gap-4 text-sm font-bold text-gray-700 mb-6">
-                  <span className="flex items-center gap-1"><span className="text-[#0065eb]">4</span> Beds</span>
-                  <span className="w-1 h-1 bg-gray-300 rounded-full self-center"></span>
-                  <span className="flex items-center gap-1"><span className="text-[#0065eb]">3</span> Baths</span>
-                  <span className="w-1 h-1 bg-gray-300 rounded-full self-center"></span>
-                  <span className="flex items-center gap-1"><span className="text-[#0065eb]">3,200</span> Sqft</span>
-                </div>
-                <div className="mt-auto flex justify-between pt-4 border-t border-gray-100 gap-2">
-                   <button className="border border-gray-200 text-black px-6 py-2.5 rounded-xl text-xs font-black uppercase hover:border-black transition-colors w-full">Details</button>
-                   <button className="bg-black text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase hover:bg-[#0065eb] transition-colors w-full">Buy Now</button>
-                </div>
-              </div>
-            </div>
+                if (property.status === 'rented_out') {
+                    statusLabel = 'Rented';
+                    statusColor = 'bg-red-600';
+                } else if (property.isForSale) {
+                    statusLabel = 'For Sale';
+                    statusColor = 'bg-[#0065eb]';
+                }
 
-            {/* Card 2 - Verified */}
-            <div className="modern-card group">
-              <div className="modern-img-wrapper">
-                <img src="https://images.unsplash.com/photo-1600607687940-c52af0a43328?q=80&w=1000" alt="House" />
-                <div className="status-badge bg-black">For Rent</div>
-                
-                {/* VERIFIED GREEN CARD */}
-                <div className="verified-card">
-                   <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                   <span>Verified</span>
-                </div>
+                // Location Formatting
+                const locationText = getLocationString(property.location);
 
-                <div className="price-badge">$8,500<span className="text-sm font-normal text-gray-500">/mo</span></div>
-                 <div className="card-actions">
-                    <div className="action-btn"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg></div>
-                    <div className="action-btn"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg></div>
-                </div>
-              </div>
-              <div className="p-6 flex flex-col flex-grow">
-                <div className="flex justify-between items-start mb-2">
-                  <h4 className="text-xl font-bold text-slate-900 group-hover:text-[#0065eb] transition-colors">Skyline Penthouse</h4>
-                </div>
-                <p className="text-gray-500 text-sm font-medium mb-5">New York, NY</p>
-                <div className="flex gap-4 text-sm font-bold text-gray-700 mb-6">
-                  <span className="flex items-center gap-1"><span className="text-[#0065eb]">2</span> Beds</span>
-                  <span className="w-1 h-1 bg-gray-300 rounded-full self-center"></span>
-                  <span className="flex items-center gap-1"><span className="text-[#0065eb]">2</span> Baths</span>
-                  <span className="w-1 h-1 bg-gray-300 rounded-full self-center"></span>
-                  <span className="flex items-center gap-1"><span className="text-[#0065eb]">1,800</span> Sqft</span>
-                </div>
-                <div className="mt-auto flex justify-between pt-4 border-t border-gray-100 gap-2">
-                   <button className="border border-gray-200 text-black px-6 py-2.5 rounded-xl text-xs font-black uppercase hover:border-black transition-colors w-full">Details</button>
-                   <button className="bg-[#0065eb] text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase hover:bg-black transition-colors w-full">Rent Now</button>
-                </div>
-              </div>
-            </div>
+                return (
+                <div key={property.id} className="modern-card group">
+                <div className="modern-img-wrapper">
+                    <img 
+                        src={property.images && property.images.length > 0 ? property.images[0] : "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1000"} 
+                        alt={property.title} 
+                    />
+                    
+                    {/* STATUS BADGE */}
+                    <div className={`status-badge ${statusColor}`}>
+                        {statusLabel}
+                    </div>
+                    
+                    {/* VERIFIED BADGE LOGIC */}
+                    {isVerified ? (
+                        <div className="verified-card">
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
+                            <span>Verified</span>
+                        </div>
+                    ) : (
+                        <div className="unverified-card">
+                            <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
+                            <span>Unverified</span>
+                        </div>
+                    )}
 
-            {/* Card 3 - Unverified */}
-            <div className="modern-card group">
-              <div className="modern-img-wrapper">
-                <img src="https://images.unsplash.com/photo-1600566753190-17f0bb2a6c3e?q=80&w=1000" alt="House" />
-                <div className="status-badge bg-orange-500">Pending</div>
-                
-                {/* UNVERIFIED GRAY CARD */}
-                <div className="unverified-card">
-                    <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                    <span>Unverified</span>
+                    <div className="price-badge">
+                        {formatPrice(property.price)}
+                        {!property.isForSale && <span className="text-sm font-normal text-gray-500">/mo</span>}
+                    </div>
+                    
+                    <div className="card-actions">
+                        <div className="action-btn"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg></div>
+                        <div className="action-btn"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg></div>
+                    </div>
                 </div>
-
-                <div className="price-badge">$3,120,000</div>
-                 <div className="card-actions">
-                    <div className="action-btn"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg></div>
-                    <div className="action-btn"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg></div>
+                <div className="p-6 flex flex-col flex-grow">
+                    <div className="flex justify-between items-start mb-2">
+                    <h4 className="text-xl font-bold text-slate-900 group-hover:text-[#0065eb] transition-colors">{property.title}</h4>
+                    {property.featured && <span className="text-[10px] font-black uppercase tracking-widest bg-yellow-400 text-black px-2 py-0.5 rounded">Featured</span>}
+                    </div>
+                    
+                    <p className="text-gray-500 text-sm font-medium mb-5">{locationText}</p>
+                    
+                    <div className="flex gap-4 text-sm font-bold text-gray-700 mb-6">
+                    <span className="flex items-center gap-1"><span className="text-[#0065eb]">{property.bedrooms || 0}</span> Beds</span>
+                    <span className="w-1 h-1 bg-gray-300 rounded-full self-center"></span>
+                    <span className="flex items-center gap-1"><span className="text-[#0065eb]">{property.bathrooms || 0}</span> Baths</span>
+                    <span className="w-1 h-1 bg-gray-300 rounded-full self-center"></span>
+                    <span className="flex items-center gap-1"><span className="text-[#0065eb]">{property.area || 0}</span> Sqft</span>
+                    </div>
+                    <div className="mt-auto flex justify-between pt-4 border-t border-gray-100 gap-2">
+                        <Link href={`/properties/${property.id}`} className="border border-gray-200 text-black px-6 py-2.5 rounded-xl text-xs font-black uppercase hover:border-black transition-colors w-full text-center">
+                            Details
+                        </Link>
+                        <button className="bg-black text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase hover:bg-[#0065eb] transition-colors w-full">
+                            {property.status === 'rented_out' ? 'Rented' : 'Buy Now'}
+                        </button>
+                    </div>
                 </div>
-              </div>
-              <div className="p-6 flex flex-col flex-grow">
-                <div className="flex justify-between items-start mb-2">
-                  <h4 className="text-xl font-bold text-slate-900 group-hover:text-[#0065eb] transition-colors">Azure Waterfront</h4>
                 </div>
-                <p className="text-gray-500 text-sm font-medium mb-5">Miami, Florida</p>
-                <div className="flex gap-4 text-sm font-bold text-gray-700 mb-6">
-                  <span className="flex items-center gap-1"><span className="text-[#0065eb]">5</span> Beds</span>
-                  <span className="w-1 h-1 bg-gray-300 rounded-full self-center"></span>
-                  <span className="flex items-center gap-1"><span className="text-[#0065eb]">4</span> Baths</span>
-                  <span className="w-1 h-1 bg-gray-300 rounded-full self-center"></span>
-                  <span className="flex items-center gap-1"><span className="text-[#0065eb]">4,500</span> Sqft</span>
-                </div>
-                <div className="mt-auto flex justify-between pt-4 border-t border-gray-100 gap-2">
-                   <button className="border border-gray-200 text-black px-6 py-2.5 rounded-xl text-xs font-black uppercase hover:border-black transition-colors w-full">Details</button>
-                   <button className="bg-black text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase hover:bg-[#0065eb] transition-colors w-full">Buy Now</button>
-                </div>
-              </div>
-            </div>
+            )})}
           </div>
         </div>
       </section>
 
-      {/* ================= TRENDING HOTELS SECTION ================= */}
+      {/* ================= TRENDING HOTELS SECTION (REAL DB DATA) ================= */}
       <section className="bg-white pb-24 reveal">
          <div className="max-w-[1600px] mx-auto px-6">
             <h2 className="text-slate-900 text-4xl font-black leading-tight tracking-tight mb-10">Trending Hotels</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {[1,2,3,4].map((item) => (
-                    <div key={item} className="hotel-card group relative">
+                {featuredHotels.slice(0, 4).map((hotel) => {
+                    // --- TRUTH DATA LOGIC ---
+                    // Verification for hotels: planTier == 'pro' || 'premium'
+                    const isHotelVerified = hotel.planTier === 'pro' || hotel.planTier === 'premium' || hotel.isPro;
+                    const hotelLocation = getLocationString(hotel.location);
+
+                    return (
+                    <div key={hotel.id} className="hotel-card group relative">
                         <div className="h-64 overflow-hidden relative">
-                            <img src={`https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=600&auto=format&fit=crop`} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt="Hotel" />
+                            <img 
+                                src={hotel.images && hotel.images.length > 0 ? hotel.images[0] : `https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=600&auto=format&fit=crop`} 
+                                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
+                                alt={hotel.name} 
+                            />
                             <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">Top Rated</div>
-                             {/* ICONS - COLORED BLACK/BLUE */}
+                             
+                             {/* HOTEL VERIFICATION BADGE */}
+                             {isHotelVerified ? (
+                                <div className="verified-card">
+                                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
+                                    <span>Verified</span>
+                                </div>
+                             ) : (
+                                <div className="unverified-card">
+                                    <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
+                                    <span>Unverified</span>
+                                </div>
+                             )}
+
                             <div className="absolute top-4 right-4 flex flex-col gap-2">
                                 <button className="w-8 h-8 bg-white/90 rounded-full flex items-center justify-center text-black hover:bg-[#0065eb] hover:text-white transition-colors shadow-lg"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg></button>
-                                <button className="w-8 h-8 bg-white/90 rounded-full flex items-center justify-center text-black hover:bg-[#0065eb] hover:text-white transition-colors shadow-lg"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg></button>
                             </div>
                         </div>
                         <div className="p-5">
                             <div className="flex justify-between items-start">
-                                <h3 className="text-lg font-bold text-slate-900 leading-tight mb-1">Grand Plaza Hotel</h3>
-                                <span className="flex items-center text-xs font-bold text-[#0065eb] gap-1">4.9 <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></span>
+                                <h3 className="text-lg font-bold text-slate-900 leading-tight mb-1">{hotel.name}</h3>
+                                <span className="flex items-center text-xs font-bold text-[#0065eb] gap-1">{hotel.rating || 5.0} <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></span>
                             </div>
-                            <p className="text-gray-400 text-xs font-bold mb-3">Downtown, Dubai</p>
+                            
+                            <p className="text-gray-400 text-xs font-bold mb-3">
+                                {hotelLocation}
+                            </p>
+
                             <div className="hotel-features">
                                 <span className="hotel-feature">Free Wifi</span>
                                 <span className="hotel-feature">Pool</span>
                                 <span className="hotel-feature">Spa</span>
                             </div>
                             <div className="mt-5 flex items-center justify-between">
-                                <div className="text-slate-900 font-black text-lg">$120<span className="text-xs font-normal text-gray-400">/night</span></div>
-                                <button className="bg-[#0065eb] text-white px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-black transition-colors shadow-lg shadow-blue-500/20">Book Now</button>
+                                <div className="text-slate-900 font-black text-lg">{formatPrice(hotel.pricePerNight || 120)}<span className="text-xs font-normal text-gray-400">/night</span></div>
+                                <Link href={`/hotels/${hotel.id}`} className="bg-[#0065eb] text-white px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-black transition-colors shadow-lg shadow-blue-500/20">
+                                    Book Now
+                                </Link>
                             </div>
                         </div>
                     </div>
-                ))}
+                )})}
             </div>
          </div>
       </section>
@@ -980,88 +1003,7 @@ const HeroSection = () => {
       </section>
 
       {/* ================= SUPER COMPLETE MODERN FOOTER ================= */}
-      <footer className="bg-white pt-24 pb-12 px-6 border-t border-gray-100 reveal">
-        <div className="max-w-[1600px] mx-auto">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-20 mb-12"> {/* REDUCED BOTTOM MARGIN */}
-                
-                {/* BRAND COLUMN */}
-                <div className="lg:col-span-4 flex flex-col items-start">
-                    <div className="flex items-center gap-2 mb-8">
-                        <img src="/android-chrome-512x512.png" alt="GuriUp Logo" className="h-10 w-auto" />
-                        <span className="text-2xl font-black text-slate-900">GuriUp.</span>
-                    </div>
-                    
-                    <p className="text-gray-500 text-sm leading-relaxed mb-8 max-w-sm font-medium">
-                        The Horn of Africa's premier digital real estate and hospitality ecosystem. We connect people with places, seamlessly and securely.
-                    </p>
-                    
-                    <div className="flex gap-4 mb-8">
-                         <button className="bg-black text-white px-5 py-3 rounded-xl flex items-center gap-3 hover:bg-[#0065eb] transition-all transform hover:-translate-y-1">
-                            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 9.49l1.84-3.18a.56.56 0 0 0-.2-.76.56.56 0 0 0-.77.2l-1.93 3.32a9.1 9.1 0 0 0-4.54-1.22 9.1 9.1 0 0 0-4.55 1.22L5.53 5.75a.56.56 0 0 0-.77-.2.56.56 0 0 0-.2.76l1.84 3.18A9.2 9.2 0 0 0 2.5 17c0 0 .1.1.25.1h18.5c.15 0 .25-.1.25-.1a9.2 9.2 0 0 0-3.9-7.51z"/></svg>
-                            <div className="text-left leading-none">
-                                <div className="text-[9px] font-bold opacity-60 mb-0.5">GET IT ON</div>
-                                <div className="text-sm font-bold">Google Play</div>
-                            </div>
-                         </button>
-                         <button className="bg-black text-white px-5 py-3 rounded-xl flex items-center gap-3 hover:bg-[#0065eb] transition-all transform hover:-translate-y-1">
-                            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.5 1.55-.03 3.03 1.04 3.98 1.04 1.26 0 3.22-1.54 5.39-1.31 2.27.1 4 1.63 4.65 2.58-3.92 1.95-3.3 6.94.8 8.65l-.93 1.65z"/></svg>
-                            <div className="text-left leading-none">
-                                <div className="text-[9px] font-bold opacity-60 mb-0.5">DOWNLOAD ON</div>
-                                <div className="text-sm font-bold">App Store</div>
-                            </div>
-                         </button>
-                    </div>
-
-                    <div className="flex gap-6">
-                        {['twitter', 'facebook', 'instagram', 'linkedin'].map(icon => (
-                            <a key={icon} href="#" className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 hover:bg-[#0065eb] hover:text-white transition-all">
-                                <span className="uppercase text-[10px] font-bold">{icon.charAt(0)}</span>
-                            </a>
-                        ))}
-                    </div>
-                </div>
-
-                {/* LINKS COLUMNS */}
-                <div className="lg:col-span-2">
-                    <h4 className="font-black text-slate-900 mb-8 uppercase tracking-widest text-xs">Company</h4>
-                    <ul className="space-y-4">
-                        {['About Us', 'Careers', 'Our Team', 'Blog', 'Press'].map(item => (
-                            <li key={item}><a href="#" className="text-gray-500 font-bold text-sm hover:text-[#0065eb] transition-colors">{item}</a></li>
-                        ))}
-                    </ul>
-                </div>
-
-                <div className="lg:col-span-2">
-                    <h4 className="font-black text-slate-900 mb-8 uppercase tracking-widest text-xs">Discovery</h4>
-                    <ul className="space-y-4">
-                        {['New Houses', 'Most Sold', 'Rental Properties', 'Luxury Hotels', 'Agents'].map(item => (
-                            <li key={item}><a href="#" className="text-gray-500 font-bold text-sm hover:text-[#0065eb] transition-colors">{item}</a></li>
-                        ))}
-                    </ul>
-                </div>
-
-                <div className="lg:col-span-4">
-                     <h4 className="font-black text-slate-900 mb-8 uppercase tracking-widest text-xs">Stay Connected</h4>
-                     <div className="bg-[#f8f9fa] rounded-3xl p-8">
-                        <p className="text-gray-600 font-medium text-sm mb-6">Join 50,000+ subscribers receiving the latest property news and exclusive offers.</p>
-                        <form className="flex flex-col gap-3">
-                            <input type="email" placeholder="Enter your email address" className="w-full bg-white border border-gray-200 px-5 py-4 rounded-xl text-sm font-bold outline-none focus:border-[#0065eb] transition-colors" />
-                            <button className="bg-[#0065eb] text-white w-full py-4 rounded-xl font-bold text-sm hover:bg-black transition-colors uppercase tracking-wider">Subscribe Now</button>
-                        </form>
-                     </div>
-                </div>
-            </div>
-
-            <div className="border-t border-gray-100 pt-10 flex flex-col md:flex-row justify-between items-center gap-6">
-                 <p className="text-gray-400 font-bold text-xs">© 2026 GuriUp Inc. All rights reserved.</p>
-                 <div className="flex gap-8">
-                    <a href="#" className="text-gray-400 font-bold text-xs hover:text-black transition-colors">Privacy Policy</a>
-                    <a href="#" className="text-gray-400 font-bold text-xs hover:text-black transition-colors">Terms of Service</a>
-                    <a href="#" className="text-gray-400 font-bold text-xs hover:text-black transition-colors">Cookies Settings</a>
-                 </div>
-            </div>
-        </div>
-      </footer>
+     
 
       <svg width="0" height="0">
         <defs>
@@ -1074,4 +1016,4 @@ const HeroSection = () => {
   );
 };
 
-export default HeroSection;
+export default HomeUI;
