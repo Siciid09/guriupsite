@@ -32,9 +32,10 @@ interface HotelsUIProps {
   allHotels: Hotel[];
 }
 
+// Standardized with App's HotelAmenities.fromList logic
 const AMENITIES_LIST = [
   'Wi-Fi', 'Swimming Pool', 'Gym', 'Restaurant', 
-  'Parking', 'Room Service'
+  'Parking', 'Air Conditioning'
 ];
 
 const HOTEL_TYPES = [
@@ -80,7 +81,8 @@ const HotelsUI = ({ featuredHotels, allHotels }: HotelsUIProps) => {
   const typeRef = useRef<HTMLDivElement>(null);
 
   // LOGIC FIX: Default price range starts from 0 to avoid hiding cheaper hotels on load
-  const [priceRange, setPriceRange] = useState<[number, number]>([0, 2000]);
+ // Aligned with Flutter App HotelFilter default (50 - 1000)
+  const [priceRange, setPriceRange] = useState<[number, number]>([50, 1000]);
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
   const [minRating, setMinRating] = useState(0);
 
@@ -273,78 +275,89 @@ const HotelsUI = ({ featuredHotels, allHotels }: HotelsUIProps) => {
       Luxury hotels & resorts across the Horn of Africa. Luxury hotels & resorts across the Horn of Africa.
     </p>
 
-    <div className="glass-card p-2 rounded-full shadow-2xl w-full max-w-4xl mx-auto flex items-center relative z-[50]">
-      <div className="flex-[1.5] relative border-r border-slate-200/50" ref={cityRef}>
-        <button 
-          onClick={() => setIsCityDropdownOpen(!isCityDropdownOpen)}
-          className="w-full flex items-center gap-3 px-6 py-3 rounded-l-full hover:bg-white/50 transition-all text-left"
-        >
-          <MapPin className="text-[#0065eb]" size={20} />
-          <div className="flex-1 overflow-hidden">
-            <p className="text-[9px] font-black uppercase text-slate-400">Destination</p>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-sm text-slate-900 truncate">
-                {searchDestination || 'Select City'}
-              </span>
-            </div>
-          </div>
+  <div className="glass-card p-3 md:p-2 rounded-3xl md:rounded-full shadow-2xl w-full max-w-4xl mx-auto grid grid-cols-2 md:flex md:items-center relative z-[50] gap-2 md:gap-0">
+  
+  {/* 1. Destination (Top-Left on Mobile) */}
+  <div className="relative border-r-0 md:border-r border-slate-200/50" ref={cityRef}>
+    <button 
+      onClick={() => setIsCityDropdownOpen(!isCityDropdownOpen)}
+      className="w-full flex items-center gap-3 px-4 md:px-6 py-3 rounded-2xl md:rounded-l-full hover:bg-white/50 transition-all text-left bg-slate-50/50 md:bg-transparent"
+    >
+      <MapPin className="text-[#0065eb]" size={20} />
+      <div className="flex-1 overflow-hidden">
+        <p className="text-[9px] font-black uppercase text-slate-400">Destination</p>
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-sm text-slate-900 truncate">
+            {searchDestination || 'Select City'}
+          </span>
+        </div>
+      </div>
+    </button>
+
+    {isCityDropdownOpen && (
+      <div className="absolute top-full left-0 mt-4 w-[280px] md:w-[300px] bg-white rounded-[1.5rem] shadow-2xl p-2 z-[9999] border border-slate-100 animate-in fade-in zoom-in-95 duration-200 max-h-60 overflow-y-auto">
+        <button onClick={() => { setSearchDestination(''); setIsCityDropdownOpen(false); }} className="w-full text-left px-4 py-3 rounded-[1rem] hover:bg-slate-50 text-sm font-bold text-slate-500">
+          Anywhere
         </button>
-
-        {isCityDropdownOpen && (
-          <div className="absolute top-full left-0 mt-4 w-[300px] bg-white rounded-[1.5rem] shadow-2xl p-2 z-[9999] border border-slate-100 animate-in fade-in zoom-in-95 duration-200 max-h-60 overflow-y-auto">
-            <button onClick={() => { setSearchDestination(''); setIsCityDropdownOpen(false); }} className="w-full text-left px-4 py-3 rounded-[1rem] hover:bg-slate-50 text-sm font-bold text-slate-500">
-              Anywhere
-            </button>
-            {POPULAR_CITIES.map((city) => (
-              <button key={city} onClick={() => { setSearchDestination(city); setIsCityDropdownOpen(false); }} className={`w-full flex items-center gap-3 p-3 rounded-[1rem] transition-all hover:bg-slate-50 ${searchDestination === city ? 'bg-blue-50 text-[#0065eb]' : 'text-slate-900'}`}>
-                <MapPin size={16} className={searchDestination === city ? 'text-[#0065eb]' : 'text-slate-400'} />
-                <span className="font-bold text-sm">{city}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="flex-[1.5] relative" ref={typeRef}>
-          <button 
-              onClick={() => setIsTypeDropdownOpen(!isTypeDropdownOpen)}
-              className="w-full flex items-center gap-3 px-6 py-3 hover:bg-white/50 transition-all text-left"
-          >
-              <Briefcase className="text-orange-500" size={20} />
-              <div className="flex-1 overflow-hidden">
-              <p className="text-[9px] font-black uppercase text-slate-400">Hotel Type</p>
-              <div className="flex items-center gap-2">
-                  <span className="font-bold text-sm text-slate-900 truncate">
-                  {searchType || 'Any Type'}
-                  </span>
-              </div>
-              </div>
+        {POPULAR_CITIES.map((city) => (
+          <button key={city} onClick={() => { setSearchDestination(city); setIsCityDropdownOpen(false); }} className={`w-full flex items-center gap-3 p-3 rounded-[1rem] transition-all hover:bg-slate-50 ${searchDestination === city ? 'bg-blue-50 text-[#0065eb]' : 'text-slate-900'}`}>
+            <MapPin size={16} className={searchDestination === city ? 'text-[#0065eb]' : 'text-slate-400'} />
+            <span className="font-bold text-sm">{city}</span>
           </button>
-
-          {isTypeDropdownOpen && (
-              <div className="absolute top-full left-0 mt-4 w-[300px] bg-white rounded-[1.5rem] shadow-2xl p-2 z-[9999] border border-slate-100 animate-in fade-in zoom-in-95 duration-200 max-h-60 overflow-y-auto">
-              <button onClick={() => { setSearchType(''); setIsTypeDropdownOpen(false); }} className="w-full text-left px-4 py-3 rounded-[1rem] hover:bg-slate-50 text-sm font-bold text-slate-500">
-                  All Types
-              </button>
-              {HOTEL_TYPES.map((type) => (
-                  <button key={type} onClick={() => { setSearchType(type); setIsTypeDropdownOpen(false); }} className={`w-full flex items-center gap-3 p-3 rounded-[1rem] transition-all hover:bg-slate-50 ${searchType === type ? 'bg-orange-50 text-orange-600' : 'text-slate-900'}`}>
-                  <span className="font-bold text-sm">{type}</span>
-                  </button>
-              ))}
-              </div>
-          )}
+        ))}
       </div>
+    )}
+  </div>
 
-      <div className="flex items-center gap-2 pl-2">
-          <button onClick={() => setIsFilterOpen(true)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 w-12 h-12 rounded-full transition-all flex items-center justify-center">
-             <SlidersHorizontal size={18} />
-          </button>
-
-          <button className="bg-[#0065eb] hover:bg-[#0052c1] text-white px-8 h-12 rounded-full font-black text-xs transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2">
-            <Search size={18} /> Search
-          </button>
+  {/* 2. Hotel Type (Top-Right on Mobile) */}
+  <div className="relative" ref={typeRef}>
+    <button 
+      onClick={() => setIsTypeDropdownOpen(!isTypeDropdownOpen)}
+      className="w-full flex items-center gap-3 px-4 md:px-6 py-3 rounded-2xl md:rounded-none hover:bg-white/50 transition-all text-left bg-slate-50/50 md:bg-transparent"
+    >
+      <Briefcase className="text-orange-500" size={20} />
+      <div className="flex-1 overflow-hidden">
+        <p className="text-[9px] font-black uppercase text-slate-400">Hotel Type</p>
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-sm text-slate-900 truncate">
+            {searchType || 'Any Type'}
+          </span>
+        </div>
       </div>
-    </div>
+    </button>
+
+    {isTypeDropdownOpen && (
+      <div className="absolute top-full left-0 mt-4 w-[280px] md:w-[300px] bg-white rounded-[1.5rem] shadow-2xl p-2 z-[9999] border border-slate-100 animate-in fade-in zoom-in-95 duration-200 max-h-60 overflow-y-auto">
+        <button onClick={() => { setSearchType(''); setIsTypeDropdownOpen(false); }} className="w-full text-left px-4 py-3 rounded-[1rem] hover:bg-slate-50 text-sm font-bold text-slate-500">
+          All Types
+        </button>
+        {HOTEL_TYPES.map((type) => (
+          <button key={type} onClick={() => { setSearchType(type); setIsTypeDropdownOpen(false); }} className={`w-full flex items-center gap-3 p-3 rounded-[1rem] transition-all hover:bg-slate-50 ${searchType === type ? 'bg-orange-50 text-orange-600' : 'text-slate-900'}`}>
+            <span className="font-bold text-sm">{type}</span>
+          </button>
+        ))}
+      </div>
+    )}
+  </div>
+
+  {/* 3. Filter Button (Bottom-Left on Mobile) */}
+  <div className="md:pl-2">
+    <button 
+      onClick={() => setIsFilterOpen(true)} 
+      className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 h-14 md:w-12 md:h-12 rounded-2xl md:rounded-full transition-all flex items-center justify-center gap-2 md:gap-0"
+    >
+      <SlidersHorizontal size={18} />
+      <span className="md:hidden font-bold text-sm">Filters</span>
+    </button>
+  </div>
+
+  {/* 4. Search Button (Bottom-Right on Mobile) */}
+  <div className="md:pl-2">
+    <button className="w-full bg-[#0065eb] hover:bg-[#0052c1] text-white h-14 md:px-8 md:h-12 rounded-2xl md:rounded-full font-black text-sm md:text-xs transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2">
+      <Search size={18} /> Search
+    </button>
+  </div>
+</div>
   </div>
 </section>
 

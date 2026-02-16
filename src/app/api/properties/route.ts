@@ -6,7 +6,6 @@ import {
   query, 
   where, 
   limit, 
-  orderBy, 
   doc, 
   getDoc, 
   DocumentSnapshot 
@@ -17,20 +16,22 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-
-    // --- 1. PARSE PARAMETERS ---
     const id = searchParams.get('id');
     const limitParam = searchParams.get('limit');
-    const limitCount = limitParam ? parseInt(limitParam) : 50;
+    const limitCount = limitParam ? parseInt(limitParam) + 5 : 55;
     const isFeatured = searchParams.get('featured') === 'true';
-    const mode = searchParams.get('mode'); // 'buy' | 'rent'
+    const mode = searchParams.get('mode'); 
     const type = searchParams.get('type');
     const city = searchParams.get('city');
 
-    // --- CASE A: SINGLE PROPERTY DETAILS ---
     if (id) {
-      const propRef = doc(db, 'property', id);
-      const propSnap = await getDoc(propRef);
+      let propRef = doc(db, 'property', id);
+      let propSnap = await getDoc(propRef);
+
+      if (!propSnap.exists()) {
+        propRef = doc(db, 'properties', id);
+        propSnap = await getDoc(propRef);
+      }
 
       if (!propSnap.exists()) {
         return NextResponse.json({ error: 'Property not found' }, { status: 404 });
@@ -41,7 +42,6 @@ export async function GET(request: Request) {
       let agentData = {};
 
       if (agentId) {
-        // Try getting agent from 'users', fallback to 'agents'
         const agentSnap = await getDoc(doc(db, 'users', agentId));
         if (agentSnap.exists()) {
           agentData = agentSnap.data();
@@ -54,13 +54,9 @@ export async function GET(request: Request) {
       return NextResponse.json(mergeAndNormalize(propSnap, agentData));
     }
 
-    // --- CASE B: LIST PROPERTIES ---
-    const collectionRef = collection(db, 'property');
-    const constraints: any[] = [
-      where('isArchived', '==', false),
-      orderBy('createdAt', 'desc'),
-      limit(limitCount)
-    ];
+    let collectionName = 'property';
+    const collectionRef = collection(db, collectionName);
+    const constraints: any[] = [limit(limitCount)];
 
     if (isFeatured) constraints.push(where('featured', '==', true));
     if (mode === 'buy') constraints.push(where('isForSale', '==', true));
@@ -70,20 +66,12 @@ export async function GET(request: Request) {
 
     const q = query(collectionRef, ...constraints);
     const snapshot = await getDocs(q);
-    
     const rawProperties = snapshot.docs;
 
-    // --- DATA JOINING: FETCH AGENTS EFFICIENTLY ---
     const agentIds = [...new Set(rawProperties.map(doc => doc.data()?.agentId).filter(Boolean))];
-
-    // Fetch agents in parallel (handle potential failures gracefully)
     const agentSnapshots = await Promise.all(
         agentIds.map(async (agentId) => {
-            try {
-                return await getDoc(doc(db, 'users', agentId));
-            } catch (e) {
-                return null;
-            }
+            try { return await getDoc(doc(db, 'users', agentId)); } catch (e) { return null; }
         })
     );
 
@@ -94,107 +82,73 @@ export async function GET(request: Request) {
       }
     });
 
-    // --- MERGE & NORMALIZE ---
     const mergedData = rawProperties.map(propDoc => {
-      try {
-        const pData = propDoc.data();
-        const liveAgent = agentMap[pData?.agentId] || {}; 
-        return mergeAndNormalize(propDoc, liveAgent);
-      } catch (err) {
-        console.error("Error normalizing property:", propDoc.id, err);
-        return null; // Skip bad data
-      }
-    }).filter(Boolean); // Remove nulls
+      const pData = propDoc.data();
+      // Only hide if explicitly marked as true; preserves missing fields
+      if (pData?.isArchived === true) return null;
+
+      const liveAgent = (pData?.agentId && agentMap[pData.agentId]) ? agentMap[pData.agentId] : {}; 
+      return mergeAndNormalize(propDoc, liveAgent);
+    }).filter(Boolean);
 
     return NextResponse.json(mergedData);
 
   } catch (error: any) {
-    console.error('Properties API Critical Error:', error);
-    // Return the actual error message for debugging
+    console.error('Properties API Error:', error);
     return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
   }
 }
 
-// --- HELPER: THE ULTIMATE NORMALIZER ---
 function mergeAndNormalize(propDoc: DocumentSnapshot, liveAgentData: any) {
   const p = propDoc.data() || {};
   
-  // 1. Safe Date Handling (Defensive)
   let createdAt = new Date().toISOString();
   if (p.createdAt && typeof p.createdAt.toDate === 'function') {
     createdAt = p.createdAt.toDate().toISOString();
-  } else if (p.createdAt) {
-     // Handle string or number timestamps if necessary
-     createdAt = new Date(p.createdAt).toISOString();
   }
 
-  // 2. Amenities (Defensive)
   const amenities: string[] = [];
   const feats = p.features || {};
-
   if (p.isFurnished || feats.isFurnished) amenities.push('Furnished');
-  if (p.hasGarden || feats.hasGarden) amenities.push('Garden');
   if (p.hasPool || feats.hasPool) amenities.push('Swimming Pool');
-  if (p.hasBalcony || feats.hasBalcony) amenities.push('Balcony');
-  if (p.hasGym || feats.hasGym) amenities.push('Gym');
   if (p.hasParking || feats.hasParking) amenities.push('Parking');
-  if (p.hasAirConditioning || feats.hasAirConditioning) amenities.push('AC');
-  if (p.hasSecurity || feats.hasSecurity) amenities.push('Security');
-  if (p.hasElevators || feats.hasElevators) amenities.push('Elevator');
-  if (p.hasMeetingRoom || feats.hasMeetingRoom) amenities.push('Meeting Room');
-  if (p.hasInternet || feats.hasInternet) amenities.push('Internet');
-  if (p.waterAvailable || feats.waterAvailable) amenities.push('Water Available');
 
-  // 3. Price (Defensive)
   const price = Number(p.price) || 0;
   const discountPrice = Number(p.discountPrice) || 0;
-  const hasValidDiscount = (p.hasDiscount === true) && discountPrice > 0 && discountPrice < price;
+  const hasValidDiscount = (p.hasDiscount === true) && discountPrice > 0;
 
-  // 4. Agent Verification (Defensive)
+  // FIXED: Logic strictly matches Flutter 'planTier == pro'
   const livePlan = liveAgentData.planTier || p.planTier || 'free';
-  const isAgentVerified = (liveAgentData.isVerified === true) || (livePlan === 'pro') || (livePlan === 'premium') || (p.agentVerified === true);
+  const isPlanVerified = (livePlan === 'pro'); 
+  const isManualVerified = (liveAgentData.isVerified === true) || (p.agentVerified === true);
+  const finalVerifiedStatus = isPlanVerified || isManualVerified;
 
   return {
     id: propDoc.id,
     title: p.title || 'Untitled Property',
-    description: p.description || '',
-    
-    // Pricing
     price: price,
     discountPrice: hasValidDiscount ? discountPrice : 0,
     hasDiscount: hasValidDiscount,
     displayPrice: hasValidDiscount ? discountPrice : price,
     isForSale: p.isForSale ?? true,
     status: p.status || 'available',
-
-    // Visuals
     images: Array.isArray(p.images) && p.images.length > 0 ? p.images : ['https://placehold.co/600x400?text=No+Image'],
-    videoUrl: p.videoUrl || null,
-
-    // Location (Safe Access)
     location: {
       city: p.location?.city || 'Unknown City',
       area: p.location?.area || 'Unknown Area',
-      address: p.location?.address || '',
-      lat: p.location?.lat || null,
-      lng: p.location?.lng || null,
     },
-
-    // Specs
     bedrooms: Number(p.bedrooms || feats.bedrooms || 0),
     bathrooms: Number(p.bathrooms || feats.bathrooms || 0),
     area: Number(p.area || p.size || feats.size || 0),
     type: p.type || 'House',
     amenities: amenities,
-
-    // Agent
     agentId: p.agentId || '',
     agentName: liveAgentData.name || liveAgentData.displayName || p.agentName || 'GuriUp Agent',
     agentPhoto: liveAgentData.profileImageUrl || liveAgentData.photoURL || p.agentPhoto || null,
-    agentPhone: liveAgentData.phone || liveAgentData.phoneNumber || p.contactPhone || p.agentPhone,
-    agentVerified: isAgentVerified,
+    // FIXED: Phone priority matches App contactPhone
+    agentPhone: p.contactPhone || liveAgentData.phone || liveAgentData.phoneNumber || p.agentPhone,
+    agentVerified: finalVerifiedStatus,
     agentPlanTier: livePlan,
-
     featured: p.featured || p.isFeatured || false,
     createdAt: createdAt,
   };

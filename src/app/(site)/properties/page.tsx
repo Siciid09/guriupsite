@@ -1,46 +1,32 @@
 import PropertiesUI from '@/components/templates/PropertiesUI';
 
-// Helper to fetch data from your Source of Truth API
+// Helper to fetch data from your internal API
 async function getPropertiesData() {
-  // 1. Determine Base URL Safely
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL 
-    ? process.env.NEXT_PUBLIC_BASE_URL 
-    : 'http://localhost:3000'; // Fallback for local dev
+  // Use absolute URL for server-side fetching
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
   
   try {
-    console.log(`Fetching properties from: ${baseUrl}/api/properties`);
+    // 1. Fetch Featured
+    const featuredRes = await fetch(`${baseUrl}/api/properties?featured=true`, { cache: 'no-store' });
+    
+    // 2. Fetch All (Limit 100)
+    const allRes = await fetch(`${baseUrl}/api/properties?limit=100`, { cache: 'no-store' });
 
-    // 2. Fetch Data
-    const [featuredRes, allRes] = await Promise.all([
-      fetch(`${baseUrl}/api/properties?featured=true`, { cache: 'no-store' }),
-      fetch(`${baseUrl}/api/properties?limit=100`, { cache: 'no-store' }),
-    ]);
+    // Debug Logs
+    if (!featuredRes.ok) console.error(`Featured Props Error: ${featuredRes.status}`);
+    if (!allRes.ok) console.error(`All Props Error: ${allRes.status}`);
 
-    // 3. Error Handling with Details
-    if (!featuredRes.ok) {
-        const errorText = await featuredRes.text();
-        console.error(`Featured API Error (${featuredRes.status}):`, errorText);
-    }
-    if (!allRes.ok) {
-        const errorText = await allRes.text();
-        console.error(`All Properties API Error (${allRes.status}):`, errorText);
-    }
+    const featuredProperties = featuredRes.ok ? await featuredRes.json() : [];
+    const allProperties = allRes.ok ? await allRes.json() : [];
 
-    if (!featuredRes.ok || !allRes.ok) {
-      return [];
-    }
-
-    const featuredProperties = await featuredRes.json();
-    const allProperties = await allRes.json();
-
-    // 4. Deduplicate logic
+    // Combine and Deduplicate
     const featuredIds = new Set(featuredProperties.map((p: any) => p.id));
     const otherProperties = allProperties.filter((p: any) => !featuredIds.has(p.id));
 
     return [...featuredProperties, ...otherProperties];
 
   } catch (error) {
-    console.error("Network/Server Error in properties page:", error);
+    console.error("PROPERTIES PAGE FETCH ERROR:", error);
     return [];
   }
 }
@@ -53,4 +39,4 @@ export default async function PropertiesPage() {
       initialProperties={allPropertiesForWeb} 
     />
   );
-} 
+}

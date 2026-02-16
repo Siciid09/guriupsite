@@ -53,17 +53,18 @@ interface Property {
 }
 
 // --- 10 CATEGORIES (Modern Cards) ---
+// Standardized Categories to match App's propertyTypes list
 const PROPERTY_CATEGORIES = [
-  { name: 'Villa', label: 'Villas', sub: 'Elite Living', icon: <Building2 size={20}/>, color: 'bg-blue-50 text-blue-600' },
-  { name: 'Apartment', label: 'Apartments', sub: 'Modern Flats', icon: <Building size={20}/>, color: 'bg-indigo-50 text-indigo-600' },
-  { name: 'Land', label: 'Land', sub: 'Investment', icon: <LandPlot size={20}/>, color: 'bg-emerald-50 text-emerald-600' },
-  { name: 'Commercial', label: 'Commercial', sub: 'Business', icon: <Zap size={20}/>, color: 'bg-orange-50 text-orange-600' },
   { name: 'House', label: 'Houses', sub: 'Family', icon: <Home size={20}/>, color: 'bg-rose-50 text-rose-600' },
+  { name: 'Apartment', label: 'Apartments', sub: 'Modern Flats', icon: <Building size={20}/>, color: 'bg-indigo-50 text-indigo-600' },
   { name: 'Office', label: 'Offices', sub: 'Workspaces', icon: <MapPin size={20}/>, color: 'bg-slate-50 text-slate-600' },
-  { name: 'Studio', label: 'Studios', sub: 'Compact', icon: <Key size={20}/>, color: 'bg-teal-50 text-teal-600' },
-  { name: 'Hall', label: 'Halls', sub: 'Events', icon: <Users size={20}/>, color: 'bg-purple-50 text-purple-600' },
-  { name: 'Warehouse', label: 'Storage', sub: 'Logistics', icon: <Warehouse size={20}/>, color: 'bg-amber-50 text-amber-600' },
+  { name: 'Villa', label: 'Villas', sub: 'Elite Living', icon: <Building2 size={20}/>, color: 'bg-blue-50 text-blue-600' },
   { name: 'Penthouse', label: 'Penthouse', sub: 'Luxury', icon: <Crown size={20}/>, color: 'bg-cyan-50 text-cyan-600' },
+  { name: 'Warehouse', label: 'Storage', sub: 'Logistics', icon: <Warehouse size={20}/>, color: 'bg-amber-50 text-amber-600' },
+  { name: 'Land', label: 'Land', sub: 'Investment', icon: <LandPlot size={20}/>, color: 'bg-emerald-50 text-emerald-600' },
+  { name: 'Shop', label: 'Shops', sub: 'Retail', icon: <Key size={20}/>, color: 'bg-teal-50 text-teal-600' },
+  { name: 'Guest House', label: 'Guest House', sub: 'Short Stay', icon: <HeartHandshake size={20}/>, color: 'bg-rose-50 text-rose-600' },
+  { name: 'Commercial', label: 'Commercial', sub: 'Business', icon: <Zap size={20}/>, color: 'bg-orange-50 text-orange-600' },
 ];
 
 // --- 6 ADVANTAGES (Modern Grid) ---
@@ -173,12 +174,9 @@ export default function PropertiesPage({
   }, [initialProperties, searchQuery, filterTab, selectedCategory, priceRange, minSize, selectedBeds, selectedBaths, selectedAmenities]);
 
   // --- FEATURED LOGIC (Strict: Premium Only) ---
+  // --- FEATURED LOGIC (Matches Flutter App: checks featured boolean only) ---
   const featuredProperties = useMemo(() => {
-    return filteredData.filter(p => {
-      // Matches App: featured == true AND (agentVerified == true OR planTier == pro)
-      const isVerified = p.agentVerified || p.planTier === 'pro' || p.planTier === 'premium' || p.agentPlanTier === 'pro';
-      return p.featured === true && isVerified;
-    }).slice(0, 3);
+    return filteredData.filter(p => p.featured === true).slice(0, 3);
   }, [filteredData]);
 
   const formatPrice = (price: number) => 
