@@ -22,7 +22,6 @@ export async function GET(request: Request) {
   const city = searchParams.get('city');
 
   try {
-    // --- SINGLE HOTEL FETCH ---
     if (id) {
       const docRef = doc(db, 'hotels', id);
       const docSnap = await getDoc(docRef);
@@ -43,7 +42,6 @@ export async function GET(request: Request) {
       return NextResponse.json(mergeAndNormalizeHotel(docSnap, adminData));
     }
 
-    // --- LIST FETCH ---
     const collectionRef = collection(db, 'hotels');
     const constraints: any[] = [orderBy('createdAt', 'desc'), limit(limitCount)];
 
@@ -54,7 +52,6 @@ export async function GET(request: Request) {
     const snapshot = await getDocs(q);
     const rawHotels = snapshot.docs;
 
-    // Batch Fetch Admin Data
     const adminIds = [...new Set(rawHotels.map(doc => doc.data().hotelAdminId).filter(Boolean))];
     const adminSnapshots = await Promise.all(adminIds.map(id => getDoc(doc(db, 'users', id))));
 
@@ -77,52 +74,32 @@ export async function GET(request: Request) {
   }
 }
 
-// --- NORMALIZATION HELPER ---
 function mergeAndNormalizeHotel(hotelDoc: DocumentSnapshot, liveAdminData: any) {
   const h = hotelDoc.data()!;
 
-  // 1. Amenities Normalization (Matches UI Constants)
+  // Amenities list matches App labels exactly
   let amenitiesList: string[] = [];
-  const rawAm = h.amenities || {};
-  
-  // Handle Map-based amenities (Standard App Format)
-  if (typeof rawAm === 'object' && !Array.isArray(rawAm)) {
-    if (rawAm.hasWifi) amenitiesList.push('Wi-Fi'); // Matches UI 'Wi-Fi'
-    if (rawAm.hasPool) amenitiesList.push('Swimming Pool'); // Matches UI 'Swimming Pool'
+  const rawAm = h.amenities;
+  if (Array.isArray(rawAm)) {
+    amenitiesList = rawAm; 
+  } else if (typeof rawAm === 'object' && rawAm !== null) {
+    if (rawAm.hasWifi) amenitiesList.push('Wi-Fi');
+    if (rawAm.hasPool) amenitiesList.push('Swimming Pool');
     if (rawAm.hasGym) amenitiesList.push('Gym');
     if (rawAm.hasRestaurant) amenitiesList.push('Restaurant');
     if (rawAm.hasParking) amenitiesList.push('Parking');
-    // Check both keys for AC
-    if (rawAm.hasAC || rawAm.hasAirConditioning) amenitiesList.push('Air Conditioning');
-  } 
-  // Handle Legacy Array
-  else if (Array.isArray(rawAm)) {
-    amenitiesList = rawAm; 
+    if (rawAm.hasAC) amenitiesList.push('Air Conditioning');
   }
 
-  // 2. Plan Tier Logic (STRICT)
-  // Prioritize document snapshot to prevent subscription expiry breaking old listings
-  const plan = h.planTierAtUpload || h.planTier || liveAdminData.planTier || 'free';
-  const isPro = plan === 'pro' || plan === 'premium';
+  // FIXED: Logic strictly matches Flutter 'planTier == pro'
+  const plan = liveAdminData.planTier || h.planTier || 'free';
+  const isPro = plan === 'pro';
 
-  // 3. Pricing & Discount Logic
+  // FIXED: Removed strict discount < price check to match App display logic
   const price = Number(h.pricePerNight) || 0;
   const discount = Number(h.discountPrice) || 0;
-  // Valid Discount: Must be active AND strictly less than original price
-  const hasValidDiscount = (h.hasDiscount === true) && (discount > 0) && (discount < price);
+  const hasDiscount = h.hasDiscount && discount > 0;
 
-  // 4. Coordinates Normalization
-  let coords = null;
-  if (h.location?.coordinates) {
-    if (typeof h.location.coordinates.latitude === 'number') {
-        coords = { 
-            lat: h.location.coordinates.latitude, 
-            lng: h.location.coordinates.longitude 
-        };
-    }
-  }
-
-  // 5. Date Normalization
   let createdAt = new Date().toISOString();
   if (h.createdAt?.toDate) {
     createdAt = h.createdAt.toDate().toISOString();
@@ -131,35 +108,21 @@ function mergeAndNormalizeHotel(hotelDoc: DocumentSnapshot, liveAdminData: any) 
   return {
     id: hotelDoc.id,
     name: h.name || 'Untitled Hotel',
-    description: h.description || '',
-    
-    // Pricing
-    pricePerNight: hasValidDiscount ? discount : price,
+    pricePerNight: hasDiscount ? discount : price,
     originalPrice: price,
-    hasDiscount: hasValidDiscount,
-    displayPrice: hasValidDiscount ? discount : price,
-    
-    // Media
+    hasDiscount: hasDiscount,
+    displayPrice: hasDiscount ? discount : price,
     images: h.images?.length > 0 ? h.images : ['https://placehold.co/600x400?text=No+Image'],
     rating: Number(h.rating) || 0,
-    
-    // Location
     location: {
       city: h.location?.city || h.city || 'Unknown City',
       area: h.location?.area || h.area || 'Unknown Area',
-      coordinates: coords,
     },
-    
-    // Metadata
     amenities: amenitiesList,
     planTier: plan,
     isPro: isPro,
     featured: h.featured || false,
-    
-    // Contact
     contactPhone: liveAdminData.phone || liveAdminData.phoneNumber || h.phone || '',
-    hotelAdminId: h.hotelAdminId || '',
-    
     createdAt: createdAt,
   };
 }

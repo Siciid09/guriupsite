@@ -3,8 +3,8 @@ import HotelsUI from '@/components/templates/HotelsUI';
 // Helper to fetch data from your internal API
 async function getHotelsData() {
   // Use absolute URL for server-side fetching
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-  
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://guriup.hiigsitech.com/';
+   
   try {
     const [featuredRes, allRes] = await Promise.all([
       fetch(`${baseUrl}/api/hotels?featured=true&limit=10`, { cache: 'no-store' }),
