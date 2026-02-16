@@ -161,8 +161,8 @@ function mergeAndNormalize(propDoc: DocumentSnapshot, liveAgentData: any) {
 
   // 4. Plan Tier Logic (STRICT SOURCE OF TRUTH)
   // Priority: Document Snapshot (Historic) -> Live Agent (Current) -> Free
-  const planTier = p.planTierAtUpload || p.planTier || liveAgentData.planTier || 'free';
-  const isPro = planTier === 'pro' || planTier === 'premium';
+const planTier = p.planTierAtUpload || p.planTier || liveAgentData.planTier || 'free';
+const isPro = planTier === 'pro' || planTier === 'premium'; // Make sure this line exists!
 
   // 5. Verification Logic
   const isManualVerified = (liveAgentData.isVerified === true) || (p.agentVerified === true);

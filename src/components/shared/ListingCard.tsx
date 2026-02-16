@@ -25,9 +25,12 @@ export default function ListingCard({ listing }: ListingCardProps) {
   const linkPath = isListingHotel ? `/hotels/${listing.id}` : `/properties/${listing.id}`;
   
   // Data Normalization
-  const displayName = isListingHotel ? listing.name : listing.title;
-  const price = isListingHotel ? listing.pricePerNight : listing.price;
-  const priceLabel = isListingHotel ? '/night' : (listing as Property).isForSale ? '' : '/month';
+  const displayName = isListingHotel ? (listing as Hotel).name : (listing as Property).title;
+  const price = isListingHotel ? (listing as Hotel).pricePerNight : (listing as Property).price;
+  const isForSale = !isListingHotel && (listing as Property).isForSale;
+  const priceLabel = isListingHotel ? '/night' : isForSale ? '' : '/month';
+
+  // Handling location object vs string
   const locationText = typeof listing.location === 'string' 
     ? listing.location 
     : `${listing.location.area || ''}, ${listing.location.city || ''}`;
@@ -44,7 +47,6 @@ export default function ListingCard({ listing }: ListingCardProps) {
         
         {/* --- IMAGE SECTION --- */}
         <div className="relative h-64 w-full overflow-hidden rounded-[1.5rem] bg-gray-100 isolate">
-          {/* Image Zoom Effect */}
           <Image
             src={listing.images[0] || 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c'}
             alt={displayName}
@@ -52,10 +54,8 @@ export default function ListingCard({ listing }: ListingCardProps) {
             className="object-cover transition-transform duration-700 ease-in-out group-hover:scale-110"
           />
           
-          {/* Gradient Overlay for Text Contrast */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
-          {/* Top Badges (Glassmorphism) */}
           <div className="absolute top-4 left-4 flex gap-2 z-10">
             {listing.featured && (
               <div className="bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm">
@@ -63,40 +63,33 @@ export default function ListingCard({ listing }: ListingCardProps) {
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-800">Featured</span>
               </div>
             )}
-             {/* Dynamic Status Badge */}
              {!isListingHotel && (
                <div className={`backdrop-blur-md px-3 py-1.5 rounded-full shadow-sm ${
-                 (listing as Property).isForSale ? 'bg-slate-900/80 text-white' : 'bg-emerald-500/90 text-white'
+                 isForSale ? 'bg-slate-900/80 text-white' : 'bg-emerald-500/90 text-white'
                }`}>
                 <span className="text-[10px] font-extrabold uppercase tracking-wider">
-                  {(listing as Property).isForSale ? 'Buy' : 'Rent'}
+                  {isForSale ? 'Buy' : 'Rent'}
                 </span>
               </div>
              )}
           </div>
 
-          {/* Top Right Action (Like/Save) */}
           <button className="absolute top-4 right-4 w-10 h-10 bg-white/10 backdrop-blur-md border border-white/20 rounded-full flex items-center justify-center text-white transition-all hover:bg-white hover:text-red-500 hover:scale-110 active:scale-95 z-20">
             <Heart size={18} strokeWidth={2.5} />
           </button>
 
-          {/* Rating (Hotels) or New Tag (Properties) */}
           <div className="absolute bottom-4 left-4 z-10">
-            {isListingHotel ? (
+            {isListingHotel && (
               <div className="flex items-center gap-1 bg-white px-3 py-1 rounded-full shadow-lg">
                 <Star size={14} className="fill-yellow-400 text-yellow-400" />
-                <span className="text-xs font-bold text-slate-800">{listing.rating.toFixed(1)}</span>
+                <span className="text-xs font-bold text-slate-800">{(listing as Hotel).rating?.toFixed(1) || '5.0'}</span>
               </div>
-            ) : (
-               // Optional: Show something else for properties
-               null
             )}
           </div>
         </div>
 
         {/* --- CONTENT SECTION --- */}
         <div className="pt-5 px-2 pb-2 flex flex-col h-[calc(100%-16rem)]">
-          {/* Title & Arrow */}
           <div className="flex justify-between items-start gap-4 mb-2">
             <h3 className="text-xl font-bold text-slate-900 leading-tight group-hover:text-[#0164E5] transition-colors line-clamp-1">
               {displayName}
@@ -106,34 +99,31 @@ export default function ListingCard({ listing }: ListingCardProps) {
             </div>
           </div>
 
-          {/* Location */}
           <div className="flex items-center gap-1.5 text-gray-500 mb-6">
             <MapPin size={14} className="text-gray-400" />
             <p className="text-sm font-medium truncate">{locationText}</p>
           </div>
 
-          {/* Amenities Row (Pills Design) */}
+          {/* Amenities Row - Matches your Property model bedrooms/bathrooms/area directly */}
           {!isListingHotel && (
             <div className="flex gap-2 mb-6 overflow-x-auto no-scrollbar">
-              <div className="flex items-center gap-1.5 bg-gray-50 px-3 py-2 rounded-xl border border-gray-100">
+              <div className="flex items-center gap-1.5 bg-gray-50 px-3 py-2 rounded-xl border border-gray-100 shrink-0">
                 <BedDouble size={16} className="text-slate-900" />
-                <span className="text-xs font-bold text-gray-600">{listing.features.bedrooms} <span className="hidden sm:inline font-medium text-gray-400">Beds</span></span>
+                <span className="text-xs font-bold text-gray-600">{(listing as Property).bedrooms} <span className="hidden sm:inline font-medium text-gray-400">Beds</span></span>
               </div>
-              <div className="flex items-center gap-1.5 bg-gray-50 px-3 py-2 rounded-xl border border-gray-100">
+              <div className="flex items-center gap-1.5 bg-gray-50 px-3 py-2 rounded-xl border border-gray-100 shrink-0">
                 <Bath size={16} className="text-slate-900" />
-                <span className="text-xs font-bold text-gray-600">{listing.features.bathrooms} <span className="hidden sm:inline font-medium text-gray-400">Baths</span></span>
+                <span className="text-xs font-bold text-gray-600">{(listing as Property).bathrooms} <span className="hidden sm:inline font-medium text-gray-400">Baths</span></span>
               </div>
-               {/* Assuming area exists on listing or features */}
-              <div className="flex items-center gap-1.5 bg-gray-50 px-3 py-2 rounded-xl border border-gray-100">
+              <div className="flex items-center gap-1.5 bg-gray-50 px-3 py-2 rounded-xl border border-gray-100 shrink-0">
                 <Maximize size={16} className="text-slate-900" />
                 <span className="text-xs font-bold text-gray-600">
-                   {(listing as any).features?.area || (listing as any).area || 'N/A'} <span className="hidden sm:inline font-medium text-gray-400">sqft</span>
+                    {(listing as Property).area} <span className="hidden sm:inline font-medium text-gray-400">sqft</span>
                 </span>
               </div>
             </div>
           )}
 
-          {/* Footer: Price & CTA */}
           <div className="mt-auto pt-4 border-t border-gray-100 flex items-center justify-between group-hover:border-transparent transition-colors">
             <div className="flex flex-col">
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
@@ -147,9 +137,6 @@ export default function ListingCard({ listing }: ListingCardProps) {
               </div>
             </div>
             
-            {/* The button text appears/slides on hover if you want extra effect, 
-                but keeping it clean is often more modern. 
-                Below is a subtle "Book" indicator */}
             <div className="opacity-0 transform translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
                 <span className="text-xs font-black text-[#0164E5] uppercase tracking-widest">
                     View Details
