@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth'; 
 import { auth } from '@/app/lib/firebase';
+// 1. ADD THIS IMPORT
+import { LogOut } from 'lucide-react';
 
 const Header = () => {
   const pathname = usePathname();
@@ -78,33 +80,6 @@ const Header = () => {
 
   return (
     <>
-      <style jsx>{`
-        /* --- THICK BLUE UNDERLINE CSS --- */
-        .nav-underline {
-          position: relative;
-          display: inline-block;
-          text-decoration: none;
-        }
-        .nav-underline::after {
-          content: '';
-          position: absolute;
-          width: 0;
-          height: 4px; /* Thick Line */
-          bottom: -6px;
-          left: 0;
-          background-color: #38bdf8; /* Light Blue */
-          transition: width 0.3s ease-in-out;
-          border-radius: 4px;
-        }
-        .nav-underline:hover::after {
-          width: 100%;
-        }
-        /* Keep underline visible if active */
-        .nav-underline.active::after {
-          width: 100%;
-        }
-      `}</style>
-
       {/* --- MOBILE NAV OVERLAY (HAMBURGER) --- */}
       <div className={`fixed inset-0 bg-[#0a0c10]/98 backdrop-blur-2xl z-[9999] flex flex-col justify-center transition-transform duration-500 ${isNavOpen ? 'translate-x-0' : 'translate-x-full'}`}>
         
@@ -115,7 +90,7 @@ const Header = () => {
 
         {/* Mobile Menu List */}
         <div className="pl-8 md:pl-12 flex flex-col space-y-2 overflow-y-auto max-h-[85vh] py-10">
-          <span className="text-[#38bdf8] font-bold text-sm tracking-widest uppercase mb-4">Menu</span>
+          <span className="text-[#0065eb] font-bold text-sm tracking-widest uppercase mb-4">Menu</span>
           
           {/* 1. Main Pages */}
           {navLinks.map((item) => (
@@ -123,7 +98,7 @@ const Header = () => {
               key={item.name} 
               href={item.href} 
               onClick={toggleNav}
-              className={`text-4xl md:text-5xl font-black transition-all duration-300 ${pathname === item.href ? 'text-[#38bdf8] stroke-none' : 'text-transparent stroke-white hover:text-[#38bdf8]'}`}
+              className={`text-4xl md:text-5xl font-black transition-all duration-300 ${pathname === item.href ? 'text-[#0065eb] stroke-none' : 'text-transparent stroke-white hover:text-[#0065eb]'}`}
               style={pathname === item.href ? {} : { WebkitTextStroke: '1px rgba(255,255,255,0.5)' }}
             >
               {item.name}
@@ -137,16 +112,17 @@ const Header = () => {
                 <Link 
                   href="/dashboard" 
                   onClick={toggleNav}
-                  className="text-4xl md:text-5xl font-black text-transparent stroke-white hover:text-[#38bdf8] transition-all duration-300"
+                  className="text-4xl md:text-5xl font-black text-transparent stroke-white hover:text-[#0065eb] transition-all duration-300"
                   style={{ WebkitTextStroke: '1px rgba(255,255,255,0.5)' }}
                 >
                   Dashboard
                 </Link>
+                {/* 2. UPDATED MOBILE LOGOUT ICON */}
                 <button 
                   onClick={handleSignOut}
-                  className="text-left text-4xl md:text-5xl font-black text-red-500 transition-all duration-300 opacity-80 hover:opacity-100"
+                  className="text-left transition-all duration-300 opacity-80 hover:opacity-100 text-red-500"
                 >
-                  Log Out
+                  <LogOut size={48} />
                 </button>
               </>
             ) : (
@@ -154,7 +130,7 @@ const Header = () => {
                 <Link 
                   href="/login" 
                   onClick={toggleNav}
-                  className="text-4xl md:text-5xl font-black text-transparent stroke-white hover:text-[#38bdf8] transition-all duration-300"
+                  className="text-4xl md:text-5xl font-black text-transparent stroke-white hover:text-[#0065eb] transition-all duration-300"
                   style={{ WebkitTextStroke: '1px rgba(255,255,255,0.5)' }}
                 >
                   Log In
@@ -162,7 +138,7 @@ const Header = () => {
                 <Link 
                   href="/signup" 
                   onClick={toggleNav}
-                  className="text-4xl md:text-5xl font-black text-transparent stroke-white hover:text-[#38bdf8] transition-all duration-300"
+                  className="text-4xl md:text-5xl font-black text-transparent stroke-white hover:text-[#0065eb] transition-all duration-300"
                   style={{ WebkitTextStroke: '1px rgba(255,255,255,0.5)' }}
                 >
                   Sign Up
@@ -174,7 +150,7 @@ const Header = () => {
           {/* 3. Download Link */}
           <button 
             onClick={() => { handleDownloadClick(); toggleNav(); }}
-            className="text-left text-4xl md:text-5xl font-black text-[#38bdf8] transition-all duration-300 mt-4"
+            className="text-left text-4xl md:text-5xl font-black text-[#0065eb] transition-all duration-300 mt-4"
           >
             Download
           </button>
@@ -195,12 +171,17 @@ const Header = () => {
                 </Link>
 
                 {/* DESKTOP NAV LINKS (Hidden on Mobile) */}
-                <div className="hidden lg:flex gap-6 xl:gap-8 font-bold text-gray-300 text-[15px]">
+                <div className="hidden lg:flex gap-6 xl:gap-8 font-bold text-[15px]">
                   {navLinks.map((link) => (
                     <Link 
                       key={link.name} 
                       href={link.href} 
-                      className={`nav-underline hover:text-white transition-colors py-1 ${pathname === link.href ? 'text-[#38bdf8] active' : ''}`}
+                      className={`relative py-1 transition-all duration-500 ease-out 
+                        bg-left-bottom bg-gradient-to-r from-[#0065eb] to-[#0065eb] bg-no-repeat 
+                        ${pathname === link.href 
+                          ? 'text-[#0065eb] bg-[length:0%_4px]' 
+                          : 'text-gray-300 hover:text-white bg-[length:0%_4px] hover:bg-[length:100%_4px]'
+                        }`}
                     >
                       {link.name}
                     </Link>
@@ -214,12 +195,19 @@ const Header = () => {
                   <div className="hidden md:flex items-center gap-4">
                     {!loading && user ? (
                       <div className="flex items-center gap-3">
-                          <Link href="/dashboard" className="nav-underline text-white font-bold hover:text-[#38bdf8] transition-colors text-sm">
+                          <Link 
+                            href="/dashboard" 
+                            className={`relative text-sm font-bold text-white transition-all duration-500 ease-out 
+                              bg-left-bottom bg-gradient-to-r from-[#0065eb] to-[#0065eb] bg-no-repeat 
+                              bg-[length:0%_4px] hover:bg-[length:100%_4px] hover:text-[#0065eb]`}
+                          >
                             Dashboard
                           </Link>
-                          <button onClick={handleSignOut} className="text-white/50 hover:text-red-400 font-bold text-sm">
-                            Sign Out
+                          {/* 3. UPDATED DESKTOP LOGOUT ICON */}
+                          <button onClick={handleSignOut} className="text-white/50 hover:text-red-400 transition-colors" title="Sign Out">
+                            <LogOut size={18} />
                           </button>
+                          
                           <Link href="/dashboard">
                           <div className="w-9 h-9 rounded-full bg-[#0065eb] ring-2 ring-white/20 overflow-hidden">
                              {user.photoURL ? (
@@ -232,7 +220,12 @@ const Header = () => {
                       </div>
                     ) : (
                       <>
-                        <Link href="/login" className="nav-underline text-white font-bold hover:text-[#38bdf8] transition-colors text-sm">
+                        <Link 
+                          href="/login" 
+                          className={`relative text-sm font-bold text-white transition-all duration-500 ease-out 
+                            bg-left-bottom bg-gradient-to-r from-[#0065eb] to-[#0065eb] bg-no-repeat 
+                            bg-[length:0%_4px] hover:bg-[length:100%_4px] hover:text-[#0065eb]`}
+                        >
                           Log In
                         </Link>
                         <Link href="/signup">

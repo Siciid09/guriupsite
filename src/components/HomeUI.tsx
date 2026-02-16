@@ -446,7 +446,7 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
               </div>
 
               <div className="mt-auto text-right mb-4 pb-4 translate-y-[-27px] mr-10">
-                <p className="text-gray-400 text-sm mb-1">Give us a Call <span className="text-white font-black hover:text-[#0065eb] transition-colors cursor-pointer">1-888-498-9240</span></p>
+                <p className="text-gray-400 text-sm mb-1">Give us a Call <span className="text-white font-black hover:text-[#0065eb] transition-colors cursor-pointer">+252  65 3227084</span></p>
                 <a href="#" className="text-[#0065eb] text-sm underline font-bold">check our pricing plans</a>
               </div>
             </div>
