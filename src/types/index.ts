@@ -1,24 +1,24 @@
-// No longer need to import these here, as we are using serializable types
-// import { Timestamp, GeoPoint } from 'firebase/firestore';
+// types/index.ts
 
+// --- USER ---
 export interface User {
   uid: string;
   name: string;
   email: string;
   phoneNumber?: string;
-  createdAt: string; // CHANGED from Timestamp
+  createdAt: string;
   role: 'user' | 'reagent' | 'hoadmin' | 'admin';
   favoriteProperties?: string[];
   favoriteHotels?: string[];
-  planTier?: 'free' | 'pro' | 'premium'; // Added to match Signup fix
+  planTier?: 'free' | 'pro' | 'premium';
 }
 
+// --- AGENT ---
 export interface Agent {
-  phone: any;
-  id: any;
-  name: any;
   uid: string;
-  displayName: string;
+  id: string;
+  name: string;
+  displayName?: string; // Handle legacy field
   email: string;
   phoneNumber: string;
   location: string;
@@ -28,109 +28,134 @@ export interface Agent {
   role: 'agent' | 'admin';
 }
 
+// --- PROPERTY (Aligned with App's Property Model) ---
 export interface Property {
   id: string;
   title: string;
-  description: string;
-  type: 'House' | 'Apartment' | 'Land' | 'Commercial';
-  images: string[];
-  searchKeywords: string[];
-  createdAt: string; // CHANGED from Timestamp
-  updatedAt: string; // CHANGED from Timestamp
-  status: 'available' | 'rented_out' | 'sold';
-  agentId: string;
-  agentName: string;
-  price: number;
+  description?: string;
+  type: string; // 'House', 'Apartment', 'Land', 'Commercial', etc.
+  status: string; // 'available', 'rented_out', 'sold'
   isForSale: boolean;
-  hasDiscount?: boolean;
-  discountPrice?: number;
-  featured: boolean;
   
-  // --- ADDED THIS FIELD ---
-  // Matches the App's logic for "Pro" badges
-  planTier: 'free' | 'pro' | 'premium'; 
-  // ------------------------
+  // Media
+  images: string[];
+  videoUrl?: string; // ✅ Added to match App
 
+  // Price
+  price: number;
+  displayPrice: number; // Normalized active price
+  discountPrice: number;
+  hasDiscount: boolean;
+
+  // Location
   location: {
-    address: string;
     city: string;
     area: string;
-    gpsCoordinates: string;
+    address?: string;
+    coordinates?: { lat: number; lng: number }; // ✅ Normalized from GeoPoint
   };
-  features: {
-    size: number;
-    bedrooms: number;
-    bathrooms: number;
-    isFurnished: boolean;
-    hasGate: boolean;
-    hasPool: boolean;
-    hasParking: boolean;
-    roadAccess: boolean;
-  };
+
+  // Specs (Flattened from 'features' map to match API normalization)
+  bedrooms: number;
+  bathrooms: number;
+  area: number; // ✅ Primary size field
+  size?: number; // Legacy alias
+
+  // Commercial / Special Specs
+  shopCount?: number;
+  workspaceArea?: number;
+  seatingCapacity?: number;
+
+  // Amenities
+  // The API now returns a clean list of strings (e.g., ['Pool', 'Generator'])
+  amenities: string[]; 
+
+  // Agent Info
+  agentId: string;
+  agentName: string;
+  agentPhoto?: string;
+  agentPhone?: string;
+  agentVerified: boolean;
+  
+  // Plan & Verification
+  planTier: string; // 'free' | 'pro' | 'premium'
+  isPro?: boolean; 
+  featured: boolean;
+  
+  createdAt: string;
 }
 
+// --- HOTEL (Aligned with App's Hotel Model) ---
 export interface Hotel {
   id: string;
   name: string;
-  description: string;
+  description?: string;
   images: string[];
   rating: number;
   featured: boolean;
-  createdAt: string; // CHANGED from Timestamp
-  updatedAt: string; // CHANGED from Timestamp
-  hotelAdminId: string;
+  
+  // Price
   pricePerNight: number;
-  hasDiscount?: boolean;
-  discountPrice?: number;
+  originalPrice: number;
+  displayPrice: number;
+  hasDiscount: boolean;
+  discountPrice: number;
+
+  // Location
   location: {
-    address: string;
     city: string;
     area: string;
-    // CHANGED from GeoPoint
-    coordinates: { latitude: number; longitude: number };
+    address?: string;
+    coordinates?: { lat: number; lng: number }; // ✅ Normalized from GeoPoint
   };
-  contact: {
-    phone: string;
-    email: string;
-  };
-  amenities: {
-    hasWifi: boolean;
-    hasPool: boolean;
-    hasGym: boolean;
-    hasRestaurant: boolean;
-    hasParking: boolean;
-  };
-  policies: {
-    checkIn: string;
-    checkOut: string;
-    cancellation: string;
-  };
-  roomTypes: {
-    name: string;
-    price: number;
-    details: string;
-  }[];
+
+  // Amenities
+  // The API returns strings like 'Wi-Fi', 'Swimming Pool', 'Air Conditioning'
+  amenities: string[]; 
+
+  // Contact & Admin
+  contactPhone?: string;
+  hotelAdminId: string;
+
+  // Plan
+  planTier: string;
+  isPro: boolean;
+  
+  createdAt: string;
+  
+  // ✅ REMOVED: 'policies' object (Does not exist in App/Firestore)
+  
+  roomTypes?: Room[];
 }
 
+// --- ROOM (Aligned with Booking Models) ---
 export interface Room {
   id: string;
   roomTypeName: string;
-  maxOccupancy: string;
+  
+  maxOccupancy: string; // Display string e.g. "2 Adults"
+  
+  // ✅ Added numeric fields for booking logic
+  adults: number;       
+  children: number;     
+  
   pricePerNight: number;
   hasDiscount?: boolean;
   discountPrice?: number;
+  
   roomSize: string;
   numberOfRooms: number;
   images: string[];
   features: { [key: string]: boolean };
-  createdAt: string; // CHANGED from Timestamp
+  createdAt: string;
 }
 
+// --- REVIEW ---
 export interface Review {
   id: string;
   comment: string;
   rating: number;
   userName: string;
   userId: string;
-  createdAt: string; // CHANGED from Timestamp
+  createdAt: string;
 }

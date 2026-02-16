@@ -44,7 +44,7 @@ interface Property {
   area?: string; // Support for top-level app data
   bedrooms?: number;
   bathrooms?: number;
-  area_size?: number; // Normalized from 'area' or 'size'
+  size?: number; // Normalized from 'area' or 'size'
   status: string;
   isForSale: boolean;
   type: string;
@@ -165,7 +165,7 @@ function SearchContent() {
                 id: doc.id, 
                 ...data,
                 // Handle different field names for size
-                area_size: Number(data.area || data.size || data.features?.size || 0),
+                size: Number(data.area || data.size || data.features?.size || 0),
                 price: Number(data.price) || 0,
                 pricePerNight: Number(data.pricePerNight) || 0,
                 // Ensure PlanTier logic matches the app's 'pro' check
@@ -304,8 +304,8 @@ const PropertyCard = ({ property, getLocation, formatPrice }: any) => {
                 <div className="grid grid-cols-3 gap-2 mb-6">
                     <div className="flex items-center gap-2 text-slate-600 bg-slate-50 px-3 py-2 rounded-xl"><Bed size={14}/><span className="text-xs font-bold">{property.bedrooms || 0}</span></div>
                     <div className="flex items-center gap-2 text-slate-600 bg-slate-50 px-3 py-2 rounded-xl"><Bath size={14}/><span className="text-xs font-bold">{property.bathrooms || 0}</span></div>
-                    <div className="flex items-center gap-2 text-slate-600 bg-slate-50 px-3 py-2 rounded-xl"><Maximize size={14}/><span className="text-xs font-bold">{property.area_size}</span></div>
-                </div>
+             <div className="flex items-center gap-2 text-slate-600 bg-slate-50 px-3 py-2 rounded-xl"><Maximize size={14}/><span className="text-xs font-bold">{property.size}</span></div>
+               </div>
                 <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50">
                     <div><span className="text-2xl font-black text-slate-900">{formatPrice(property.price)}</span>{!property.isForSale && <span className="text-xs font-bold text-slate-400">/mo</span>}</div>
                     <button className="px-5 py-2 border border-slate-200 text-slate-900 text-xs font-black uppercase rounded-xl group-hover:bg-slate-900 group-hover:text-white transition-all">Details</button>
