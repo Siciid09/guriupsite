@@ -1,141 +1,225 @@
 'use client';
 
-import { useState } from 'react';
-import Image from 'next/image';
+import React, { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 
-// --- ICONS (Inline to ensure no dependency errors) ---
-const Icons = {
-  Mail: () => <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>,
-  Lock: () => <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>,
-  Eye: () => <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>,
-  EyeOff: () => <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>,
-  ArrowLeft: () => <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>,
-};
+// Firebase Imports
+import { 
+  signInWithEmailAndPassword, 
+  signInWithPopup, 
+  GoogleAuthProvider 
+} from 'firebase/auth';
+import { auth } from '../../lib/firebase'; // Ensure this path is correct
+
+// Icons (Lucide React - Matches your Signup Page)
+import { 
+  Mail, 
+  Lock, 
+  Eye, 
+  EyeOff, 
+  ArrowLeft, 
+  Loader2, 
+  AlertCircle,
+  CheckCircle2
+} from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false); // New: Toggle password visibility
-  const [error, setError] = useState<string | null>(null);
+  
+  // State
+  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Handle Input Change
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setError(null);
+  };
+
+  // --- 1. EMAIL LOGIN LOGIC ---
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
     try {
-      // Simulate API Call
-      console.log('Logging in with:', { email, password });
-      
-      // Simulate delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // If successful:
-      // router.push('/dashboard');
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Something went wrong';
-      setError(errorMessage);
+      await signInWithEmailAndPassword(auth, formData.email, formData.password);
+      // Success: Redirect
+      router.push('/dashboard'); 
+    } catch (err: any) {
+      console.error("Login Error:", err);
+      // User-friendly error mapping
+      let msg = "Failed to login. Please check your credentials.";
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found') {
+        msg = "Invalid email or password.";
+      } else if (err.code === 'auth/too-many-requests') {
+        msg = "Too many failed attempts. Please try again later.";
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }
   };
 
+  // --- 2. GOOGLE LOGIN LOGIC ---
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    setError(null);
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      router.push('/dashboard');
+    } catch (err: any) {
+      console.error("Google Auth Error:", err);
+      setError("Failed to sign in with Google.");
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen flex bg-white">
+    <div className="min-h-screen flex bg-[#F8FAFC]">
       
-      {/* --- LEFT SIDE: IMAGE (Hidden on Mobile) --- */}
-      <div className="hidden lg:block relative w-1/2 bg-gray-900">
+  
+     {/* --- LEFT SIDE: IMAGE (Hidden on Mobile) --- */}
+      <div className="hidden lg:block relative w-1/2 bg-slate-900 overflow-hidden">
+        <div className="absolute inset-0 bg-blue-600/20 mix-blend-overlay z-10" />
         <Image
-          src="https://images.unsplash.com/photo-1560518883-ce09059eeffa?q=80"
-          alt="Modern property"
+          src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2000"
+          alt="Modern Architecture"
           fill
-          className="object-cover opacity-80 mix-blend-overlay"
+          className="object-cover opacity-60"
           priority
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40" />
         
-        {/* Quote / Branding on Image */}
-        <div className="absolute bottom-12 left-12 right-12 text-white">
-          <h2 className="text-4xl font-bold mb-4">Welcome to GuriUp.</h2>
-          <p className="text-lg text-gray-200">The most trusted platform for finding your dream home and connecting with top agents in Africa.</p>
+        {/* Modern Glass Content Overlay */}
+        <div className="absolute inset-0 z-20 flex flex-col justify-end p-16 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent">
+          
+          {/* */}
+          <div className="backdrop-blur-md bg-white/10 border border-white/10 p-8 rounded-3xl max-w-lg animate-in slide-in-from-bottom-8 duration-1000 mb-25">
+            <div className="w-12 h-12 bg-[#0065eb] rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-blue-500/30">
+              <CheckCircle2 className="text-white" size={24} />
+            </div>
+            <h2 className="text-3xl font-black text-white mb-4 tracking-tight">Welcome to the Future.</h2>
+            <p className="text-blue-100/80 text-lg leading-relaxed font-medium">
+              Join thousands of agents, hotels, and homeowners managing their properties with GuriUp.
+            </p>
+          </div>
+
         </div>
       </div>
 
       {/* --- RIGHT SIDE: FORM --- */}
-      <div className="w-full lg:w-1/2 flex flex-col justify-center items-center p-8 relative">
-        
-        {/* Back Button */}
-        <Link href="/" className="absolute top-8 left-8 p-2 rounded-full hover:bg-gray-100 transition-colors">
-           <Icons.ArrowLeft />
+      {/* Added pt-28 to push content down below the fixed navbar on mobile */}
+     {/* Added lg:pt-32 to force desktop content down below the nav */}
+<div className="w-full lg:w-1/2 flex flex-col justify-center items-center p-6 relative pt-32 lg:pt-15">
+
+        {/* Floating Back Button */}
+        <Link 
+          href="/" 
+          className="absolute top-24 lg:top-7 left-6 lg:left-12 p-3 rounded-full bg-white border border-slate-100 shadow-sm hover:shadow-md hover:bg-slate-50 transition-all text-slate-500 group z-10"
+        >
+           <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
         </Link>
 
-        <div className="max-w-[420px] w-full">
+        <div className="max-w-[420px] w-full animate-in zoom-in-95 duration-500">
           
           {/* Header */}
-          <div className="mb-10 text-center lg:text-left">
-            <h1 className="text-4xl font-black text-slate-900 mb-2 tracking-tight">Welcome Back</h1>
-            <p className="text-slate-500 text-lg">Please enter your details to sign in.</p>
+          <div className="mb-8 text-center lg:text-left">
+            <h1 className="text-4xl lg:text-5xl font-black text-slate-900 mb-3 tracking-tight">
+              Welcome <span className="text-[#0065eb]">Back</span>
+            </h1>
+            <p className="text-slate-500 text-lg font-medium">Enter your details to access your account.</p>
           </div>
 
           {/* Error Alert */}
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-100 text-red-600 rounded-xl text-sm font-medium flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <div className="mb-6 p-4 bg-red-50 border border-red-100 text-red-600 rounded-2xl text-sm font-bold flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+              <AlertCircle className="shrink-0" size={20} />
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleLogin} className="space-y-5">
             
+            {/* Google Sign In Button */}
+            <button 
+              type="button" 
+              onClick={handleGoogleSignIn}
+              disabled={googleLoading || loading}
+              className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 p-4 rounded-2xl text-slate-700 font-bold hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm group"
+            >
+              {googleLoading ? (
+                <Loader2 className="animate-spin text-slate-400" size={20} />
+              ) : (
+                <>
+                  <Image 
+                    src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" 
+                    width={20} height={20} alt="G" 
+                    className="group-hover:scale-110 transition-transform"
+                  />
+                  <span>Sign in with Google</span>
+                </>
+              )}
+            </button>
+
+            <div className="relative flex py-2 items-center">
+              <div className="flex-grow border-t border-slate-100"></div>
+              <span className="flex-shrink-0 mx-4 text-xs font-bold text-slate-400 uppercase tracking-widest">Or Continue With</span>
+              <div className="flex-grow border-t border-slate-100"></div>
+            </div>
+
             {/* Email Field */}
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700 ml-1">Email Address</label>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">Email Address</label>
               <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none group-focus-within:text-blue-600 transition-colors">
-                  <Icons.Mail />
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb] transition-colors">
+                  <Mail size={20} strokeWidth={2} />
                 </div>
                 <input
                   type="email"
+                  name="email"
                   required
-                  className="w-full pl-11 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-medium outline-none focus:bg-white focus:ring-2 focus:ring-[#0164E5]/20 focus:border-[#0164E5] transition-all placeholder:text-slate-400"
-                  placeholder="name@company.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="w-full pl-12 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-slate-900 font-bold outline-none focus:ring-4 focus:ring-[#0065eb]/10 focus:border-[#0065eb] transition-all placeholder:text-slate-300 placeholder:font-medium"
+                  placeholder="mubarik@example.com"
                 />
               </div>
             </div>
 
             {/* Password Field */}
-            <div className="space-y-2">
-              <div className="flex justify-between items-center ml-1">
-                <label className="text-sm font-bold text-slate-700">Password</label>
-                <Link href="/forgot-password" className="text-sm font-bold text-[#0164E5] hover:underline">
+            <div>
+              <div className="flex justify-between items-center mb-2 ml-1">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Password</label>
+                <Link href="/forgot-password" className="text-xs font-bold text-[#0065eb] hover:underline">
                   Forgot password?
                 </Link>
               </div>
               <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none group-focus-within:text-blue-600 transition-colors">
-                  <Icons.Lock />
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb] transition-colors">
+                  <Lock size={20} strokeWidth={2} />
                 </div>
                 <input
                   type={showPassword ? "text" : "password"}
+                  name="password"
                   required
-                  className="w-full pl-11 pr-12 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-medium outline-none focus:bg-white focus:ring-2 focus:ring-[#0164E5]/20 focus:border-[#0164E5] transition-all placeholder:text-slate-400"
+                  value={formData.password}
+                  onChange={handleChange}
+                  className="w-full pl-12 pr-12 py-4 bg-white border border-slate-200 rounded-2xl text-slate-900 font-bold outline-none focus:ring-4 focus:ring-[#0065eb]/10 focus:border-[#0065eb] transition-all placeholder:text-slate-300 placeholder:font-medium"
                   placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
                 />
-                {/* Toggle Password Visibility */}
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"
+                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
                 >
-                  {showPassword ? <Icons.EyeOff /> : <Icons.Eye />}
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
             </div>
@@ -143,19 +227,22 @@ export default function LoginPage() {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={loading}
-              className="w-full bg-[#0164E5] text-white py-4 rounded-2xl font-bold text-lg hover:bg-blue-700 active:scale-[0.99] transition-all shadow-lg shadow-blue-500/30 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              disabled={loading || googleLoading}
+              className="w-full bg-[#0065eb] text-white py-4 rounded-2xl font-bold text-lg hover:bg-[#0052c1] active:scale-[0.98] transition-all shadow-xl shadow-blue-500/20 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
             >
-              {loading && <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                'Sign In'
+              )}
             </button>
           </form>
 
           {/* Footer */}
-          <p className="mt-10 text-center text-slate-500 font-medium">
-            Don&apos;t have an account?{' '}
-            <Link href="/signup" className="text-[#0164E5] font-bold hover:underline">
-              Sign up
+          <p className="mt-8 text-center text-slate-500 font-medium">
+            Don't have an account?{' '}
+            <Link href="/signup" className="text-[#0065eb] font-bold hover:underline">
+              Create one now
             </Link>
           </p>
         </div>

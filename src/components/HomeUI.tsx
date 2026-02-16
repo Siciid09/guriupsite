@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 
-// --- TYPES BASED ON FLUTTER MODELS ---
+// --- TYPES ---
 interface LocationData {
   city?: string;
   area?: string;
@@ -18,7 +20,7 @@ interface Property {
   location: LocationData | string;
   bedrooms?: number;
   bathrooms?: number;
-  area?: number;
+  size?: number;
   status: string;
   isForSale: boolean;
   planTier?: 'free' | 'pro' | 'premium';
@@ -40,47 +42,92 @@ interface Hotel {
 interface HomeUIProps {
   featuredProperties: Property[];
   featuredHotels: Hotel[];
+  latestProperties: Property[]; // ADD THIS
+  latestHotels: Hotel[];       // ADD THIS
 }
 
 const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
+  const router = useRouter();
   const [isNavOpen, setIsNavOpen] = useState(false);
-  const [filterTab, setFilterTab] = useState('buy');
   const [favorites, setFavorites] = useState<string[]>([]);
 
-  const toggleNav = () => {
-    setIsNavOpen(!isNavOpen);
+  // --- FILTER STATE ---
+  const [filterTab, setFilterTab] = useState<'buy' | 'rent' | 'hotel'>('buy');
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  
+  // Selection State
+  const [selectedCity, setSelectedCity] = useState('Hargeisa');
+  const [selectedType, setSelectedType] = useState('Any Type'); 
+  const [selectedPrice, setSelectedPrice] = useState('Any Price');
+
+  // --- FILTER DATA ---
+  const cities = ['Hargeisa', 'Mogadishu', 'Berbera', 'Burco', 'Boorama', 'All Cities'];
+  const propertyTypes = ['Any Type', 'Apartment', 'Villa', 'Office', 'House', 'Land', 'Commercial', 'Hall'];
+  const hotelRoomTypes = ['Any Room', 'Single Room', 'Double Room', 'Twin Room', 'Triple Room', 'Family Room', 'Suite', 'Deluxe Room', 'Studio Room'];
+  const buyPrices = ['Any Price', '$10k - $50k', '$50k - $100k', '$100k - $200k', '$200k+'];
+  const rentPrices = ['Any Price', '$100 - $500', '$500 - $1000', '$1000+'];
+  const hotelPrices = ['Any Price', '$0 - $50', '$50 - $100', '$100 - $200', '$200 - $500', '$500+'];
+
+  // --- HANDLERS ---
+  const toggleNav = () => setIsNavOpen(!isNavOpen);
+
+  const handleTabSwitch = (tab: 'buy' | 'rent' | 'hotel') => {
+    setFilterTab(tab);
+    setSelectedType(tab === 'hotel' ? 'Any Room' : 'Any Type');
+    setSelectedPrice('Any Price');
+    setOpenDropdown(null);
   };
 
-  // --- 1. LOAD FAVORITES FROM LOCAL STORAGE ---
-  useEffect(() => {
-    const savedFavs = localStorage.getItem('guriup_favorites');
-    if (savedFavs) {
-      setFavorites(JSON.parse(savedFavs));
+  const handleSearch = () => {
+    const params = new URLSearchParams();
+    params.set('mode', filterTab);
+    if (selectedCity && selectedCity !== 'All Cities') params.set('city', selectedCity);
+    if (selectedType && selectedType !== 'Any Type' && selectedType !== 'Any Room') {
+       if (filterTab === 'hotel') params.set('roomType', selectedType);
+       else params.set('type', selectedType);
     }
+    if (selectedPrice && selectedPrice !== 'Any Price') params.set('price', selectedPrice);
+    router.push(`/search?${params.toString()}`);
+  };
+
+  const toggleDropdown = (key: string) => {
+    setOpenDropdown(openDropdown === key ? null : key);
+  };
+
+  const selectOption = (setter: Function, value: string) => {
+    setter(value);
+    setOpenDropdown(null);
+  };
+
+  // Click Outside Handler
+  const filterRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setOpenDropdown(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // --- SCROLL ANIMATION OBSERVER ---
+  // Favorites & Scroll Animation
+  useEffect(() => {
+    const savedFavs = localStorage.getItem('guriup_favorites');
+    if (savedFavs) setFavorites(JSON.parse(savedFavs));
+  }, []);
+
   useEffect(() => {
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('visible');
-        }
+        if (entry.isIntersecting) entry.target.classList.add('visible');
       });
     }, { threshold: 0.1 });
-
-    const elements = document.querySelectorAll('.reveal');
-    elements.forEach((el) => observer.observe(el));
-
-    return () => elements.forEach((el) => observer.unobserve(el));
+    document.querySelectorAll('.reveal').forEach((el) => observer.observe(el));
   }, []);
 
-  // --- HELPER: FORMAT PRICE ---
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(price);
-  };
+  const formatPrice = (price: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(price);
 
-  // --- HELPER: GET LOCATION STRING ---
   const getLocationString = (location: LocationData | string) => {
     if (typeof location === 'string') return location;
     if (!location) return 'Unknown Location';
@@ -90,40 +137,19 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
     return parts.length > 0 ? parts.join(', ') : (location.address || 'Unknown Location');
   };
 
-  // --- 2. FAVORITE LOGIC ---
   const toggleFavorite = (e: React.MouseEvent, id: string) => {
-    e.preventDefault();
-    e.stopPropagation(); // Prevent card click
-    
-    let newFavs;
-    if (favorites.includes(id)) {
-      newFavs = favorites.filter(favId => favId !== id);
-    } else {
-      newFavs = [...favorites, id];
-    }
+    e.preventDefault(); e.stopPropagation();
+    let newFavs = favorites.includes(id) ? favorites.filter(favId => favId !== id) : [...favorites, id];
     setFavorites(newFavs);
     localStorage.setItem('guriup_favorites', JSON.stringify(newFavs));
   };
 
-  // --- 3. SHARE LOGIC ---
   const handleShare = async (e: React.MouseEvent, title: string, path: string) => {
-    e.preventDefault();
-    e.stopPropagation(); // Prevent card click
-
+    e.preventDefault(); e.stopPropagation();
     const fullUrl = `${window.location.origin}${path}`;
-    
     if (navigator.share) {
-      try {
-        await navigator.share({
-          title: title,
-          text: `Check out ${title} on GuriUp!`,
-          url: fullUrl,
-        });
-      } catch (err) {
-        console.log('Share canceled');
-      }
+      try { await navigator.share({ title, text: `Check out ${title} on GuriUp!`, url: fullUrl }); } catch (err) { console.log('Share canceled'); }
     } else {
-      // Fallback
       navigator.clipboard.writeText(fullUrl);
       alert(`Link copied to clipboard: ${fullUrl}`);
     }
@@ -146,373 +172,102 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
   ];
   const pillItems = [...rawPills, ...rawPills, ...rawPills, ...rawPills];
 
+  // Helpers
+  const getCurrentTypeList = () => filterTab === 'hotel' ? hotelRoomTypes : propertyTypes;
+  const getCurrentPriceList = () => {
+      if (filterTab === 'hotel') return hotelPrices;
+      if (filterTab === 'rent') return rentPrices;
+      return buyPrices;
+  };
+
   return (
     <>
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #fff; overflow-x: hidden; }
+        
+        /* ANIMATIONS */
+        .reveal { opacity: 0; transform: translateY(30px); transition: all 0.8s ease-out; }
+        .reveal.visible { opacity: 1; transform: translateY(0); }
+        
+        /* MOVING PARTICLES (BLOBS) */
+        @keyframes blob-float {
+            0% { transform: translate(0px, 0px) scale(1); }
+            33% { transform: translate(30px, -50px) scale(1.1); }
+            66% { transform: translate(-20px, 20px) scale(0.9); }
+            100% { transform: translate(0px, 0px) scale(1); }
+        }
+        .animate-blob { animation: blob-float 10s infinite; }
+        .animation-delay-2000 { animation-delay: 2s; }
 
-        body {
-          font-family: 'Plus Jakarta Sans', sans-serif;
-          background-color: #fff;
-          overflow-x: hidden;
-        }
+        /* GRADIENT UNDERLINE */
+        .gradient-underline { display: block; width: 0; height: 6px; background: linear-gradient(90deg, #0065eb, #60a5fa); border-radius: 4px; margin-top: 4px; transition: width 1.2s cubic-bezier(0.22, 1, 0.36, 1); }
+        .reveal.visible .gradient-underline { width: 80px; }
 
-        /* --- ANIMATIONS --- */
-        .reveal {
-          opacity: 0;
-          transform: translateY(30px);
-          transition: all 0.8s ease-out;
-        }
-        .reveal.visible {
-          opacity: 1;
-          transform: translateY(0);
-        }
-
-        /* --- HERO STYLES --- */
-        .hero-container {
-          width: 100%;
-          height: 94vh;
-          min-height: 700px;
-          max-height: 950px;
-          position: relative;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between; 
-          overflow: hidden;
-        }
-
-        .hero-bg {
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          background-image: url('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2000');
-          background-size: cover;
-          background-position: center;
-          background-color: #1a1e23;
-          background-blend-mode: overlay;
-          clip-path: url(#hero-cutout);
-          z-index: 0;
-        }
-
-        .glass-card {
-          background: rgba(35, 40, 48, 0.6);
-          backdrop-filter: blur(15px);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          transition: all 0.4s ease;
-        }
-        .glass-card:hover {
-          background: rgba(0, 101, 235, 0.15);
-          border-color: #0065eb;
-          transform: translateY(-5px);
-        }
-
+        /* HERO */
+        .hero-container { width: 100%; height: 94vh; min-height: 700px; max-height: 950px; position: relative; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; }
+        .hero-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-image: url('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2000'); background-size: cover; background-position: center -90px; background-color: #1a1e23; background-blend-mode: overlay; clip-path: url(#hero-cutout); z-index: 0; }
+        
+        .glass-card { background: rgba(35, 40, 48, 0.6); backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.1); transition: all 0.4s ease; }
+        .glass-card:hover { background: rgba(0, 101, 235, 0.15); border-color: #0065eb; transform: translateY(-5px); }
         .special-service-shape { border-radius: 24px 24px 24px 0px; }
-
-        @keyframes scroll {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); } 
-        }
-        .animate-scroll {
-          display: flex;
-          gap: 1rem;
-          width: max-content;
-          animation: scroll 60s linear infinite;
-        }
-        .animate-scroll:hover {
-            animation-play-state: paused;
-        }
-
-        .mask-services {
-          mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
-          -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
-        }
-
-        .mask-pills {
-          mask-image: linear-gradient(to right, transparent 0%, transparent 28%, black 38%, black 95%, transparent 100%);
-          -webkit-mask-image: linear-gradient(to right, transparent 0%, transparent 28%, black 38%, black 95%, transparent 100%);
-        }
-
-        @media (max-width: 1024px) {
-            .hero-container { height: auto; min-height: 50vh; }
-            .hero-bg { clip-path: none; }
-            .mask-pills {
-                mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
-                -webkit-mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%);
-            }
-        }
-
-        /* --- NAV LINKS --- */
+        
+        @keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .animate-scroll { display: flex; gap: 1rem; width: max-content; animation: scroll 60s linear infinite; }
+        .animate-scroll:hover { animation-play-state: paused; }
+        
+        .mask-services { mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); }
+        .mask-pills { mask-image: linear-gradient(to right, transparent 0%, transparent 28%, black 38%, black 95%, transparent 100%); -webkit-mask-image: linear-gradient(to right, transparent 0%, transparent 28%, black 38%, black 95%, transparent 100%); }
+        @media (max-width: 1024px) { .hero-container { height: auto; min-height: 50vh; } .hero-bg { clip-path: none; } .mask-pills { mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%); -webkit-mask-image: linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%); } }
+        
         .nav-link { position: relative; font-weight: 700; font-size: 16.5px; letter-spacing: 0.3px; }
-        .nav-link::after {
-          content: '';
-          position: absolute;
-          width: 0;
-          height: 3px;
-          bottom: -4px;
-          left: 0;
-          background-color: #0065eb;
-          transition: width 0.3s ease;
-        }
+        .nav-link::after { content: ''; position: absolute; width: 0; height: 3px; bottom: -4px; left: 0; background-color: #0065eb; transition: width 0.3s ease; }
         .nav-link:hover::after { width: 100%; }
-
-        .property-pill {
-          background: rgba(31, 41, 55, 0.95);
-          border-radius: 50px;
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 12px 24px;
-          white-space: nowrap;
-          font-weight: 700;
-          color: #ffffff;
-          font-size: 14px;
-          border: 1px solid rgba(255,255,255,0.1);
-          backdrop-filter: blur(5px);
-          transition: all 0.3s ease;
-          cursor: pointer;
-        }
+        
+        .property-pill { background: rgba(31, 41, 55, 0.95); border-radius: 50px; display: flex; align-items: center; gap: 8px; padding: 12px 24px; white-space: nowrap; font-weight: 700; color: #ffffff; font-size: 14px; border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(5px); transition: all 0.3s ease; cursor: pointer; }
         .property-pill:hover { background: #0065eb; transform: scale(1.05); }
         .property-pill svg { width: 16px; height: 16px; stroke: #fff; opacity: 0.8; }
         .property-pill:hover svg { opacity: 1; }
-
-        /* --- CARDS & INTERACTIONS --- */
-        .modern-card {
-            background: #fff;
-            border-radius: 24px;
-            overflow: hidden;
-            position: relative;
-            transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
-            box-shadow: 0 2px 20px rgba(0,0,0,0.05);
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            cursor: pointer; /* Indication it is clickable */
-        }
-        .modern-card:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 15px 40px rgba(0, 101, 235, 0.15);
-        }
-        .modern-img-wrapper {
-            position: relative;
-            height: 280px;
-            overflow: hidden;
-            border-radius: 24px;
-            margin: 8px;
-        }
-        .modern-img-wrapper img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            transition: transform 0.6s ease;
-            border-radius: 18px;
-        }
+        
+        /* CARD CSS */
+        .modern-card { background: #fff; border-radius: 24px; overflow: hidden; position: relative; transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); box-shadow: 0 2px 20px rgba(0,0,0,0.05); height: 100%; display: flex; flex-direction: column; cursor: pointer; }
+        .modern-card:hover { transform: translateY(-8px); box-shadow: 0 15px 40px rgba(0, 101, 235, 0.15); }
+        .modern-img-wrapper { position: relative; height: 280px; overflow: hidden; border-radius: 24px; margin: 8px; }
+        .modern-img-wrapper img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.6s ease; border-radius: 18px; }
         .modern-card:hover .modern-img-wrapper img { transform: scale(1.1); }
-        
-        .card-actions {
-            position: absolute;
-            top: 12px;
-            right: 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            z-index: 10;
-        }
-        .action-btn {
-            width: 32px;
-            height: 32px;
-            background: rgba(255,255,255,0.9);
-            backdrop-filter: blur(4px);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            cursor: pointer;
-            transition: 0.2s;
-            color: #1f2937;
-        }
+        .card-actions { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 8px; z-index: 10; }
+        .action-btn { width: 32px; height: 32px; background: rgba(255,255,255,0.9); backdrop-filter: blur(4px); border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.15); cursor: pointer; transition: 0.2s; color: #1f2937; }
         .action-btn:hover { background: #0065eb; color: white; }
-        .action-btn.active { background: #ef4444; color: white; } /* Heart active color */
-
-        .price-badge {
-            position: absolute;
-            bottom: 12px;
-            left: 12px;
-            background: rgba(255,255,255,0.95);
-            backdrop-filter: blur(10px);
-            padding: 6px 14px;
-            border-radius: 10px;
-            font-weight: 800;
-            color: #0a0c10;
-            font-size: 1rem;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-        }
-        .status-badge {
-            position: absolute;
-            top: 12px;
-            left: 12px;
-            color: white;
-            font-size: 0.65rem;
-            font-weight: 800;
-            text-transform: uppercase;
-            padding: 5px 10px;
-            border-radius: 30px;
-            letter-spacing: 0.5px;
-            z-index: 5;
-        }
-        
-        .verified-card {
-            position: absolute;
-            bottom: 12px;
-            right: 12px;
-            background: #22c55e;
-            padding: 4px 8px;
-            border-radius: 8px;
-            display: flex; align-items: center; gap: 4px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-        }
+        .action-btn.active { background: #ef4444; color: white; }
+        .price-badge { position: absolute; bottom: 12px; left: 12px; background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); padding: 6px 14px; border-radius: 10px; font-weight: 800; color: #0a0c10; font-size: 1rem; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .status-badge { position: absolute; top: 12px; left: 12px; color: white; font-size: 0.65rem; font-weight: 800; text-transform: uppercase; padding: 5px 10px; border-radius: 30px; letter-spacing: 0.5px; z-index: 5; }
+        .verified-card { position: absolute; bottom: 12px; right: 12px; background: #22c55e; padding: 4px 8px; border-radius: 8px; display: flex; align-items: center; gap: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         .verified-card span { font-size: 9px; font-weight: 800; color: white; text-transform: uppercase; }
-        
-        .unverified-card {
-            position: absolute;
-            bottom: 12px;
-            right: 12px;
-            background: #e5e7eb;
-            padding: 4px 8px;
-            border-radius: 8px;
-            display: flex; align-items: center; gap: 4px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-        }
+        .unverified-card { position: absolute; bottom: 12px; right: 12px; background: #e5e7eb; padding: 4px 8px; border-radius: 8px; display: flex; align-items: center; gap: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         .unverified-card span { font-size: 9px; font-weight: 800; color: #6b7280; text-transform: uppercase; }
-
-        /* HOTEL CARDS */
-        .hotel-card {
-           background: #fff;
-           border-radius: 30px;
-           overflow: hidden;
-           box-shadow: 0 10px 30px rgba(0,0,0,0.05);
-           transition: all 0.4s ease;
-           cursor: pointer;
-        }
+        .hotel-card { background: #fff; border-radius: 30px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.05); transition: all 0.4s ease; cursor: pointer; }
         .hotel-card:hover { transform: translateY(-10px); box-shadow: 0 20px 50px rgba(0,0,0,0.1); }
         .hotel-features { display: flex; gap: 8px; margin-top: 12px; }
         .hotel-feature { background: #f3f4f6; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; color: #4b5563; }
-
-        /* Bento Grid with IMG BG */
-        .bento-grid {
-            display: grid;
-            grid-template-columns: repeat(1, 1fr);
-            gap: 1.5rem;
-        }
-        @media(min-width: 768px) {
-            .bento-grid {
-                grid-template-columns: repeat(4, 1fr);
-                grid-template-rows: repeat(2, 300px);
-            }
-        }
-        .bento-box {
-            background: rgba(20, 20, 20, 0.6);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 30px;
-            position: relative;
-            overflow: hidden;
-            transition: all 0.4s ease;
-            display: flex;
-            flex-direction: column;
-        }
-        .bento-box:hover {
-            border-color: rgba(255,255,255,0.3);
-            transform: scale(1.01);
-            background: rgba(30, 30, 30, 0.8);
-        }
-        .bento-img-bg {
-             background-size: cover;
-             background-position: center;
-             position: relative;
-        }
-        .bento-img-bg::before {
-             content: '';
-             position: absolute;
-             inset: 0;
-             background: rgba(0,0,0,0.75);
-        }
-
-        /* MODERN GROW SECTION */
-        .modern-grow-card {
-            border-radius: 32px;
-            overflow: hidden;
-            position: relative;
-            height: 400px;
-        }
-        .modern-grow-card::after {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 60%);
-            transition: opacity 0.3s;
-        }
-        .grow-content {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            padding: 40px;
-            z-index: 10;
-            transform: translateY(20px);
-            transition: transform 0.4s;
-        }
+        
+        .bento-grid { display: grid; grid-template-columns: repeat(1, 1fr); gap: 1.5rem; }
+        @media(min-width: 768px) { .bento-grid { grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(2, 300px); } }
+        .bento-box { background: rgba(20, 20, 20, 0.6); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); border-radius: 30px; position: relative; overflow: hidden; transition: all 0.4s ease; display: flex; flex-direction: column; }
+        .bento-box:hover { border-color: rgba(255,255,255,0.3); transform: scale(1.01); background: rgba(30, 30, 30, 0.8); }
+        .bento-img-bg { background-size: cover; background-position: center; position: relative; }
+        .bento-img-bg::before { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,0.75); }
+        
+        .modern-grow-card { border-radius: 32px; overflow: hidden; position: relative; height: 400px; }
+        .modern-grow-card::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 60%); transition: opacity 0.3s; }
+        .grow-content { position: absolute; bottom: 0; left: 0; width: 100%; padding: 40px; z-index: 10; transform: translateY(20px); transition: transform 0.4s; }
         .modern-grow-card:hover .grow-content { transform: translateY(0); }
-
-        /* Phone App */
-        .app-phone {
-            width: 300px;
-            height: 600px;
-            background: #000;
-            border: 8px solid #333;
-            border-radius: 50px;
-            position: relative;
-            box-shadow: 0 0 0 2px #555, 0 30px 80px -10px rgba(0,101,235,0.3);
-            z-index: 20;
-            transform: rotate(6deg); 
-            transition: transform 0.5s ease;
-        }
-        .app-phone:hover {
-            transform: rotate(0deg);
-        }
-        .app-phone-screen {
-            width: 100%;
-            height: 100%;
-            background: url('https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?q=80&w=600') center/cover;
-            border-radius: 42px;
-            overflow: hidden;
-            position: relative;
-        }
-        .app-float-card {
-            position: absolute;
-            bottom: 100px;
-            left: -40px;
-            background: rgba(255,255,255,0.9);
-            backdrop-filter: blur(10px);
-            padding: 20px;
-            border-radius: 24px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
-            animation: float 6s ease-in-out infinite;
-        }
+        
+        /* PHONE APP */
+        .app-phone { width: 300px; height: 600px; background: #000; border: 8px solid #333; border-radius: 50px; position: relative; box-shadow: 0 0 0 2px #555, 0 30px 80px -10px rgba(0,101,235,0.3); z-index: 20; transform: rotate(6deg); transition: transform 0.5s ease; }
+        .app-phone:hover { transform: rotate(0deg); }
+        .app-phone-screen { width: 100%; height: 100%; border-radius: 42px; overflow: hidden; position: relative; }
+        .app-float-card { position: absolute; bottom: 100px; left: -40px; background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); padding: 20px; border-radius: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); animation: float 6s ease-in-out infinite; }
         @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-15px); } 100% { transform: translateY(0px); } }
-
-        select.modern-select {
-            -webkit-appearance: none;
-            -moz-appearance: none;
-            appearance: none;
-            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-            background-repeat: no-repeat;
-            background-position: right 0px center;
-            background-size: 14px;
-            padding-right: 20px;
-        }
       `}</style>
 
       {/* --- WHATSAPP FLOAT --- */}
@@ -542,7 +297,7 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
 
         <div className="relative z-10 w-full max-w-[1600px] mx-auto px-6 md:px-10 flex flex-col h-full">
           
-          {/* HERO CONTENT - Moved content down approx 5% */}
+          {/* HERO CONTENT */}
           <div className="flex flex-col lg:flex-row items-center justify-center pt-2 pb-10 reveal translate-y-[5vh]">
             
             {/* LEFT SIDE */}
@@ -560,84 +315,104 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
                 Real Estate & Properties For Sale Or Rent In 12+ Country
               </p>
 
-              {/* FILTER CAPSULE */}
-              <div className="bg-white rounded-[2rem] p-3 shadow-2xl w-full max-w-3xl mb-7 relative z-20">
-                {/* FILTER TABS */}
+              {/* === MODERN FILTER CAPSULE === */}
+              <div ref={filterRef} className="bg-white rounded-[2rem] p-3 shadow-2xl w-full max-w-3xl mb-7 relative z-20">
+                
+                {/* 1. FILTER TABS */}
                 <div className="flex gap-2 mb-3 pl-3 pt-2">
-                    {['buy', 'rent', 'hotel'].map(tab => (
-                        <button 
-                            key={tab}
-                            onClick={() => setFilterTab(tab)}
-                            className={`px-5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all ${filterTab === tab ? 'bg-black text-white' : 'text-gray-400 hover:text-black'}`}
-                        >
-                            {tab}
-                        </button>
-                    ))}
+                  {['buy', 'rent', 'hotel'].map(tab => (
+                    <button 
+                      key={tab}
+                      onClick={() => handleTabSwitch(tab as any)}
+                      className={`px-5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all ${filterTab === tab ? 'bg-black text-white' : 'text-gray-400 hover:text-black'}`}
+                    >
+                      {tab}
+                    </button>
+                  ))}
                 </div>
 
+                {/* 2. INPUTS ROW */}
                 <div className="flex flex-col md:flex-row items-center bg-gray-50 rounded-[1.5rem] border border-gray-100 p-2">
-                  {/* City Input */}
-                  <div className="flex flex-1 items-center gap-3 px-4 py-5 w-full border-b md:border-b-0 md:border-r border-gray-200 hover:bg-white transition-colors group rounded-xl">
-                    <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center group-hover:bg-[#0065eb] group-hover:text-white transition-colors">
-                      <svg className="w-4 h-4 text-[#0065eb] group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                    </div>
-                    <div className="flex flex-col w-full">
-                      <span className="text-[9px] uppercase font-black text-gray-400 tracking-wider mb-0.5">City</span>
-                      <select className="modern-select text-xs font-bold text-slate-900 bg-transparent w-full">
-                          <option>Hargeisa</option>
-                          <option>Mogadishu</option>
-                          <option>Berbera</option>
-                      </select>
-                    </div>
+                  
+                  {/* --- CITY DROPDOWN --- */}
+                  <div className="flex flex-1 items-center gap-3 px-4 py-5 w-full border-b md:border-b-0 md:border-r border-gray-200 hover:bg-white transition-colors group rounded-xl relative">
+                     <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center group-hover:bg-[#0065eb] group-hover:text-white transition-colors">
+                        <svg className="w-4 h-4 text-[#0065eb] group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                     </div>
+                     <div className="flex flex-col w-full" onClick={() => toggleDropdown('city')}>
+                        <span className="text-[9px] uppercase font-black text-gray-400 tracking-wider mb-0.5">City</span>
+                        <div className="flex items-center justify-between cursor-pointer">
+                            <span className="text-xs font-bold text-slate-900">{selectedCity}</span>
+                            <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </div>
+                     </div>
+                     {/* City Menu */}
+                     {openDropdown === 'city' && (
+                        <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-[60] max-h-60 overflow-y-auto">
+                           {cities.map((city) => (
+                                <div key={city} onClick={() => selectOption(setSelectedCity, city)} className="px-4 py-3 hover:bg-gray-50 cursor-pointer text-xs font-bold text-slate-700">{city}</div>
+                           ))}
+                        </div>
+                     )}
                   </div>
 
-                  {/* Type Input */}
-                  <div className="flex flex-1 items-center gap-3 px-4 py-5 w-full border-b md:border-b-0 md:border-r border-gray-200 hover:bg-white transition-colors group rounded-xl">
-                    <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition-colors">
+                  {/* --- TYPE DROPDOWN --- */}
+                  <div className="flex flex-1 items-center gap-3 px-4 py-5 w-full border-b md:border-b-0 md:border-r border-gray-200 hover:bg-white transition-colors group rounded-xl relative">
+                     <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition-colors">
                         <svg className="w-4 h-4 text-green-600 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
-                    </div>
-                    <div className="flex flex-col w-full">
-                      <span className="text-[9px] uppercase font-black text-gray-400 tracking-wider mb-0.5">
-                        {filterTab === 'hotel' ? 'Rooms' : 'Type'}
-                      </span>
-                      <select className="modern-select text-xs font-bold text-slate-900 bg-transparent w-full">
-                          {filterTab === 'hotel' ? (
-                            <>
-                                <option>1 Room, 2 Guests</option>
-                                <option>2 Rooms, 4 Guests</option>
-                            </>
-                          ) : (
-                            <>
-                                <option>Apartment</option>
-                                <option>Villa</option>
-                                <option>Office</option>
-                            </>
-                          )}
-                      </select>
-                    </div>
+                     </div>
+                     <div className="flex flex-col w-full" onClick={() => toggleDropdown('type')}>
+                        <span className="text-[9px] uppercase font-black text-gray-400 tracking-wider mb-0.5">{filterTab === 'hotel' ? 'Rooms' : 'Type'}</span>
+                        <div className="flex items-center justify-between cursor-pointer">
+                            <span className="text-xs font-bold text-slate-900 truncate">{selectedType}</span>
+                            <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </div>
+                     </div>
+                     {/* Type Menu */}
+                     {openDropdown === 'type' && (
+                        <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-[60] max-h-60 overflow-y-auto">
+                           {getCurrentTypeList().map((type) => (
+                                <div key={type} onClick={() => selectOption(setSelectedType, type)} className="px-4 py-3 hover:bg-gray-50 cursor-pointer text-xs font-bold text-slate-700">{type}</div>
+                           ))}
+                        </div>
+                     )}
                   </div>
 
-                   {/* Price Input */}
-                   <div className="flex flex-1 items-center gap-3 px-4 py-5 w-full hover:bg-white transition-colors group rounded-xl">
-                    <div className="w-9 h-9 bg-orange-100 rounded-full flex items-center justify-center group-hover:bg-orange-500 group-hover:text-white transition-colors">
-                       <svg className="w-4 h-4 text-orange-600 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    </div>
-                    <div className="flex flex-col w-full">
-                      <span className="text-[9px] uppercase font-black text-gray-400 tracking-wider mb-0.5">Price</span>
-                      <select className="modern-select text-xs font-bold text-slate-900 bg-transparent w-full">
-                          <option>Any Price</option>
-                          <option>$50k - $100k</option>
-                          <option>$100k+</option>
-                      </select>
-                    </div>
+                  {/* --- PRICE DROPDOWN --- */}
+                  <div className="flex flex-1 items-center gap-3 px-4 py-5 w-full hover:bg-white transition-colors group rounded-xl relative">
+                     <div className="w-9 h-9 bg-orange-100 rounded-full flex items-center justify-center group-hover:bg-orange-500 group-hover:text-white transition-colors">
+                        <svg className="w-4 h-4 text-orange-600 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                     </div>
+                     <div className="flex flex-col w-full" onClick={() => toggleDropdown('price')}>
+                        <span className="text-[9px] uppercase font-black text-gray-400 tracking-wider mb-0.5">Price</span>
+                        <div className="flex items-center justify-between cursor-pointer">
+                            <span className="text-xs font-bold text-slate-900 truncate">{selectedPrice}</span>
+                            <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </div>
+                     </div>
+                     {/* Price Menu */}
+                     {openDropdown === 'price' && (
+                        <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-[60] max-h-60 overflow-y-auto">
+                           {getCurrentPriceList().map((price) => (
+                                <div key={price} onClick={() => selectOption(setSelectedPrice, price)} className="px-4 py-3 hover:bg-gray-50 cursor-pointer text-xs font-bold text-slate-700">{price}</div>
+                           ))}
+                        </div>
+                     )}
                   </div>
 
-                  <button className="bg-[#0065eb] text-white w-full md:w-auto px-8 py-5 font-bold text-xs hover:bg-[#0052c1] transition-colors flex items-center justify-center gap-2 rounded-full shadow-lg shadow-blue-500/30">
+                  {/* 3. SEARCH BUTTON (FIXED INSIDE CARD) */}
+                  <button 
+                     onClick={handleSearch}
+                     className="bg-[#0065eb] text-white w-full md:w-auto px-8 py-5 font-bold text-xs hover:bg-[#0052c1] transition-colors flex items-center justify-center gap-2 rounded-full shadow-lg shadow-blue-500/30"
+                  >
                      Search
                   </button>
+
                 </div>
               </div>
+              {/* === END MODERN FILTER === */}
 
+              {/* RESTORED PILLS LAYOUT (Below Filter) */}
               <div className="grid grid-cols-2 gap-x-8 gap-y-4 w-fit">
                 {['Buy a home', 'Book hotels', 'Rent a home', 'Download app'].map((text) => (
                   <div key={text} className="flex items-center gap-2 group cursor-pointer text-white font-bold text-sm opacity-90 hover:opacity-100">
@@ -677,7 +452,7 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
             </div>
           </div>
 
-          {/* BOTTOM SCROLLING PILLS - Moved down approx 2% relative to previous position */}
+          {/* BOTTOM SCROLLING PILLS - RESTORED TO BOTTOM */}
           <div className="flex items-center mt-12 lg:mt-0 pb-8 w-full translate-y-[4vh]">
             <div className="flex-1 overflow-hidden w-full mask-pills">
               <div className="animate-scroll">
@@ -694,12 +469,14 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
       </section>
 
       {/* ================= SECTION 2: FEATURED PROPERTIES ================= */}
-      {/* Reduced padding from py-20 to py-12 */}
       <section className="bg-[#fafbfc] py-12 relative z-20 reveal">
         <div className="max-w-[1600px] mx-auto px-6">
           <div className="flex justify-between items-end mb-12">
             <div>
-              <h2 className="text-slate-900 text-4xl font-black leading-tight tracking-tight">Latest Featured <br/> Properties</h2>
+              <h2 className="text-slate-900 text-4xl font-black leading-tight tracking-tight relative inline-block">
+                Latest Featured Properties
+                <span className="gradient-underline"></span>
+              </h2>
             </div>
             <button className="hidden md:block border border-slate-200 px-6 py-3 rounded-full font-bold hover:bg-black hover:text-white transition-all text-sm">View All Listings</button>
           </div>
@@ -725,7 +502,6 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
 
                 return (
                 <div key={property.id} className="modern-card group">
-                {/* --- CLICKABLE CARD OVERLAY --- */}
                 <Link href={propertyPath} className="absolute inset-0 z-0"></Link>
 
                 <div className="modern-img-wrapper">
@@ -755,7 +531,6 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
                         {!property.isForSale && <span className="text-sm font-normal text-gray-500">/mo</span>}
                     </div>
                     
-                    {/* BUTTONS WITH z-10 TO SIT ABOVE LINK */}
                     <div className="card-actions">
                         <div 
                             className={`action-btn ${isFavorite ? 'active' : ''}`}
@@ -788,7 +563,7 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
                     <span className="w-1 h-1 bg-gray-300 rounded-full self-center"></span>
                     <span className="flex items-center gap-1"><span className="text-[#0065eb]">{property.bathrooms || 0}</span> Baths</span>
                     <span className="w-1 h-1 bg-gray-300 rounded-full self-center"></span>
-                    <span className="flex items-center gap-1"><span className="text-[#0065eb]">{property.area || 0}</span> Sqft</span>
+                    <span className="flex items-center gap-1"><span className="text-[#0065eb]">{property.size|| 0}</span> Sqft</span>
                     </div>
                     <div className="mt-auto flex justify-between pt-4 border-t border-gray-100 gap-2 pointer-events-auto">
                         <Link href={propertyPath} className="border border-gray-200 text-black px-6 py-2.5 rounded-xl text-xs font-black uppercase hover:border-black transition-colors w-full text-center relative z-10">
@@ -806,10 +581,12 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
       </section>
 
       {/* ================= TRENDING HOTELS SECTION ================= */}
-      {/* Reduced padding from pb-24 to pb-12 */}
       <section className="bg-white pb-12 reveal">
          <div className="max-w-[1600px] mx-auto px-6">
-            <h2 className="text-slate-900 text-4xl font-black leading-tight tracking-tight mb-10">Trending Hotels</h2>
+            <h2 className="text-slate-900 text-4xl font-black leading-tight tracking-tight mb-10 relative inline-block">
+                Trending Hotels
+                <span className="gradient-underline"></span>
+            </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {featuredHotels.slice(0, 4).map((hotel) => {
                     const isHotelVerified = hotel.planTier === 'pro' || hotel.planTier === 'premium' || hotel.isPro;
@@ -819,7 +596,6 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
 
                     return (
                     <div key={hotel.id} className="hotel-card group relative">
-                        {/* --- CLICKABLE CARD OVERLAY --- */}
                         <Link href={hotelPath} className="absolute inset-0 z-0"></Link>
 
                         <div className="h-64 overflow-hidden relative">
@@ -884,7 +660,6 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
       </section>
 
       {/* ================= SECTION 3: BENTO GRID ================= */}
-      {/* Reduced padding from py-20 to py-12 */}
       <section className="py-12 px-6 relative reveal" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1470076892663-af684e5e15af?q=80&w=2000')", backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }}>
         <div className="absolute inset-0 bg-[#0a0c10]/90 backdrop-blur-[4px]"></div>
 
@@ -926,7 +701,7 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
             {/* Active Users - IMG BG */}
             <div className="bento-box md:col-span-1 md:row-span-1 p-8 flex items-center justify-center bento-img-bg" style={{backgroundImage: 'url("https://images.unsplash.com/photo-1556761175-5973dc0f32e7?q=80&w=600")'}}>
               <div className="relative z-10 h-full flex flex-col justify-center items-center text-center">
-                <h3 className="text-5xl font-black text-white mb-1">5M+</h3>
+                <h3 className="text-5xl font-black text-white mb-1">130k+</h3>
                 <p className="text-[#0065eb] text-[10px] font-black uppercase tracking-[0.2em] bg-white/90 px-2 py-1 rounded">Active Users</p>
               </div>
             </div>
@@ -943,10 +718,12 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
       </section>
 
       {/* ================= SECTION 4: GROW WITH GURIUP ================= */}
-      {/* Reduced padding from py-20 to py-12 */}
       <section className="bg-white py-12 reveal">
         <div className="max-w-[1600px] mx-auto px-6">
-          <h2 className="text-4xl font-black text-slate-900 mb-10 tracking-tight">Grow With GuriUp</h2>
+          <h2 className="text-4xl font-black text-slate-900 mb-10 tracking-tight relative inline-block">
+            Grow With GuriUp
+            <span className="gradient-underline"></span>
+          </h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* AGENT CARD - LINK TO /join/agent */}
@@ -987,9 +764,7 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
       </section>
 
       {/* ================= NEW: REFERRAL PROGRAM SECTION ================= */}
-      {/* Reduced padding from py-20 to py-12 */}
       <section className="bg-gradient-to-r from-[#0065eb] to-[#004bb5] py-12 reveal relative overflow-hidden">
-        {/* Decorative elements */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-white opacity-10 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2"></div>
         <div className="absolute bottom-0 left-0 w-72 h-72 bg-white opacity-10 rounded-full blur-3xl transform -translate-x-1/3 translate-y-1/3"></div>
 
@@ -1001,11 +776,17 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
                     <p className="text-blue-100 text-lg mb-8 max-w-lg font-medium">Share GuriUp with your network. For every friend who joins, we’ll drop <span className="text-white font-bold underline decoration-yellow-400 decoration-4 underline-offset-4">100 GuriPoints</span> directly into your wallet.</p>
                     
                     <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
-                        <button className="bg-white text-[#0065eb] px-8 py-4 rounded-xl font-bold text-sm shadow-xl hover:bg-gray-100 transition-all flex items-center justify-center gap-2">
+                        <button 
+                            onClick={() => router.push('/referrals')}
+                            className="bg-white text-[#0065eb] px-8 py-4 rounded-xl font-bold text-sm shadow-xl hover:bg-gray-100 transition-all flex items-center justify-center gap-2"
+                        >
                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
                            Share Your Link
                         </button>
-                        <button className="border border-white/30 text-white px-8 py-4 rounded-xl font-bold text-sm hover:bg-white/10 transition-all">
+                        <button 
+                            onClick={() => router.push('/referrals')}
+                            className="border border-white/30 text-white px-8 py-4 rounded-xl font-bold text-sm hover:bg-white/10 transition-all"
+                        >
                            How it Works
                         </button>
                     </div>
@@ -1026,10 +807,13 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
         </div>
       </section>
 
-      {/* ================= SECTION 5: MOBILE APP ================= */}
-      {/* Reduced padding from py-24 to py-12 */}
+      {/* ================= SECTION 5: MOBILE APP (RESTORED WITH BLOB) ================= */}
       <section className="bg-[#050505] py-12 md:py-20 px-6 relative overflow-hidden reveal">
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[#0065eb] opacity-10 blur-[120px] rounded-full pointer-events-none"></div>
+        
+        {/* === MOVING BLURRED CIRCLES (RESTORED) === */}
+        <div className="absolute top-20 left-10 w-32 h-32 bg-blue-600/30 blur-[60px] rounded-full animate-blob pointer-events-none"></div>
+        <div className="absolute bottom-20 right-40 w-40 h-40 bg-purple-600/30 blur-[60px] rounded-full animate-blob animation-delay-2000 pointer-events-none"></div>
 
         <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row items-center justify-between gap-20">
           <div className="w-full md:w-1/2 z-10">
@@ -1042,7 +826,7 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
             
             <div className="flex flex-col sm:flex-row gap-4">
               <button className="bg-white text-black px-8 py-4 rounded-2xl font-bold flex items-center gap-3 hover:bg-gray-200 transition-colors">
-                <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 9.49l1.84-3.18a.56.56 0 0 0-.2-.76.56.56 0 0 0-.77.2l-1.93 3.32a9.1 9.1 0 0 0-4.54-1.22 9.1 9.1 0 0 0-4.55 1.22L5.53 5.75a.56.56 0 0 0-.77-.2.56.56 0 0 0-.2.76l1.84 3.18A9.2 9.2 0 0 0 2.5 17c0 0 .1.1.25.1h18.5c.15 0 .25-.1.25-.1a9.2 9.2 0 0 0-3.9-7.51zM8.25 14.5a1.25 1.25 0 1 1 1.25-1.25 1.25 1.25 0 0 1-1.25 1.25zm7.5 0a1.25 1.25 0 1 1 1.25-1.25 1.25 1.25 0 0 1-1.25 1.25z"/></svg>
+                 <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 9.49l1.84-3.18a.56.56 0 0 0-.2-.76.56.56 0 0 0-.77.2l-1.93 3.32a9.1 9.1 0 0 0-4.54-1.22 9.1 9.1 0 0 0-4.55 1.22L5.53 5.75a.56.56 0 0 0-.77-.2.56.56 0 0 0-.2.76l1.84 3.18A9.2 9.2 0 0 0 2.5 17c0 0 .1.1.25.1h18.5c.15 0 .25-.1.25-.1a9.2 9.2 0 0 0-3.9-7.51zM8.25 14.5a1.25 1.25 0 1 1 1.25-1.25 1.25 1.25 0 0 1-1.25 1.25zm7.5 0a1.25 1.25 0 1 1 1.25-1.25 1.25 1.25 0 0 1-1.25 1.25z"/></svg>
                 <div className="text-left leading-none">
                   <div className="text-[10px] uppercase font-black text-gray-500 mb-1">Get it on</div>
                   <div className="text-lg">Google Play</div>
@@ -1059,19 +843,28 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
           </div>
 
           <div className="w-full md:w-1/2 flex justify-center md:justify-end relative z-10">
-            <div className="app-phone">
-              <div className="app-phone-screen"></div>
-              {/* FLOAT CARD */}
-              <div className="app-float-card">
-                 <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center text-white shadow-lg shadow-green-200">
+            {/* RESTORED PHONE CONTAINER WITH mobile.jpg */}
+            <div className="app-phone relative border-[8px] border-slate-800 rounded-[3rem] shadow-2xl h-[600px] w-[320px] bg-black">
+              <div className="app-phone-screen relative w-full h-full bg-slate-900 overflow-hidden rounded-[2.5rem]">
+                <Image 
+                    src="/images/mobile.jpg" 
+                    alt="Mobile App Screenshot" 
+                    fill 
+                    className="object-cover"
+                />
+              </div>
+
+              {/* FLOAT CARD (Overlay) */}
+              <div className="app-float-card absolute bottom-8 left-1/2 -translate-x-1/2 w-[90%] bg-white p-4 rounded-xl shadow-xl border border-gray-100 z-20">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 shrink-0 bg-green-500 rounded-full flex items-center justify-center text-white shadow-lg shadow-green-200">
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
                     </div>
                     <div>
-                        <p className="text-[10px] text-gray-500 font-black uppercase tracking-wider mb-1">Tour Booked</p>
-                        <p className="text-lg font-black text-slate-900 leading-none">Tomorrow, 10:00 AM</p>
+                        <p className="text-[10px] text-gray-500 font-black uppercase tracking-wider mb-0.5">Tour Booked</p>
+                        <p className="text-base font-black text-slate-900 leading-none">Tomorrow, 10:00 AM</p>
                     </div>
-                 </div>
+                  </div>
               </div>
             </div>
           </div>

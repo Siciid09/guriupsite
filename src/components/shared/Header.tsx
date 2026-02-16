@@ -3,8 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { onAuthStateChanged, User, signOut } from 'firebase/auth'; // Added signOut
-// Update the import path below if your firebase config is in a different location, e.g. '../../lib/firebase'
+import { onAuthStateChanged, User, signOut } from 'firebase/auth'; 
 import { auth } from '@/app/lib/firebase';
 
 const Header = () => {
@@ -33,109 +32,161 @@ const Header = () => {
   const handleSignOut = async () => {
     try {
       await signOut(auth);
+      toggleNav(); // Close mobile menu if open
     } catch (error) {
       console.error("Error signing out: ", error);
     }
   };
 
-  // --- SCROLL DETECTION LOGIC ---
+  // --- SCROLL DETECTION (Show UP, Hide DOWN) ---
   useEffect(() => {
+    let lastScrollY = window.scrollY;
+
     const handleScroll = () => {
-      if (window.scrollY < 50) {
-        setIsVisible(true);
-      } else {
+      const currentScrollY = window.scrollY;
+      
+      // If scrolling DOWN and not at the very top -> HIDE
+      if (currentScrollY > lastScrollY && currentScrollY > 50) {
         setIsVisible(false);
+      } 
+      // If scrolling UP or at the top -> SHOW
+      else {
+        setIsVisible(true);
       }
+
+      lastScrollY = currentScrollY;
     };
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Helper to handle the download link
   const handleDownloadClick = () => {
     window.open('https://apps.hiigsitech.com/', '_blank');
   };
 
-  // Helper for Desktop Active Class
-  const getLinkClass = (path: string) => {
-    return pathname === path 
-      ? "text-[#0065eb] nav-link" 
-      : "nav-link hover:text-white transition-colors";
-  };
+  // --- LINKS DATA ---
+  const navLinks = [
+    { name: 'Home', href: '/' },
+    { name: 'Properties', href: '/properties' },
+    { name: 'Hotels', href: '/hotels' },
+    { name: 'Agents', href: '/agents' },
+    { name: 'Contact', href: '/contact' },
+    { name: 'About', href: '/about' },
+    { name: 'Referrals', href: '/referral' },
+  ];
 
   return (
     <>
       <style jsx>{`
-        /* Custom Hover Underline Effect */
-        .nav-link { position: relative; font-weight: 700; font-size: 16.5px; letter-spacing: 0.3px; }
-        .nav-link::after {
+        /* --- THICK BLUE UNDERLINE CSS --- */
+        .nav-underline {
+          position: relative;
+          display: inline-block;
+          text-decoration: none;
+        }
+        .nav-underline::after {
           content: '';
           position: absolute;
           width: 0;
-          height: 4px; /* Thick line */
+          height: 4px; /* Thick Line */
           bottom: -6px;
           left: 0;
-          background-color: #0065eb;
-          transition: width 0.3s ease;
-          border-radius: 2px;
+          background-color: #38bdf8; /* Light Blue */
+          transition: width 0.3s ease-in-out;
+          border-radius: 4px;
         }
-        .nav-link:hover::after { width: 100%; }
+        .nav-underline:hover::after {
+          width: 100%;
+        }
+        /* Keep underline visible if active */
+        .nav-underline.active::after {
+          width: 100%;
+        }
       `}</style>
 
-      {/* --- MOBILE NAV OVERLAY --- */}
-      <div className={`fixed inset-0 bg-[#0a0c10]/98 backdrop-blur-xl z-[9999] flex flex-col justify-center transition-transform duration-500 ${isNavOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-        <div className="absolute top-8 right-8 cursor-pointer" onClick={toggleNav}>
-          <div className="text-white/50 hover:text-white font-bold uppercase text-xs tracking-widest">Close</div>
+      {/* --- MOBILE NAV OVERLAY (HAMBURGER) --- */}
+      <div className={`fixed inset-0 bg-[#0a0c10]/98 backdrop-blur-2xl z-[9999] flex flex-col justify-center transition-transform duration-500 ${isNavOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+        
+        {/* Close Button */}
+        <div className="absolute top-8 right-8 cursor-pointer p-2" onClick={toggleNav}>
+          <div className="text-white/50 hover:text-white font-bold uppercase text-xs tracking-widest border border-white/20 px-4 py-2 rounded-full">Close</div>
         </div>
-        <div className="pl-8 md:pl-12 flex flex-col space-y-4">
-          <span className="text-[#0065eb] font-bold text-sm tracking-widest uppercase mb-4">Menu</span>
-          {[
-            { name: 'Home', href: '/' },
-            { name: 'Hotels', href: '/hotels' },
-            { name: 'Agents', href: '/agents' },
-            { name: 'Referrals', href: '/referral' },
-            // Mobile Auth Links
-            ...(user 
-              ? [{ name: 'Dashboard', href: '/dashboard' }] 
-              : [{ name: 'Log In', href: '/login' }]
-            ),
-          ].map((item) => (
+
+        {/* Mobile Menu List */}
+        <div className="pl-8 md:pl-12 flex flex-col space-y-2 overflow-y-auto max-h-[85vh] py-10">
+          <span className="text-[#38bdf8] font-bold text-sm tracking-widest uppercase mb-4">Menu</span>
+          
+          {/* 1. Main Pages */}
+          {navLinks.map((item) => (
             <Link 
               key={item.name} 
               href={item.href} 
               onClick={toggleNav}
-              className={`text-4xl md:text-6xl font-black transition-all duration-300 ${pathname === item.href ? 'text-[#0065eb] stroke-none' : 'text-transparent stroke-white hover:text-[#0065eb]'}`}
+              className={`text-4xl md:text-5xl font-black transition-all duration-300 ${pathname === item.href ? 'text-[#38bdf8] stroke-none' : 'text-transparent stroke-white hover:text-[#38bdf8]'}`}
               style={pathname === item.href ? {} : { WebkitTextStroke: '1px rgba(255,255,255,0.5)' }}
             >
               {item.name}
             </Link>
           ))}
-          {/* Mobile Logout Button */}
-          {user && (
-            <button 
-              onClick={() => { handleSignOut(); toggleNav(); }}
-              className="text-left text-4xl md:text-6xl font-black text-red-500 transition-all duration-300"
-              style={{ WebkitTextStroke: '1px rgba(239,68,68,0.5)' }}
-            >
-              Log Out
-            </button>
-          )}
+
+          {/* 2. Auth Links (Conditional) */}
+          <div className="pt-6 flex flex-col space-y-2">
+            {!loading && user ? (
+              <>
+                <Link 
+                  href="/dashboard" 
+                  onClick={toggleNav}
+                  className="text-4xl md:text-5xl font-black text-transparent stroke-white hover:text-[#38bdf8] transition-all duration-300"
+                  style={{ WebkitTextStroke: '1px rgba(255,255,255,0.5)' }}
+                >
+                  Dashboard
+                </Link>
+                <button 
+                  onClick={handleSignOut}
+                  className="text-left text-4xl md:text-5xl font-black text-red-500 transition-all duration-300 opacity-80 hover:opacity-100"
+                >
+                  Log Out
+                </button>
+              </>
+            ) : (
+              <>
+                <Link 
+                  href="/login" 
+                  onClick={toggleNav}
+                  className="text-4xl md:text-5xl font-black text-transparent stroke-white hover:text-[#38bdf8] transition-all duration-300"
+                  style={{ WebkitTextStroke: '1px rgba(255,255,255,0.5)' }}
+                >
+                  Log In
+                </Link>
+                <Link 
+                  href="/signup" 
+                  onClick={toggleNav}
+                  className="text-4xl md:text-5xl font-black text-transparent stroke-white hover:text-[#38bdf8] transition-all duration-300"
+                  style={{ WebkitTextStroke: '1px rgba(255,255,255,0.5)' }}
+                >
+                  Sign Up
+                </Link>
+              </>
+            )}
+          </div>
+
+          {/* 3. Download Link */}
           <button 
-            onClick={handleDownloadClick}
-            className="text-left text-4xl md:text-6xl font-black text-[#0065eb] transition-all duration-300"
+            onClick={() => { handleDownloadClick(); toggleNav(); }}
+            className="text-left text-4xl md:text-5xl font-black text-[#38bdf8] transition-all duration-300 mt-4"
           >
-            Download App
+            Download
           </button>
         </div>
       </div>
 
-      {/* --- MAIN NAVBAR --- */}
+      {/* --- MAIN DESKTOP HEADER --- */}
       <header 
         className={`fixed top-0 left-0 w-full z-50 transition-transform duration-300 ease-in-out ${isVisible ? 'translate-y-0' : '-translate-y-full'}`}
       >
-        <div className="w-full bg-[#0a0c10]/60 backdrop-blur-xl border-b border-white/10">
-            <nav className="max-w-[1600px] mx-auto px-4 md:px-10 flex justify-between items-center py-3">
+        <div className="w-full bg-[#0a0c10]/85 backdrop-blur-md border-b border-white/5 shadow-lg">
+            <nav className="max-w-[1600px] mx-auto px-4 md:px-10 flex justify-between items-center py-4">
                 
                 {/* LOGO */}
                 <Link href="/" className="cursor-pointer hover:opacity-80 transition-opacity flex items-center gap-1">
@@ -143,75 +194,69 @@ const Header = () => {
                     <span className="text-white font-black text-xl md:text-2xl tracking-tight">GuriUp</span>
                 </Link>
 
-                {/* DESKTOP LINKS */}
-                <div className="hidden lg:flex gap-8 font-bold text-gray-300">
-                  <Link href="/" className={getLinkClass('/')}>Home</Link>
-                  <Link href="/properties" className={getLinkClass('/properties')}>Properties</Link>
-                  <Link href="/hotels" className={getLinkClass('/hotels')}>Hotels</Link>
-                  <Link href="/agents" className={getLinkClass('/agents')}>Agents</Link>
-                  <Link href="/contact" className={getLinkClass('/contact')}>Contact</Link>
-                  <Link href="/about" className={getLinkClass('/about')}>About</Link>
-                  <Link href="/referral" className={getLinkClass('/referral')}>Referrals</Link>
+                {/* DESKTOP NAV LINKS (Hidden on Mobile) */}
+                <div className="hidden lg:flex gap-6 xl:gap-8 font-bold text-gray-300 text-[15px]">
+                  {navLinks.map((link) => (
+                    <Link 
+                      key={link.name} 
+                      href={link.href} 
+                      className={`nav-underline hover:text-white transition-colors py-1 ${pathname === link.href ? 'text-[#38bdf8] active' : ''}`}
+                    >
+                      {link.name}
+                    </Link>
+                  ))}
                 </div>
 
-                {/* AUTH BUTTONS (CONDITIONAL) */}
-                <div className="flex items-center gap-2 md:gap-4">
+                {/* RIGHT SIDE: AUTH & ACTIONS */}
+                <div className="flex items-center gap-3">
                   
-                  {!loading && user ? (
-                    // --- LOGGED IN STATE ---
-                    <div className="flex items-center gap-4">
-                      <Link href="/dashboard" className="hidden md:flex items-center gap-2 text-white font-bold hover:text-[#0065eb] transition-colors nav-link">
-                          Dashboard
-                      </Link>
-                      <Link href="/dashboard">
-                        <div className="w-9 h-9 rounded-full bg-[#0065eb] flex items-center justify-center text-white font-bold border-2 border-white/20 cursor-pointer">
-                           {user.photoURL ? (
-                             <img src={user.photoURL} alt="User" className="w-full h-full rounded-full object-cover" />
-                           ) : (
-                             user.displayName ? user.displayName[0].toUpperCase() : 'U'
-                           )}
-                        </div>
-                      </Link>
-                      {/* Logout Icon Button */}
-                      <button 
-                        onClick={handleSignOut}
-                        className="text-white/70 hover:text-red-500 transition-colors p-2"
-                        title="Sign Out"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                          <polyline points="16 17 21 12 16 7"></polyline>
-                          <line x1="21" y1="12" x2="9" y2="12"></line>
-                        </svg>
-                      </button>
-                    </div>
-                  ) : (
-                    // --- GUEST STATE ---
-                    <>
-                      <Link href="/login" className="text-white text-sm font-bold hidden md:block hover:text-[#0065eb] transition-colors">Log In</Link>
-                      <div className="flex items-center gap-2">
+                  {/* Desktop Auth Buttons */}
+                  <div className="hidden md:flex items-center gap-4">
+                    {!loading && user ? (
+                      <div className="flex items-center gap-3">
+                          <Link href="/dashboard" className="nav-underline text-white font-bold hover:text-[#38bdf8] transition-colors text-sm">
+                            Dashboard
+                          </Link>
+                          <button onClick={handleSignOut} className="text-white/50 hover:text-red-400 font-bold text-sm">
+                            Sign Out
+                          </button>
+                          <Link href="/dashboard">
+                          <div className="w-9 h-9 rounded-full bg-[#0065eb] ring-2 ring-white/20 overflow-hidden">
+                             {user.photoURL ? (
+                               <img src={user.photoURL} alt="User" className="w-full h-full object-cover" />
+                             ) : (
+                               <div className="w-full h-full flex items-center justify-center text-white font-bold">{user.displayName ? user.displayName[0] : 'U'}</div>
+                             )}
+                          </div>
+                          </Link>
+                      </div>
+                    ) : (
+                      <>
+                        <Link href="/login" className="nav-underline text-white font-bold hover:text-[#38bdf8] transition-colors text-sm">
+                          Log In
+                        </Link>
                         <Link href="/signup">
-                          <button className="hidden md:block bg-white/10 text-white rounded-full px-6 py-2.5 text-[14px] font-bold hover:bg-white hover:text-black transition-all backdrop-blur-sm border border-white/10">
+                          <button className="bg-white/10 hover:bg-white hover:text-black text-white px-5 py-2.5 rounded-full font-bold text-sm transition-all border border-white/10 backdrop-blur-sm">
                             Sign Up
                           </button>
                         </Link>
-                      </div>
-                    </>
-                  )}
-                  
-                  {/* DOWNLOAD BUTTON (ALWAYS VISIBLE) */}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Download Button (Always Visible) */}
                   <button 
                     onClick={handleDownloadClick}
-                    className="bg-[#0065eb] text-white rounded-full px-3 py-1.5 md:px-5 md:py-2.5 text-xs md:text-[14px] font-bold hover:bg-[#0052c1] transition-all flex items-center gap-1 shadow-lg shadow-blue-500/20"
+                    className="bg-[#0065eb] text-white rounded-full px-4 py-2 text-xs md:text-sm font-bold hover:bg-[#0052c1] transition-all flex items-center gap-1.5 shadow-lg shadow-blue-500/20"
                   >
-                    Download
-                    <svg className="w-3 h-3 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
+                    <span>Download</span>
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
                   </button>
-                  
-                  {/* MOBILE HAMBURGER */}
-                  <div className="lg:hidden cursor-pointer p-1" onClick={toggleNav}>
-                    <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-                  </div>
+
+                  {/* Mobile Menu Toggle (Hamburger) */}
+                  <button className="lg:hidden p-2 text-white" onClick={toggleNav}>
+                    <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                  </button>
                 </div>
             </nav>
         </div>

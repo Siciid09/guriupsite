@@ -32,7 +32,8 @@ interface Property {
   agentName: string; 
   agencyName?: string; 
   agentVerified: boolean; 
-  planTierAtUpload?: 'free' | 'pro' | 'premium'; 
+  // FIX: Updated to 'planTier' to match App/DB
+  planTier?: 'free' | 'pro' | 'premium'; 
   agentPlanTier?: string; 
   agentPhoto?: string;
   featured: boolean;
@@ -148,7 +149,8 @@ export default function PropertiesPage({
   // --- FEATURED LOGIC ---
   const featuredProperties = useMemo(() => {
     return filteredData.filter(p => {
-      const isVerified = p.agentVerified || p.planTierAtUpload === 'pro' || p.agentPlanTier === 'pro';
+      // FIX: Use planTier instead of planTierAtUpload
+      const isVerified = p.agentVerified || p.planTier === 'pro' || p.planTier === 'premium' || p.agentPlanTier === 'pro';
       return p.featured === true && isVerified;
     }).slice(0, 3);
   }, [filteredData]);
@@ -571,7 +573,8 @@ export default function PropertiesPage({
 // =======================================================================
 function PropertyCard({ property, isFeatured = false, formatPrice }: { property: Property, isFeatured?: boolean, formatPrice: (n:number)=>string }) {
   const displayName = property.agencyName || property.agentName || "GuriUp Agent";
-  const isVerified = property.agentVerified || property.planTierAtUpload === 'pro' || property.agentPlanTier === 'pro';
+  // FIX: Use updated planTier field for verification check
+  const isVerified = property.agentVerified || property.planTier === 'pro' || property.planTier === 'premium' || property.agentPlanTier === 'pro';
   const hasValidDiscount = property.hasDiscount && (property.discountPrice || 0) > 0;
   const displayPrice = hasValidDiscount ? property.discountPrice : property.price;
 

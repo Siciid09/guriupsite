@@ -10,6 +10,7 @@ export interface User {
   role: 'user' | 'reagent' | 'hoadmin' | 'admin';
   favoriteProperties?: string[];
   favoriteHotels?: string[];
+  planTier?: 'free' | 'pro' | 'premium'; // Added to match Signup fix
 }
 
 export interface Agent {
@@ -44,6 +45,12 @@ export interface Property {
   hasDiscount?: boolean;
   discountPrice?: number;
   featured: boolean;
+  
+  // --- ADDED THIS FIELD ---
+  // Matches the App's logic for "Pro" badges
+  planTier: 'free' | 'pro' | 'premium'; 
+  // ------------------------
+
   location: {
     address: string;
     city: string;

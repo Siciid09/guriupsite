@@ -26,6 +26,8 @@ export default async function HomePage() {
     <HomeUI 
       featuredProperties={featuredProperties} 
       featuredHotels={featuredHotels} 
+      latestProperties={latestProperties} // Add this
+      latestHotels={latestHotels}         // Add this
     />
   );
 }
