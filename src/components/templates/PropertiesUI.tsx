@@ -14,7 +14,6 @@ import {
 //  1. TYPES & DATA CONFIGURATION
 // =======================================================================
 
-// Matching Flutter 'property_model.dart' & 'booking_models.dart'
 interface Property {
   id: string;
   title: string;
@@ -22,24 +21,15 @@ interface Property {
   discountPrice?: number;
   hasDiscount?: boolean;
   isForSale: boolean; 
-  status: string; // 'available', 'rented_out', 'sold'
-  
+  status: string;
   images: string[];
   videoUrl?: string; 
-  
-  location: { 
-    city: string; 
-    area: string; 
-  };
-
-  // Specs
+  location: { city: string; area: string; };
   bedrooms: number;
   bathrooms: number;
   area?: number; 
   type: string; 
   amenities?: string[]; 
-
-  // Agent / Verification Logic
   agentId: string;
   agentName: string; 
   agencyName?: string; 
@@ -47,13 +37,10 @@ interface Property {
   planTier?: 'free' | 'pro' | 'premium'; 
   agentPlanTier?: string; 
   agentPhoto?: string;
-
   featured: boolean;
   createdAt: string; 
 }
 
-// --- 10 CATEGORIES (Modern Cards) ---
-// Standardized Categories to match App's propertyTypes list
 const PROPERTY_CATEGORIES = [
   { name: 'House', label: 'Houses', sub: 'Family', icon: <Home size={20}/>, color: 'bg-rose-50 text-rose-600' },
   { name: 'Apartment', label: 'Apartments', sub: 'Modern Flats', icon: <Building size={20}/>, color: 'bg-indigo-50 text-indigo-600' },
@@ -67,7 +54,6 @@ const PROPERTY_CATEGORIES = [
   { name: 'Commercial', label: 'Commercial', sub: 'Business', icon: <Zap size={20}/>, color: 'bg-orange-50 text-orange-600' },
 ];
 
-// --- 6 ADVANTAGES (Modern Grid) ---
 const GURIUP_ADVANTAGES = [
   { icon: <Award size={24} />, title: "Market Experts", desc: "Decades of local market intelligence." },
   { icon: <ShieldCheck size={24} />, title: "Vetted Only", desc: "Rigorous anti-fraud verification." },
@@ -120,11 +106,15 @@ export default function PropertiesPage({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // --- SCROLL ANIMATION ---
+  // --- OPTIMIZED SCROLL ANIMATION ---
   useEffect(() => {
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
-        if (entry.isIntersecting) entry.target.classList.add('visible');
+        if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            // Stop observing once visible to free up CPU
+            observer.unobserve(entry.target); 
+        }
       });
     }, { threshold: 0.1 });
 
@@ -132,12 +122,10 @@ export default function PropertiesPage({
     return () => observer.disconnect();
   }, []);
 
-  // --- FILTER LOGIC (Strict App Parity) ---
+  // --- FILTER LOGIC ---
   const filteredData = useMemo(() => {
-    // 1. Integrity: Remove 'sold' properties (Case Insensitive)
     let data = initialProperties.filter(p => p.status?.toLowerCase() !== 'sold');
 
-    // 2. Search
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       data = data.filter(p => 
@@ -147,16 +135,13 @@ export default function PropertiesPage({
       );
     }
 
-    // 3. Category
     if (selectedCategory !== 'All') {
       data = data.filter(p => p.type?.toLowerCase() === selectedCategory.toLowerCase());
     }
 
-    // 4. Tab
     if (filterTab === 'buy') data = data.filter(p => p.isForSale);
     if (filterTab === 'rent') data = data.filter(p => !p.isForSale);
 
-    // 5. Advanced Filters
     data = data.filter(p => {
       const price = (p.hasDiscount && (p.discountPrice || 0) > 0) ? p.discountPrice : p.price;
       return (price || 0) >= priceRange[0] && (price || 0) <= priceRange[1];
@@ -173,8 +158,6 @@ export default function PropertiesPage({
     return data;
   }, [initialProperties, searchQuery, filterTab, selectedCategory, priceRange, minSize, selectedBeds, selectedBaths, selectedAmenities]);
 
-  // --- FEATURED LOGIC (Strict: Premium Only) ---
-  // --- FEATURED LOGIC (Matches Flutter App: checks featured boolean only) ---
   const featuredProperties = useMemo(() => {
     return filteredData.filter(p => p.featured === true).slice(0, 3);
   }, [filteredData]);
@@ -187,16 +170,48 @@ export default function PropertiesPage({
   return (
     <div className="bg-white font-sans text-slate-900 overflow-x-hidden">
       <style jsx global>{`
-        .reveal { opacity: 0; transform: translateY(30px); transition: all 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
-        .reveal.visible { opacity: 1; transform: translateY(0); }
-        /* Modern Glass Card */
-        .glass-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(24px); border: 1px solid rgba(255,255,255,0.8); box-shadow: 0 20px 40px rgba(0,0,0,0.05); }
+        /* 1. FORCE SMOOTH SCROLLING */
+        html { scroll-behavior: smooth; }
+        
+        /* 2. OPTIMIZE TEXT RENDERING */
+        body { 
+            text-rendering: optimizeSpeed; 
+            -webkit-font-smoothing: antialiased; 
+        }
+
+        /* 3. HARDWARE ACCELERATION FOR ANIMATIONS */
+        .reveal { 
+            opacity: 0; 
+            transform: translateY(30px) translateZ(0); /* translateZ forces GPU layer */
+            transition: opacity 0.6s ease-out, transform 0.6s ease-out; 
+            will-change: opacity, transform; /* Hints browser to optimize */
+        }
+        .reveal.visible { opacity: 1; transform: translateY(0) translateZ(0); }
+
+        /* 4. GLASSMORPHISM OPTIMIZATION */
+        .glass-card { 
+            background: rgba(255, 255, 255, 0.9); 
+            backdrop-filter: blur(24px); 
+            -webkit-backdrop-filter: blur(24px); /* Safari Fix */
+            border: 1px solid rgba(255,255,255,0.8); 
+            box-shadow: 0 20px 40px rgba(0,0,0,0.05); 
+            transform: translateZ(0); /* Separate layer */
+        }
+
         .hero-gradient { background: radial-gradient(circle at top right, #1e293b, #0f172a); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* 5. CONTENT VISIBILITY (THE MAGIC FIX) 
+           This tells browser to NOT render sections until you scroll close to them.
+           This massively reduces main-thread work. */
+        section {
+            content-visibility: auto;
+            contain-intrinsic-size: 600px; /* Estimates section height */
+        }
       `}</style>
 
-      {/* ================= FILTER MODAL (Centered 80%) ================= */}
+      {/* ================= FILTER MODAL ================= */}
       {isFilterOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsFilterOpen(false)}></div>
@@ -219,22 +234,22 @@ export default function PropertiesPage({
                 <input type="range" min="0" max="1000000" step="10000" value={priceRange[1]} onChange={(e) => setPriceRange([priceRange[0], parseInt(e.target.value)])} className="w-full accent-blue-600 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer" />
               </div>
               <div className="grid grid-cols-2 gap-6 mb-8">
-                 <div>
+                  <div>
                     <h3 className="font-bold text-xs uppercase tracking-wider text-slate-400 mb-3">Bedrooms</h3>
                     <div className="flex bg-slate-100 rounded-xl p-1">
                       {[1, 2, 3, 4].map((num) => (
                         <button key={num} onClick={() => setSelectedBeds(selectedBeds === num ? null : num)} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${selectedBeds === num ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>{num}+</button>
                       ))}
                     </div>
-                 </div>
-                 <div>
+                  </div>
+                  <div>
                     <h3 className="font-bold text-xs uppercase tracking-wider text-slate-400 mb-3">Baths</h3>
                     <div className="flex bg-slate-100 rounded-xl p-1">
                       {[1, 2, 3, 4].map((num) => (
                         <button key={num} onClick={() => setSelectedBaths(selectedBaths === num ? null : num)} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${selectedBaths === num ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>{num}+</button>
                       ))}
                     </div>
-                 </div>
+                  </div>
               </div>
               <div className="mb-8">
                 <h3 className="font-bold text-xs uppercase tracking-wider text-slate-400 mb-3">Amenities</h3>
@@ -256,11 +271,19 @@ export default function PropertiesPage({
         </div>
       )}
 
-      {/* ================= 1. HERO SECTION (15% Smaller - ~70vh) ================= */}
-      <section className="relative h-[70vh] min-h-[600px] flex flex-col justify-center items-center text-center px-6 hero-gradient overflow-visible">
+      {/* ================= 1. HERO SECTION ================= */}
+      {/* Optimization: Use transform-gpu to prevent background from causing repaint lags */}
+      <section className="relative h-[70vh] min-h-[600px] flex flex-col justify-center items-center text-center px-6 hero-gradient overflow-visible transform-gpu">
         {/* BG */}
         <div className="absolute inset-0 z-0">
-           <Image src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=2000" alt="Hero" fill className="object-cover opacity-20 mix-blend-overlay" priority />
+           {/* Optimization: priority={true} loads this immediately. */}
+           <Image 
+             src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=2000" 
+             alt="Hero" 
+             fill 
+             className="object-cover opacity-20 mix-blend-overlay" 
+             priority={true}
+           />
         </div>
         
         <div className="relative z-10 max-w-3xl reveal">
@@ -275,7 +298,7 @@ export default function PropertiesPage({
             Connecting the global diaspora and local visionaries to Africa's most prestigious property listings.
           </p>
 
-          {/* --- SEARCH CAPSULE (Fixed Z-Index) --- */}
+          {/* --- SEARCH CAPSULE --- */}
           <div className="glass-card p-2 rounded-[2rem] shadow-2xl max-w-4xl mx-auto flex flex-col md:flex-row gap-2 relative z-[50]">
             
             {/* Location */}
@@ -287,7 +310,7 @@ export default function PropertiesPage({
               </div>
             </div>
 
-            {/* Dropdown (Top Z-Index) */}
+            {/* Dropdown */}
             <div className="flex-1 relative" ref={dropdownRef}>
               <button onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="w-full flex items-center gap-3 px-5 py-3 bg-slate-50/50 rounded-[1.5rem] hover:bg-white transition-all text-left">
                 <Home className="text-blue-500" size={20} />
@@ -299,7 +322,6 @@ export default function PropertiesPage({
                   </div>
                 </div>
               </button>
-              {/* Dropdown Menu (Z-INDEX 100) */}
               {isDropdownOpen && (
                 <div className="absolute top-full left-0 right-0 mt-3 bg-white rounded-[1.5rem] shadow-2xl p-2 z-[100] border border-slate-100 animate-in fade-in zoom-in-95 duration-200 max-h-80 overflow-y-auto">
                   {PROPERTY_CATEGORIES.map((cat) => (
@@ -327,14 +349,16 @@ export default function PropertiesPage({
         </div>
       </section>
 
-      {/* ================= 2. CATEGORIES (10 Modern Cards, 70% Smaller) ================= */}
+      {/* ================= 2. CATEGORIES ================= */}
+      {/* content-visibility: auto handled by global CSS */}
       <section className="py-16 max-w-[1200px] mx-auto px-6 reveal">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           {PROPERTY_CATEGORIES.map((item) => (
             <button 
               key={item.name} 
               onClick={() => setSelectedCategory(item.name)}
-              className={`p-4 rounded-[1.8rem] transition-all duration-300 hover:-translate-y-1 cursor-pointer group text-center border border-slate-100 bg-white hover:shadow-xl hover:border-blue-100 flex flex-col items-center justify-center gap-3 relative overflow-hidden`}
+              // Optimization: Added transform-gpu to offload hover effect to GPU
+              className={`p-4 rounded-[1.8rem] transition-all duration-300 hover:-translate-y-1 cursor-pointer group text-center border border-slate-100 bg-white hover:shadow-xl hover:border-blue-100 flex flex-col items-center justify-center gap-3 relative overflow-hidden transform-gpu`}
             >
               <div className={`p-3 rounded-full ${item.color} bg-opacity-10 mb-1 group-hover:scale-110 transition-transform`}>
                   {item.icon}
@@ -348,7 +372,7 @@ export default function PropertiesPage({
         </div>
       </section>
 
-      {/* ================= 3. FEATURED LISTINGS (Premium Only) ================= */}
+      {/* ================= 3. FEATURED LISTINGS ================= */}
       {featuredProperties.length > 0 && (
         <section className="bg-slate-50 py-20 px-6 reveal">
           <div className="max-w-[1400px] mx-auto">
@@ -368,7 +392,7 @@ export default function PropertiesPage({
         </section>
       )}
 
-      {/* ================= 4. LATEST LISTINGS (All Active) ================= */}
+      {/* ================= 4. LATEST LISTINGS ================= */}
       <section className="py-20 px-6 bg-white reveal">
          <div className="max-w-[1400px] mx-auto">
             <div className="flex flex-col md:flex-row justify-between items-center mb-10 gap-6">
@@ -395,13 +419,13 @@ export default function PropertiesPage({
          </div>
       </section>
 
-      {/* ================= 5. GURIUP ADVANTAGE (6 Modern Cards) ================= */}
+      {/* ================= 5. GURIUP ADVANTAGE ================= */}
       <section className="py-20 bg-slate-50 reveal border-t border-slate-100">
         <div className="max-w-[1400px] mx-auto px-6 text-center">
           <h2 className="text-3xl font-black mb-16 text-slate-900 tracking-tighter">The GuriUp Advantage</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
             {GURIUP_ADVANTAGES.map((item, i) => (
-              <div key={i} className="p-6 rounded-[2rem] bg-white border border-slate-100 hover:border-blue-200 hover:shadow-xl transition-all duration-300 group flex flex-col items-center justify-center relative overflow-hidden h-48">
+              <div key={i} className="p-6 rounded-[2rem] bg-white border border-slate-100 hover:border-blue-200 hover:shadow-xl transition-all duration-300 group flex flex-col items-center justify-center relative overflow-hidden h-48 transform-gpu">
                 <div className="absolute inset-0 bg-gradient-to-b from-transparent to-slate-50 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 <div className="relative z-10 text-blue-600 mb-4 group-hover:scale-110 transition-transform bg-blue-50 p-4 rounded-full">
                     {item.icon}
@@ -416,9 +440,9 @@ export default function PropertiesPage({
         </div>
       </section>
 
-      {/* ================= 6. PAN-AFRICAN REACH (20% Smaller, Countries) ================= */}
+      {/* ================= 6. PAN-AFRICAN REACH ================= */}
       <section className="py-24 px-6 reveal">
-        <div className="max-w-[1200px] mx-auto bg-[#0a0c10] rounded-[3rem] p-12 relative overflow-hidden">
+        <div className="max-w-[1200px] mx-auto bg-[#0a0c10] rounded-[3rem] p-12 relative overflow-hidden transform-gpu">
           <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-600 opacity-20 blur-[150px] rounded-full pointer-events-none"></div>
           
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center relative z-10">
@@ -428,12 +452,11 @@ export default function PropertiesPage({
                 From the bustling streets of Mogadishu to the rising skyline of Hargeisa, we provide the digital infrastructure for Africa's property evolution.
               </p>
               <div className="flex gap-12">
-                 <div><h4 className="text-3xl font-black text-white mb-1">5+</h4><p className="text-blue-500 font-black text-[10px] uppercase tracking-widest">Countries</p></div>
-                 <div><h4 className="text-3xl font-black text-white mb-1">15k+</h4><p className="text-blue-500 font-black text-[10px] uppercase tracking-widest">Active Listings</p></div>
+                  <div><h4 className="text-3xl font-black text-white mb-1">5+</h4><p className="text-blue-500 font-black text-[10px] uppercase tracking-widest">Countries</p></div>
+                  <div><h4 className="text-3xl font-black text-white mb-1">15k+</h4><p className="text-blue-500 font-black text-[10px] uppercase tracking-widest">Active Listings</p></div>
               </div>
             </div>
             
-            {/* Country Map Grid (Modern) */}
             <div className="grid grid-cols-3 gap-3">
               {['Ethiopia', 'Somalia', 'Somaliland', 'Kenya', 'Djibouti', 'Global'].map((country, i) => (
                 <div key={country} className="aspect-square bg-white/5 border border-white/10 rounded-2xl flex flex-col items-center justify-center hover:bg-white/10 transition-colors group cursor-pointer backdrop-blur-sm">
@@ -454,17 +477,24 @@ export default function PropertiesPage({
 // =======================================================================
 function PropertyCard({ property, isFeatured = false }: { property: Property, isFeatured?: boolean }) {
   const formatPrice = (price: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(price);
-  
-  // Strict Logic: PlanTier is Pro OR Premium OR Verified
   const isVerified = property.agentVerified || property.planTier === 'pro' || property.planTier === 'premium' || property.agentPlanTier === 'pro';
-  
   const displayPrice = (property.hasDiscount && (property.discountPrice || 0) > 0) ? property.discountPrice : property.price;
 
   return (
     <Link href={`/properties/${property.id}`} className="group block">
-      <div className={`relative overflow-hidden rounded-[2rem] border border-slate-100 bg-white transition-all duration-500 hover:shadow-2xl ${isFeatured ? 'hover:-translate-y-2' : ''}`}>
+      {/* Optimization: transform-gpu added here. This ensures the hover effect happens on the GPU. */}
+      <div className={`relative overflow-hidden rounded-[2rem] border border-slate-100 bg-white transition-transform duration-500 hover:shadow-2xl transform-gpu ${isFeatured ? 'hover:-translate-y-2' : ''}`}>
         <div className="relative h-64 bg-slate-200 overflow-hidden">
-          <Image src={property.images?.[0] || 'https://placehold.co/600x400'} alt={property.title} fill className="object-cover transition-transform duration-700 group-hover:scale-110" />
+          {/* Optimization: loading="lazy" and sizes prop ensures we don't load huge images for small cards */}
+          <Image 
+            src={property.images?.[0] || 'https://placehold.co/600x400'} 
+            alt={property.title} 
+            fill 
+            className="object-cover transition-transform duration-700 group-hover:scale-110" 
+            loading="lazy"
+            decoding="async"
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent opacity-60"></div>
           
           <div className="absolute top-4 left-4 flex flex-col gap-2">

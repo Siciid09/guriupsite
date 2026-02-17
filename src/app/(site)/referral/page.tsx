@@ -6,8 +6,10 @@ import {
   Copy, Share2, CheckCircle2, Info, ArrowLeft,
   Lock, Zap, Trophy, ShieldCheck, Phone, Send,
   Instagram, ChevronRight, Clock, Star, Medal,
-  Wallet, TrendingUp, Users, LayoutDashboard
+  Wallet, TrendingUp, Users, LayoutDashboard,
+  ArrowRight, Globe
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 // Firebase Imports
 import { db, auth } from '../../lib/firebase';
@@ -18,35 +20,40 @@ import {
 import { onAuthStateChanged } from 'firebase/auth';
 
 export default function ReferralSystem() {
+  const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [userData, setUserData] = useState<any>(null);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [referrals, setReferrals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
+  const [origin, setOrigin] = useState('');
+
   // UI View States
-  const [showHowItWorks, setShowHowItWorks] = useState(false);
-  const [activeTab, setActiveTab] = useState<'valid' | 'pending' | 'rejected'>('valid');
+  const [showRules, setShowRules] = useState(false);
+  const [activeTab, setActiveTab] = useState<'valid' | 'pending'>('valid');
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
+    // Get current domain for the link (e.g., https://guriup.com)
+    setOrigin(typeof window !== 'undefined' ? window.location.origin : '');
+
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
         
-        // 1. Sync User Stats (Rank, Streak, Code)
+        // 1. Sync User Stats
         const unsubUser = onSnapshot(doc(db, "users", currentUser.uid), (doc) => {
           if (doc.exists()) setUserData(doc.data());
           setLoading(false);
         });
 
-        // 2. Sync Leaderboard (Top 10)
+        // 2. Sync Leaderboard
         const qLeader = query(collection(db, "users"), orderBy("validReferralCount", "desc"), limit(10));
         const unsubLeader = onSnapshot(qLeader, (snap) => {
           setLeaderboard(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
-        // 3. Sync User Referrals
+        // 3. Sync Referrals
         const qRefs = query(collection(db, "referrals"), where("referrerId", "==", currentUser.uid));
         const unsubRefs = onSnapshot(qRefs, (snap) => {
           setReferrals(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -73,262 +80,391 @@ export default function ReferralSystem() {
     });
   };
 
+  const fullReferralLink = userData?.referralCode 
+    ? `${origin}/register?ref=${userData.referralCode}` 
+    : '';
+
   const handleCopy = () => {
-    if (!userData?.referralCode) return;
-    navigator.clipboard.writeText(userData.referralCode);
+    if (!fullReferralLink) return;
+    navigator.clipboard.writeText(fullReferralLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   if (loading) return <LoadingScreen />;
-  if (!user) return <AuthScreen />;
-  if (showHowItWorks) return <RulesScreen onClose={() => setShowHowItWorks(false)} />;
-  if (!userData?.referralCode) return <GuideScreen onGenerate={generateLink} onHow={() => setShowHowItWorks(true)} />;
+
+  // 1. Not Logged In -> Show Marketing Page
+  if (!user) return <MarketingPage />;
+
+  // 2. Logged In But No Code -> Show Guide/Onboarding
+  if (!userData?.referralCode) return <GuideScreen onGenerate={generateLink} onHow={() => setShowRules(true)} />;
+
+  // 3. Logged In & Has Code -> Show Dashboard (Or Rules Overlay)
+  if (showRules) return <RulesScreen onClose={() => setShowRules(false)} />;
 
   return (
-    <div className="min-h-screen bg-[#F1F5F9] pt-24 pb-20 px-4 md:px-6">
-      <div className="max-w-2xl mx-auto space-y-6">
+    <div className="min-h-screen bg-[#F8FAFC] pt-24 pb-20 px-4 md:px-8 font-sans">
+      <div className="max-w-5xl mx-auto space-y-8">
         
-        {/* --- DYNAMIC HEADER --- */}
-        <div className="flex justify-between items-center px-2">
-           <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-white rounded-2xl shadow-xl shadow-slate-200 flex items-center justify-center border border-white">
-                 <Medal className="text-blue-600" size={28} />
-              </div>
-              <div>
-                 <h1 className="text-2xl font-black text-slate-900 tracking-tighter leading-none">Rank #{userData.rank || '---'}</h1>
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1">{userData.validReferralCount || 0} Valid Referrals</p>
-              </div>
-           </div>
-           <button onClick={() => setShowHowItWorks(true)} className="p-3 bg-white rounded-full text-slate-400 hover:text-blue-600 shadow-md border border-white transition-all">
-              <Info size={22} />
-           </button>
+        {/* --- HEADER --- */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Referral Hub</h1>
+            <p className="text-slate-500 font-medium">Track your performance and rewards.</p>
+          </div>
+          
+          <div className="flex items-center gap-3">
+             <div className="bg-white px-5 py-2.5 rounded-full shadow-sm border border-slate-200 flex items-center gap-2">
+                <Trophy size={18} className="text-yellow-500" />
+                <span className="font-bold text-slate-700 text-sm">Rank #{userData.rank || 'N/A'}</span>
+             </div>
+             <button onClick={() => setShowRules(true)} className="p-2.5 bg-white border border-slate-200 rounded-full text-slate-400 hover:text-blue-600 hover:border-blue-200 transition-all">
+               <Info size={20} />
+             </button>
+          </div>
         </div>
 
-        {/* --- MAIN DASHBOARD CARD --- */}
-        <div className="bg-white rounded-[3rem] p-8 shadow-2xl shadow-slate-200 border border-white relative overflow-hidden">
-           <div className="flex justify-between items-center mb-8">
-              <div className="flex items-center gap-2 bg-orange-100 text-orange-700 px-4 py-2 rounded-2xl border border-orange-200">
-                 <Flame size={18} className="fill-orange-500" />
-                 <span className="text-xs font-black uppercase">{userData.streakCount || 0} Day Streak</span>
-              </div>
-              <div className="bg-blue-50 text-blue-700 px-4 py-2 rounded-2xl border border-blue-100 flex items-center gap-2">
-                 <Trophy size={14} />
-                 <span className="text-[10px] font-black uppercase">Top 100</span>
-              </div>
-           </div>
-
-           <div className="flex justify-between mb-3 text-[10px] font-black uppercase text-slate-400 px-1">
-              <span>Start</span>
-              <span className="text-blue-600">Goal: Top 10</span>
-           </div>
-           <div className="h-4 w-full bg-slate-100 rounded-full p-0.5 mb-8">
-              <div 
-                className="h-full bg-gradient-to-r from-blue-500 to-blue-700 rounded-full transition-all duration-1000 shadow-[0_0_15px_rgba(37,99,235,0.4)]" 
-                style={{ width: `${Math.min(((userData.validReferralCount || 0) / 10) * 100, 100)}%` }}
-              />
-           </div>
-
-           <div className="flex items-center gap-4 bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100">
-              <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-600/20">
-                <Target size={24} />
-              </div>
-              <p className="text-sm font-bold text-slate-700 leading-tight">
-                You need <span className="text-blue-600">{Math.max(10 - (userData.validReferralCount || 0), 0)} more referrals</span> <br/>
-                <span className="text-slate-400 text-xs font-medium">to enter the Top 10 and unlock your $50+ reward.</span>
-              </p>
-           </div>
-        </div>
-
-        {/* --- THE PRO INVITE CARD (DARK CONTRAST) --- */}
-        <div className="bg-slate-900 rounded-[3rem] p-10 text-white relative overflow-hidden shadow-2xl">
-           <div className="absolute top-0 right-0 w-48 h-48 bg-blue-600 opacity-20 blur-[90px]"></div>
-           <div className="relative z-10">
-              <h3 className="text-xs font-black uppercase tracking-[0.3em] text-blue-400 mb-8 text-center">Your Unique Referral Code</h3>
-              
-              <div className="flex items-center justify-between gap-4 bg-white/5 border border-white/10 p-5 rounded-3xl mb-10 group">
-                 <span className="text-2xl md:text-3xl font-black font-mono tracking-[0.4em] pl-4">{userData.referralCode}</span>
-                 <button onClick={handleCopy} className="p-4 bg-white text-slate-900 rounded-2xl hover:scale-105 transition-all active:scale-90 shadow-xl">
-                    {copied ? <CheckCircle2 size={24} className="text-green-600" /> : <Copy size={24} />}
-                 </button>
-              </div>
-
-              <div className="grid grid-cols-4 gap-4">
-                 <ShareBtn color="bg-[#25D366]" icon={<Phone />} label="WhatsApp" />
-                 <ShareBtn color="bg-[#E1306C]" icon={<Instagram />} label="Instagram" />
-                 <ShareBtn color="bg-[#0088cc]" icon={<Send />} label="Telegram" />
-                 <ShareBtn color="bg-slate-700" icon={<Share2 />} label="More" />
-              </div>
-           </div>
-        </div>
-
-        {/* --- LIVE LEADERBOARD (PODIUMS) --- */}
-        <div className="pt-10">
-           <div className="flex justify-between items-center mb-8 px-2">
-              <h3 className="text-2xl font-black text-slate-900 tracking-tighter">Live Leaderboard</h3>
-              <div className="flex items-center gap-2 text-blue-600 text-xs font-black uppercase tracking-widest">
-                 <Clock size={14} /> Resets in 12d
-              </div>
-           </div>
-           
-           <div className="grid grid-cols-3 gap-3 mb-12 items-end">
-              <PodiumItem rank={2} name={leaderboard[1]?.name} count={leaderboard[1]?.validReferralCount} prize="$500" h="h-32" />
-              <PodiumItem rank={1} name={leaderboard[0]?.name} count={leaderboard[0]?.validReferralCount} prize="$700" h="h-48" first />
-              <PodiumItem rank={3} name={leaderboard[2]?.name} count={leaderboard[2]?.validReferralCount} prize="$300" h="h-28" />
-           </div>
-
-           <div className="bg-white rounded-[2.5rem] border border-white overflow-hidden shadow-2xl shadow-slate-200">
-              {leaderboard.slice(3, 6).map((l, i) => (
-                 <div key={l.id} className="flex items-center justify-between p-6 border-b border-slate-50 last:border-0">
-                    <div className="flex items-center gap-5">
-                       <span className="text-slate-300 font-black text-xl w-6 text-center">{i + 4}</span>
-                       <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center font-black text-slate-400 border border-white">{l.name?.[0]}</div>
-                       <span className="font-bold text-slate-800">{l.name}</span>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* --- LEFT COLUMN: STATS & LINK --- */}
+          <div className="lg:col-span-2 space-y-8">
+            
+            {/* PROGRESS CARD */}
+            <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-xl shadow-slate-200/50 relative overflow-hidden">
+               <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+               
+               <div className="relative z-10">
+                 <div className="flex justify-between items-start mb-6">
+                    <div>
+                      <h2 className="text-4xl font-black text-slate-900 mb-1">{userData.validReferralCount || 0}</h2>
+                      <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Valid Referrals</p>
                     </div>
-                    <div className="flex items-center gap-4">
-                       <span className="text-xs font-black text-slate-400">{l.validReferralCount} Refs</span>
-                       <span className="bg-purple-50 text-purple-600 text-[9px] font-black px-2 py-1 rounded uppercase">Gift Available</span>
+                    <div className="flex items-center gap-2 bg-orange-50 text-orange-600 px-3 py-1.5 rounded-lg border border-orange-100">
+                      <Flame size={16} className="fill-orange-500" />
+                      <span className="text-xs font-bold">{userData.streakCount || 0} Day Streak</span>
                     </div>
                  </div>
-              ))}
-              <div className="p-5 text-center bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">View Full Leaderboard</div>
-           </div>
-        </div>
 
-        {/* --- MY REFERRALS LIST --- */}
-        <div className="pt-10">
-           <h3 className="text-xl font-black text-slate-900 mb-6 px-2">Manage Referrals</h3>
-           <div className="flex p-1.5 bg-white border border-white rounded-[2rem] shadow-xl shadow-slate-200 mb-6">
-              {['valid', 'pending', 'rejected'].map((t: any) => (
-                 <button key={t} onClick={() => setActiveTab(t)} className={`flex-1 py-3.5 text-[10px] font-black uppercase rounded-[1.5rem] transition-all ${activeTab === t ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400'}`}>
-                    {t}
-                 </button>
-              ))}
-           </div>
-           
-           <div className="space-y-4">
-              {referrals.filter(r => r.status === activeTab).length > 0 ? (
-                referrals.filter(r => r.status === activeTab).map((ref) => (
-                  <div key={ref.id} className="bg-white p-6 rounded-[2.5rem] border border-white flex items-center justify-between shadow-lg shadow-slate-200/50">
-                     <div className="flex items-center gap-5">
-                        <div className={`w-14 h-14 rounded-[1.25rem] flex items-center justify-center ${activeTab === 'valid' ? 'bg-green-500 text-white shadow-xl shadow-green-200' : 'bg-slate-100 text-slate-400'}`}>
-                           {activeTab === 'valid' ? <CheckCircle2 size={24} /> : <Clock size={24} />}
-                        </div>
-                        <div>
-                           <h4 className="font-black text-slate-800 text-lg">{ref.inviteeName || 'GuriUp User'}</h4>
-                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{activeTab === 'valid' ? 'Active Partner' : 'Waiting for 4-day streak'}</p>
-                        </div>
-                     </div>
-                     <span className="text-[10px] font-black text-slate-300 uppercase">{ref.createdAt?.toDate().toLocaleDateString() || 'Recent'}</span>
+                 {/* Progress Bar */}
+                 <div className="mb-2 flex justify-between text-xs font-bold text-slate-500">
+                   <span>Progress to Top 10</span>
+                   <span>{Math.min(((userData.validReferralCount || 0) / 10) * 100, 100).toFixed(0)}%</span>
+                 </div>
+                 <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden mb-6">
+                   <div 
+                     className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full transition-all duration-1000" 
+                     style={{ width: `${Math.min(((userData.validReferralCount || 0) / 10) * 100, 100)}%` }}
+                   />
+                 </div>
+
+                 <div className="flex items-start gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                    <Target className="text-blue-600 shrink-0 mt-0.5" size={20} />
+                    <p className="text-sm text-slate-600 font-medium">
+                      You need <span className="text-slate-900 font-bold">{Math.max(10 - (userData.validReferralCount || 0), 0)} more referrals</span> to enter the leaderboard and unlock the <span className="text-green-600 font-bold">$500 Prize Pool</span>.
+                    </p>
+                 </div>
+               </div>
+            </div>
+
+            {/* LINK GENERATOR */}
+            <div className="bg-[#0F172A] rounded-3xl p-8 text-white relative overflow-hidden shadow-2xl">
+              <div className="relative z-10">
+                <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
+                  <Globe size={20} className="text-blue-400"/> Your Unique Invite Link
+                </h3>
+
+                <div className="flex flex-col md:flex-row gap-3">
+                  <div className="flex-1 bg-white/10 border border-white/10 rounded-xl px-4 py-4 flex items-center justify-between group hover:bg-white/15 transition-colors">
+                    <span className="font-mono text-sm text-blue-100 truncate pr-4">{fullReferralLink}</span>
+                    <button onClick={handleCopy} className="text-white hover:text-blue-400 transition-colors">
+                      {copied ? <CheckCircle2 size={20} className="text-green-400"/> : <Copy size={20}/>}
+                    </button>
                   </div>
-                ))
-              ) : (
-                <div className="text-center py-16 text-slate-300 text-sm font-bold bg-white rounded-[2.5rem] border border-dashed border-slate-200 uppercase tracking-widest shadow-inner">Empty Status</div>
-              )}
-           </div>
-        </div>
+                  <button onClick={handleCopy} className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-4 rounded-xl transition-all shadow-lg shadow-blue-900/50">
+                    {copied ? 'Copied!' : 'Copy Link'}
+                  </button>
+                </div>
 
+                <div className="mt-8 pt-6 border-t border-white/10 flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Share via</span>
+                  <div className="flex gap-4">
+                     <ShareIcon icon={<Phone size={18} />} />
+                     <ShareIcon icon={<Instagram size={18} />} />
+                     <ShareIcon icon={<Send size={18} />} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* REFERRALS LIST */}
+            <div>
+              <div className="flex items-center justify-between mb-6">
+                 <h3 className="text-xl font-bold text-slate-900">Referral History</h3>
+                 <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm">
+                    <button onClick={() => setActiveTab('valid')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'valid' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-900'}`}>Valid</button>
+                    <button onClick={() => setActiveTab('pending')} className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${activeTab === 'pending' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-900'}`}>Pending</button>
+                 </div>
+              </div>
+
+              <div className="space-y-3">
+                {referrals.filter(r => r.status === activeTab).length > 0 ? (
+                  referrals.filter(r => r.status === activeTab).map((ref) => (
+                    <div key={ref.id} className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center justify-between hover:shadow-md transition-shadow">
+                       <div className="flex items-center gap-4">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${activeTab === 'valid' ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>
+                             {activeTab === 'valid' ? <CheckCircle2 size={18} /> : <Clock size={18} />}
+                          </div>
+                          <div>
+                             <h4 className="font-bold text-slate-900 text-sm">{ref.inviteeName || 'User'}</h4>
+                             <p className="text-xs text-slate-500">{new Date(ref.createdAt?.toDate()).toLocaleDateString()}</p>
+                          </div>
+                       </div>
+                       <span className={`text-xs font-bold px-3 py-1 rounded-full ${activeTab === 'valid' ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'}`}>
+                         {activeTab === 'valid' ? '+$50 Pending' : 'Waiting'}
+                       </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200">
+                    <p className="text-slate-400 text-sm font-medium">No {activeTab} referrals yet.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+          </div>
+
+          {/* --- RIGHT COLUMN: LEADERBOARD --- */}
+          <div className="lg:col-span-1">
+             <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xl shadow-slate-200/50 sticky top-24">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="font-bold text-slate-900">Top Performers</h3>
+                  <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">Live</span>
+                </div>
+
+                <div className="space-y-4 mb-6">
+                   {leaderboard.slice(0, 3).map((l, i) => (
+                      <div key={l.id} className={`flex items-center gap-4 p-3 rounded-2xl ${i === 0 ? 'bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-100' : 'bg-slate-50'}`}>
+                         <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm ${i === 0 ? 'bg-yellow-400 text-white' : 'bg-white text-slate-500 shadow-sm'}`}>
+                            {i + 1}
+                         </div>
+                         <div className="flex-1">
+                            <p className="font-bold text-slate-900 text-sm">{l.name || 'Anonymous'}</p>
+                            <p className="text-xs text-slate-500">{l.validReferralCount} Invites</p>
+                         </div>
+                         {i === 0 && <Trophy size={16} className="text-yellow-500" />}
+                      </div>
+                   ))}
+                </div>
+
+                <div className="border-t border-slate-100 pt-4">
+                   {leaderboard.slice(3, 8).map((l, i) => (
+                      <div key={l.id} className="flex items-center justify-between py-3 px-2 hover:bg-slate-50 rounded-lg transition-colors">
+                         <div className="flex items-center gap-3">
+                            <span className="text-slate-400 font-mono text-xs w-4">{i + 4}</span>
+                            <span className="text-sm font-medium text-slate-700">{l.name}</span>
+                         </div>
+                         <span className="text-xs font-bold text-slate-900">{l.validReferralCount}</span>
+                      </div>
+                   ))}
+                </div>
+             </div>
+          </div>
+
+        </div>
       </div>
     </div>
   );
 }
 
-// --- VISUAL LAYERS ---
+// =========================================================================
+//  COMPONENT: Marketing Page (Not Logged In)
+// =========================================================================
+function MarketingPage() {
+  const router = useRouter();
+
+  return (
+    <div className="bg-white min-h-screen font-sans text-slate-900">
+      
+      {/* HERO */}
+      <section className="relative pt-32 pb-20 px-6 overflow-hidden">
+         <div className="absolute top-0 inset-x-0 h-[60vh] bg-slate-50 -z-10 rounded-b-[4rem]"></div>
+         <div className="max-w-4xl mx-auto text-center">
+            <div className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider mb-8">
+               <Sparkles size={14} /> GuriUp Partner Program
+            </div>
+            <h1 className="text-5xl md:text-7xl font-black tracking-tight leading-[1.1] mb-8">
+              Turn Your Network <br/> Into <span className="text-blue-600">Net Worth.</span>
+            </h1>
+            <p className="text-lg md:text-xl text-slate-500 font-medium max-w-2xl mx-auto mb-10 leading-relaxed">
+              Join the GuriUp referral ecosystem. Earn real cash rewards for every friend who joins and verifies their account. No limits on earnings.
+            </p>
+            <div className="flex flex-col sm:flex-row justify-center gap-4">
+               <button onClick={() => router.push('/login')} className="bg-slate-900 text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/20">
+                 Start Earning Now
+               </button>
+               <button onClick={() => router.push('/about')} className="bg-white text-slate-900 border border-slate-200 px-8 py-4 rounded-full font-bold text-lg hover:bg-slate-50 transition-all">
+                 Read Success Stories
+               </button>
+            </div>
+         </div>
+      </section>
+
+      {/* 3 CORE BENEFITS */}
+      <section className="py-20 px-6 max-w-6xl mx-auto">
+         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <BenefitCard 
+              icon={<Wallet className="text-green-600" size={32} />}
+              title="Passive Income"
+              desc="Earn $50 for every 10 valid referrals. Top performers earn monthly bonuses up to $700."
+            />
+            <BenefitCard 
+              icon={<Users className="text-purple-600" size={32} />}
+              title="Grow Your Network"
+              desc="Connect with other top agents and property enthusiasts in our exclusive community."
+            />
+            <BenefitCard 
+              icon={<Gift className="text-pink-600" size={32} />}
+              title="Exclusive Rewards"
+              desc="Unlock pro features, badges, and early access to new property listings."
+            />
+         </div>
+      </section>
+
+      {/* HOW IT WORKS */}
+      <section className="py-20 bg-slate-900 text-white rounded-[3rem] mx-4 mb-10 relative overflow-hidden">
+         <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600 opacity-20 blur-[100px]"></div>
+         <div className="max-w-4xl mx-auto px-6 relative z-10">
+            <h2 className="text-3xl md:text-5xl font-black text-center mb-16">How It Works</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+               <Step number="01" title="Get Your Link" desc="Sign up and generate your unique referral tracking link instantly." />
+               <Step number="02" title="Invite Friends" desc="Share your link. Friends must verify phone & stay active for 4 days." />
+               <Step number="03" title="Get Paid" desc="Track valid referrals on your dashboard and cash out directly." />
+            </div>
+            <div className="text-center mt-16">
+               <button onClick={() => router.push('/login')} className="bg-blue-600 hover:bg-blue-500 text-white px-10 py-5 rounded-2xl font-bold text-xl shadow-lg shadow-blue-600/40 transition-all">
+                 Create Free Account
+               </button>
+            </div>
+         </div>
+      </section>
+    </div>
+  )
+}
+
+// =========================================================================
+//  COMPONENT: Guide/Onboarding (Logged In, New User)
+// =========================================================================
+function GuideScreen({ onGenerate, onHow }: any) {
+  return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+      <div className="bg-white max-w-md w-full rounded-[2.5rem] p-10 shadow-2xl shadow-slate-200/50 text-center relative overflow-hidden">
+        
+        <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 to-purple-500"></div>
+
+        <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-inner">
+          <Sparkles size={40} />
+        </div>
+
+        <h1 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">Welcome to <br/> Partner Program</h1>
+        <p className="text-slate-500 font-medium mb-10 leading-relaxed">
+          You are one step away from earning rewards. Generate your unique ID to start tracking your invites.
+        </p>
+
+        <div className="space-y-4">
+          <button onClick={onGenerate} className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10 flex items-center justify-center gap-2 group">
+             Activate My Account <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform"/>
+          </button>
+          <button onClick={onHow} className="text-slate-400 font-bold text-sm hover:text-slate-600 transition-colors">
+             Read Terms & Conditions
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =========================================================================
+//  COMPONENT: Rules Overlay
+// =========================================================================
+function RulesScreen({ onClose }: any) {
+  return (
+    <div className="fixed inset-0 bg-white z-50 overflow-y-auto">
+      <div className="max-w-2xl mx-auto px-6 py-20">
+        <button onClick={onClose} className="flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold mb-12 transition-colors">
+          <ArrowLeft size={20} /> Back to Dashboard
+        </button>
+
+        <h1 className="text-4xl md:text-5xl font-black text-slate-900 mb-8">Fair Play Rules</h1>
+        <p className="text-xl text-slate-500 font-medium mb-16">To ensure the integrity of the GuriUp ecosystem, we strictly enforce the following verification rules for all referrals.</p>
+
+        <div className="space-y-12">
+           <RuleItem 
+             icon={<ShieldCheck className="text-green-600" size={28}/>}
+             title="SMS Verification"
+             desc="Every invited user must verify their phone number via OTP. Unverified accounts do not count towards your score."
+           />
+           <RuleItem 
+             icon={<Flame className="text-orange-600" size={28}/>}
+             title="4-Day Activity Streak"
+             desc="Referrals remain 'Pending' until the new user opens the app for 4 separate days within their first week."
+           />
+           <RuleItem 
+             icon={<Lock className="text-red-600" size={28}/>}
+             title="No Self-Referrals"
+             desc="Creating multiple accounts on the same device or IP address will result in an immediate ban from the partner program."
+           />
+        </div>
+
+        <button onClick={onClose} className="mt-16 w-full bg-slate-100 text-slate-900 font-bold py-5 rounded-2xl hover:bg-slate-200 transition-colors">
+          I Understand
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// --- HELPER COMPONENTS ---
 
 function LoadingScreen() {
   return (
-    <div className="h-screen flex items-center justify-center bg-slate-900">
-      <div className="flex flex-col items-center gap-6">
-        <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin shadow-2xl shadow-blue-500/50"></div>
-        <span className="text-[10px] font-black uppercase tracking-[0.5em] text-blue-400">Loading GuriUp</span>
-      </div>
+    <div className="h-screen flex flex-col items-center justify-center bg-white">
+      <div className="w-12 h-12 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
+      <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">Loading Dashboard</p>
     </div>
   );
 }
 
-function AuthScreen() {
-  return (
-    <div className="h-screen flex flex-col items-center justify-center p-8 bg-slate-50 text-center">
-      <div className="w-24 h-24 bg-white rounded-[2.5rem] flex items-center justify-center mb-10 text-slate-200 shadow-2xl border border-white"><Lock size={40} /></div>
-      <h1 className="text-4xl font-black mb-4 tracking-tighter">Pro Access Only</h1>
-      <p className="text-slate-400 font-medium mb-12 max-w-xs leading-relaxed">Sign in to your GuriUp account to access your referral dashboard and rewards.</p>
-      <button className="bg-slate-900 text-white px-12 py-5 rounded-[2rem] font-black shadow-2xl shadow-slate-900/20 active:scale-95 transition-all">Go to Login</button>
-    </div>
-  );
-}
+const ShareIcon = ({ icon }: any) => (
+  <button className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white hover:text-slate-900 transition-all">
+    {icon}
+  </button>
+);
 
-function GuideScreen({ onGenerate, onHow }: any) {
-  return (
-    <div className="min-h-screen bg-white pt-28 pb-12 px-8 flex flex-col items-center text-center">
-      <div className="w-24 h-24 bg-blue-600 text-white rounded-[2.5rem] flex items-center justify-center mb-12 shadow-[0_20px_50px_rgba(37,99,235,0.4)] animate-bounce"><Gift size={48}/></div>
-      <h1 className="text-6xl md:text-8xl font-black tracking-tighter leading-[0.85] mb-8">Win <br/><span className="text-blue-600">Free Cash.</span></h1>
-      <p className="text-slate-400 font-black text-[10px] uppercase tracking-[0.4em] mb-16">The GuriUp Partner Program</p>
-      
-      <div className="grid gap-8 max-w-sm w-full mb-20 text-left">
-         <div className="flex gap-5 items-center">
-            <div className="w-16 h-16 bg-slate-50 rounded-[1.5rem] flex items-center justify-center border border-slate-100"><Zap className="text-orange-500" /></div>
-            <div><h4 className="font-black text-lg">Unique Link</h4><p className="text-xs font-bold text-slate-400">Generate your tracking code.</p></div>
-         </div>
-         <div className="flex gap-5 items-center">
-            <div className="w-16 h-16 bg-slate-50 rounded-[1.5rem] flex items-center justify-center border border-slate-100"><Smartphone className="text-blue-600" /></div>
-            <div><h4 className="font-black text-lg">Invite Friends</h4><p className="text-xs font-bold text-slate-400">Share via WhatsApp or Instagram.</p></div>
-         </div>
-         <div className="flex gap-5 items-center">
-            <div className="w-16 h-16 bg-slate-50 rounded-[1.5rem] flex items-center justify-center border border-slate-100"><Trophy className="text-yellow-500" /></div>
-            <div><h4 className="font-black text-lg">Claim Prizes</h4><p className="text-xs font-bold text-slate-400">Win cash for valid referrals.</p></div>
-         </div>
-      </div>
-
-      <div className="w-full max-w-sm space-y-6">
-         <button onClick={onGenerate} className="w-full bg-slate-900 text-white py-7 rounded-[2.5rem] font-black text-xl shadow-2xl hover:bg-blue-600 transition-all active:scale-95">Generate My Code</button>
-         <button onClick={onHow} className="text-slate-400 font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:text-slate-900"><Info size={16}/> View System Rules</button>
-      </div>
-    </div>
-  );
-}
-
-function RulesScreen({ onClose }: any) {
-  return (
-    <div className="min-h-screen bg-white pt-24 pb-12 px-8 overflow-y-auto">
-      <div className="max-w-xl mx-auto">
-        <button onClick={onClose} className="flex items-center gap-2 text-slate-400 font-black text-[10px] uppercase tracking-widest mb-16 hover:text-slate-900"><ArrowLeft size={16}/> Dashboard</button>
-        <h1 className="text-5xl font-black mb-6 tracking-tighter">The System.</h1>
-        <p className="text-slate-500 font-medium mb-16 leading-relaxed text-lg">GuriUp is a trusted ecosystem. To keep it fair, our rewards are only for valid, real activity.</p>
-        
-        <div className="space-y-16">
-           <div className="flex gap-8">
-              <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-[2rem] flex items-center justify-center flex-shrink-0 border border-blue-100"><ShieldCheck size={28}/></div>
-              <div><h4 className="font-black text-xl mb-2">Phone Verification</h4><p className="text-slate-500 font-medium leading-relaxed">Every person you invite must verify their account via SMS to prevent bots.</p></div>
-           </div>
-           <div className="flex gap-8">
-              <div className="w-16 h-16 bg-orange-50 text-orange-600 rounded-[2rem] flex items-center justify-center flex-shrink-0 border border-orange-100"><Flame size={28}/></div>
-              <div><h4 className="font-black text-xl mb-2">4-Day Active Streak</h4><p className="text-slate-500 font-medium leading-relaxed">A referral is only 'Valid' if the user opens and uses the app for 4 days within their first week.</p></div>
-           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// --- ATOMS ---
-
-const ShareBtn = ({ color, icon, label }: any) => (
-  <div className="flex flex-col items-center gap-3 group cursor-pointer">
-    <div className={`w-14 h-14 ${color} rounded-[1.5rem] flex items-center justify-center text-white transition-all group-hover:scale-110 active:scale-90 shadow-2xl`}>{icon}</div>
-    <span className="text-[9px] font-black text-slate-500 group-hover:text-white transition-colors">{label}</span>
+const BenefitCard = ({ icon, title, desc }: any) => (
+  <div className="bg-slate-50 p-8 rounded-[2rem] hover:bg-white hover:shadow-xl transition-all border border-slate-100 group">
+     <div className="mb-6 bg-white w-16 h-16 rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">{icon}</div>
+     <h3 className="text-xl font-bold text-slate-900 mb-3">{title}</h3>
+     <p className="text-slate-500 leading-relaxed font-medium">{desc}</p>
   </div>
 );
 
-const PodiumItem = ({ rank, name, count, prize, h, first = false }: any) => (
-  <div className={`flex flex-col items-center relative ${first ? 'z-10' : ''}`}>
-    <div className={`text-[11px] font-black uppercase mb-3 ${first ? 'text-blue-600 animate-pulse' : 'text-slate-300'}`}>#{rank}</div>
-    <div className={`w-full bg-white rounded-t-[2.5rem] border border-b-0 border-slate-100 flex flex-col items-center justify-center gap-3 shadow-2xl shadow-slate-200 ${h} ${first ? 'border-blue-100 scale-105' : ''}`}>
-       <div className={`rounded-full flex items-center justify-center font-black ${first ? 'w-16 h-16 bg-blue-600 text-white shadow-xl shadow-blue-500/30 text-xl' : 'w-10 h-10 bg-slate-50 text-slate-400 text-sm'}`}>{name?.[0] || '?'}</div>
-       <div className={`font-black truncate w-24 text-center ${first ? 'text-slate-900 text-base' : 'text-slate-500 text-[10px]'}`}>{name || '...'}</div>
+const Step = ({ number, title, desc }: any) => (
+  <div className="text-center md:text-left">
+    <div className="text-5xl font-black text-blue-600/30 mb-4">{number}</div>
+    <h3 className="text-2xl font-bold mb-3">{title}</h3>
+    <p className="text-slate-400 font-medium leading-relaxed">{desc}</p>
+  </div>
+);
+
+const RuleItem = ({ icon, title, desc }: any) => (
+  <div className="flex gap-6">
+    <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center shrink-0 border border-slate-100">
+      {icon}
     </div>
-    <div className={`w-full py-3 flex flex-col items-center ${first ? 'bg-blue-600 text-white rounded-b-[2rem] shadow-xl shadow-blue-600/20 scale-105' : 'bg-slate-100 text-slate-400 rounded-b-[1.5rem]'}`}>
-       <span className="text-[11px] font-black tracking-tighter">{count || 0} Refs</span>
-       <span className="text-[9px] font-black opacity-60 uppercase tracking-tighter">{prize}</span>
+    <div>
+      <h3 className="text-xl font-bold text-slate-900 mb-2">{title}</h3>
+      <p className="text-slate-500 leading-relaxed">{desc}</p>
     </div>
   </div>
 );
