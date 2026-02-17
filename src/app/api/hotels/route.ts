@@ -3,10 +3,6 @@ import { db } from '../../lib/firebase';
 import { 
   collection, 
   getDocs, 
-  query, 
-  where, 
-  limit, 
-  orderBy, 
   doc, 
   getDoc,
   DocumentSnapshot
@@ -14,6 +10,133 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+// ==================================================================
+// 1. SHARED LOGIC (RELAXED FILTERING)
+// ==================================================================
+export async function getHotelsDataInternal(options: {
+  limitCount?: number;
+  isFeatured?: boolean; 
+  city?: string | null;
+  id?: string | null;
+}) {
+  const { limitCount = 50, isFeatured = false, city, id } = options;
+
+  try {
+    // --- SCENARIO A: SINGLE ID FETCH ---
+    if (id) {
+      const docRef = doc(db, 'hotels', id);
+      const docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) return null; 
+      
+      // Only block if explicitly archived/banned
+      const data = docSnap.data();
+      if (data?.isArchived === true || data?.status === 'banned') return null;
+
+      return await fetchAdminAndMerge(docSnap);
+    }
+
+    // --- SCENARIO B: LIST FETCH ---
+    const collectionRef = collection(db, 'hotels');
+    const snapshot = await getDocs(collectionRef);
+    const rawDocs = snapshot.docs;
+
+    // Filter in Memory
+    let filteredDocs = rawDocs.filter(doc => {
+      const data = doc.data();
+      
+      // 1. ARCHIVE/BAN CHECK (The Blocklist)
+      // We show everything EXCEPT banned or archived items.
+      // This allows 'draft', 'pending', or missing status to still appear.
+      if (data.isArchived === true) return false;
+      if (data.status === 'banned') return false;
+      if (data.status === 'archived') return false;
+
+      // 2. CITY CHECK
+      if (city && city !== 'All Cities') {
+        const docCity = data.location?.city || data.city;
+        if (docCity !== city) return false;
+      }
+
+      // 3. RECOMMENDED CHECK (STRICT PRO/PREMIUM)
+      if (isFeatured) {
+        // Must be explicitly Pro or Premium
+        const tier = (data.planTier || data.planTierAtUpload || 'free').toLowerCase();
+        if (tier !== 'pro' && tier !== 'premium') return false;
+      }
+
+      return true;
+    });
+
+    // Sort: Verified/Pro First, then Newest
+    filteredDocs.sort((a, b) => {
+      const tierA = (a.data().planTier || 'free').toLowerCase();
+      const tierB = (b.data().planTier || 'free').toLowerCase();
+      
+      const isAPro = tierA === 'pro' || tierA === 'premium';
+      const isBPro = tierB === 'pro' || tierB === 'premium';
+
+      if (isAPro && !isBPro) return -1;
+      if (!isAPro && isBPro) return 1;
+
+      // Date Sort (Handle missing dates safely)
+      const dateA = a.data().createdAt?.toDate ? a.data().createdAt.toDate().getTime() : 0;
+      const dateB = b.data().createdAt?.toDate ? b.data().createdAt.toDate().getTime() : 0;
+      return dateB - dateA;
+    });
+
+    // Apply Limit
+    if (limitCount && filteredDocs.length > limitCount) {
+      filteredDocs = filteredDocs.slice(0, limitCount);
+    }
+
+    // Batch Fetch Admin Data
+    const adminIds = [...new Set(filteredDocs.map(d => d.data().hotelAdminId).filter(Boolean))];
+    const adminMap = await fetchAdminsBatch(adminIds);
+
+    return filteredDocs.map(hotelDoc => {
+      const liveAdmin = adminMap[hotelDoc.data().hotelAdminId] || {};
+      return mergeAndNormalizeHotel(hotelDoc, liveAdmin);
+    });
+
+  } catch (error) {
+    console.error('Internal Data Error:', error);
+    return []; 
+  }
+}
+
+// --- HELPER: Batch Fetch Admins ---
+async function fetchAdminsBatch(adminIds: string[]) {
+  const adminMap: Record<string, any> = {};
+  if (adminIds.length === 0) return adminMap;
+
+  await Promise.all(adminIds.map(async (adminId) => {
+    let snap = await getDoc(doc(db, 'hotels', adminId));
+    if (!snap.exists()) {
+      snap = await getDoc(doc(db, 'users', adminId));
+    }
+    if (snap.exists()) {
+      adminMap[adminId] = snap.data();
+    }
+  }));
+  return adminMap;
+}
+
+// --- HELPER: Single Merge ---
+async function fetchAdminAndMerge(hotelDoc: DocumentSnapshot) {
+  const hData = hotelDoc.data()!;
+  const adminId = hData.hotelAdminId;
+  let adminData = {};
+
+  if (adminId) {
+    const adminMap = await fetchAdminsBatch([adminId]);
+    adminData = adminMap[adminId] || {};
+  }
+  return mergeAndNormalizeHotel(hotelDoc, adminData);
+}
+
+// ==================================================================
+// 2. ROUTE HANDLER
+// ==================================================================
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
@@ -22,98 +145,18 @@ export async function GET(request: Request) {
   const city = searchParams.get('city');
 
   try {
-    // =========================================================
-    // 1. SINGLE HOTEL FETCH (WITH PRIVACY GUARD)
-    // =========================================================
-    if (id) {
-      const docRef = doc(db, 'hotels', id);
-      const docSnap = await getDoc(docRef);
-      
-      if (!docSnap.exists()) {
-        return NextResponse.json({ error: 'Hotel not found' }, { status: 404 });
-      }
-
-      const hData = docSnap.data();
-
-      // FIX: Block direct access to Archived or Inactive hotels
-      const isPublic = hData?.isArchived === false && hData?.status === 'available';
-      if (!isPublic) {
-         return NextResponse.json({ error: 'This hotel is currently unavailable' }, { status: 403 });
-      }
-
-      const adminId = hData.hotelAdminId;
-      let adminData = {};
-
-      if (adminId) {
-        // Business-First priority
-        const businessSnap = await getDoc(doc(db, 'hotels', adminId));
-        if (businessSnap.exists()) {
-          adminData = businessSnap.data();
-        } else {
-          const userSnap = await getDoc(doc(db, 'users', adminId));
-          if (userSnap.exists()) adminData = userSnap.data();
-        }
-      }
-
-      return NextResponse.json(mergeAndNormalizeHotel(docSnap, adminData));
-    }
-
-    // =========================================================
-    // 2. HOTEL LIST FETCH (NOW WITH FULL PRIVACY FILTERS)
-    // =========================================================
-    const collectionRef = collection(db, 'hotels');
-    
-    // FIX: Archive & Status filters added to match mobile strictness
-    const constraints: any[] = [
-      where('isArchived', '==', false),
-      where('status', '==', 'available'),
-      orderBy('createdAt', 'desc'), 
-      limit(limitCount)
-    ];
-
-    // Auto-Featured based on Paid Tiers
-    if (isFeatured) {
-      constraints.push(where('planTier', 'in', ['pro', 'premium']));
-    }
-    
-    if (city && city !== 'All Cities') {
-      constraints.push(where('location.city', '==', city));
-    }
-
-    const q = query(collectionRef, ...constraints);
-    const snapshot = await getDocs(q);
-    const rawHotels = snapshot.docs;
-
-    const adminIds = [...new Set(rawHotels.map(doc => doc.data().hotelAdminId).filter(Boolean))];
-    
-    // Batch fetch admin/business data
-    const adminSnapshots = await Promise.all(adminIds.map(async (adminId) => {
-      const bSnap = await getDoc(doc(db, 'hotels', adminId));
-      if (bSnap.exists()) return bSnap;
-      return await getDoc(doc(db, 'users', adminId));
-    }));
-
-    const adminMap: Record<string, any> = {};
-    adminSnapshots.forEach(snap => {
-      if (snap.exists()) adminMap[snap.id] = snap.data();
-    });
-
-    const mergedData = rawHotels.map(hotelDoc => {
-      const liveAdmin = adminMap[hotelDoc.data().hotelAdminId] || {};
-      return mergeAndNormalizeHotel(hotelDoc, liveAdmin);
-    });
-
-    return NextResponse.json(mergedData);
-
-  } catch (error) {
-    console.error('Hotels API Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    const data = await getHotelsDataInternal({ id, limitCount, isFeatured, city });
+    if (id && !data) return NextResponse.json({ error: 'Hotel not found' }, { status: 404 });
+    return NextResponse.json(data);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Server Error' }, { status: 500 });
   }
 }
 
+// --- DATA NORMALIZATION ---
 function mergeAndNormalizeHotel(hotelDoc: DocumentSnapshot, liveAdminData: any) {
   const h = hotelDoc.data()!;
-
+  
   let amenitiesList: string[] = [];
   const rawAm = h.amenities;
   if (Array.isArray(rawAm)) {
@@ -127,14 +170,16 @@ function mergeAndNormalizeHotel(hotelDoc: DocumentSnapshot, liveAdminData: any) 
     if (rawAm.hasAC) amenitiesList.push('Air Conditioning');
   }
 
-  // Verification Alignment
-  const plan = liveAdminData.planTier || h.planTier || 'free';
+  // Verification Logic
+  const plan = (h.planTier || liveAdminData.planTier || h.planTierAtUpload || 'free').toLowerCase();
   const isVerified = plan === 'pro' || plan === 'premium';
 
+  // Price Logic
   const price = Number(h.pricePerNight) || 0;
   const discount = Number(h.discountPrice) || 0;
   const hasDiscount = h.hasDiscount && discount > 0;
 
+  // Date Logic
   let createdAt = new Date().toISOString();
   if (h.createdAt?.toDate) {
     createdAt = h.createdAt.toDate().toISOString();
@@ -143,9 +188,8 @@ function mergeAndNormalizeHotel(hotelDoc: DocumentSnapshot, liveAdminData: any) 
   return {
     id: hotelDoc.id,
     name: h.name || 'Untitled Hotel',
-    pricePerNight: hasDiscount ? discount : price,
-    originalPrice: price,
-    hasDiscount: hasDiscount,
+    pricePerNight: Number(h.pricePerNight) || 0,
+    hasDiscount,
     displayPrice: hasDiscount ? discount : price,
     images: h.images?.length > 0 ? h.images : ['https://placehold.co/600x400?text=No+Image'],
     rating: Number(h.rating) || 0,
@@ -156,8 +200,7 @@ function mergeAndNormalizeHotel(hotelDoc: DocumentSnapshot, liveAdminData: any) 
     amenities: amenitiesList,
     planTier: plan,
     isPro: isVerified,
-    featured: isVerified || h.featured || false,
-    // Locked Features
+    featured: isVerified,
     contactPhone: isVerified ? (liveAdminData.whatsappNumber || liveAdminData.phone || liveAdminData.phoneNumber || h.phone || '') : null,
     createdAt: createdAt,
   };

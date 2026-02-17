@@ -10,7 +10,8 @@ import {
   query, 
   orderBy, 
   limit, 
-  where 
+  where,
+  writeBatch
 } from 'firebase/firestore';
 
 export const dynamic = 'force-dynamic';
@@ -27,16 +28,16 @@ async function checkSuperAdmin(uid: string | null) {
   
   const userData = userSnap.data();
   // STRICT CHECK: Only 'sadmin' (Super Admin) allowed
-  return userData.role === 'sadmin'; 
+  return userData?.role === 'sadmin'; 
 }
 
 // =======================================================================
-// 2. GET: FETCH ALL DATA (DASHBOARD VIEW)
+// 2. GET: FETCH ALL DATA (FIXED FOR AGENTS)
 // =======================================================================
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const adminUid = request.headers.get('x-admin-uid'); // Passed from frontend auth
+    const adminUid = request.headers.get('x-admin-uid');
     const resource = searchParams.get('resource'); // 'users', 'agents', 'hotels', 'properties'
     const filter = searchParams.get('filter'); // 'banned', 'pending', 'pro'
 
@@ -46,20 +47,31 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized: Super Admin Access Required' }, { status: 403 });
     }
 
-    let q;
     let collectionName = '';
+    let dateField = 'createdAt'; // Default sort field
 
-    // 2. Select Collection
+    // 2. Select Collection & Sort Field
     switch (resource) {
-      case 'users': collectionName = 'users'; break;
-      case 'agents': collectionName = 'agents'; break;
-      case 'hotels': collectionName = 'hotels'; break;
-      case 'properties': collectionName = 'property'; break;
-      default: return NextResponse.json({ error: 'Invalid Resource' }, { status: 400 });
+      case 'users': 
+        collectionName = 'users'; 
+        break;
+      case 'agents': 
+        collectionName = 'agents'; 
+        dateField = 'joinDate'; // <--- FIX: Agents use 'joinDate', not 'createdAt'
+        break;
+      case 'hotels': 
+        collectionName = 'hotels'; 
+        break;
+      case 'properties': 
+        collectionName = 'property'; 
+        break;
+      default: 
+        return NextResponse.json({ error: 'Invalid Resource' }, { status: 400 });
     }
 
     // 3. Build Query
     const colRef = collection(db, collectionName);
+    let q;
     
     // Apply Dashboard Filters
     if (filter === 'banned') {
@@ -69,22 +81,42 @@ export async function GET(request: Request) {
     } else if (filter === 'archived') {
        q = query(colRef, where('isArchived', '==', true), limit(100));
     } else {
-       // Default: Recent items
-       q = query(colRef, orderBy('createdAt', 'desc'), limit(50));
+       // Default: Recent items (using the correct dateField)
+       q = query(colRef, orderBy(dateField, 'desc'), limit(50));
     }
 
     const snapshot = await getDocs(q);
-    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    
+    // 4. Map Data (Normalize fields for Frontend)
+    const data = snapshot.docs.map(doc => {
+        const d = doc.data();
+        return { 
+            id: doc.id, 
+            ...d,
+            // Fallback for Name (Agents use agencyName or name)
+            name: d.agencyName || d.name || 'Unnamed Agent', 
+            // Fallback for Email
+            email: d.email || '',
+            // Fallback for Plan
+            planTier: d.planTier || 'free',
+            // Normalize Date so Frontend table doesn't break
+            createdAt: d[dateField] || new Date().toISOString(), 
+            // Ensure boolean flags exist
+            isVerified: d.isVerified || false,
+            featured: d.featured || false
+        };
+    });
 
     return NextResponse.json({ success: true, count: data.length, data });
 
   } catch (error: any) {
+    console.error("GET Admin Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
 // =======================================================================
-// 3. PATCH: UPDATE STATUS (BAN, VERIFY, PROMOTE, ARCHIVE)
+// 3. PATCH: UPDATE STATUS (2-PLAN LOGIC)
 // =======================================================================
 export async function PATCH(request: Request) {
   try {
@@ -96,23 +128,49 @@ export async function PATCH(request: Request) {
     if (!isSadmin) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
 
     let collectionName = '';
-    // Map resource type to DB collection
     if (resourceType === 'user') collectionName = 'users';
     if (resourceType === 'agent') collectionName = 'agents';
     if (resourceType === 'hotel') collectionName = 'hotels';
     if (resourceType === 'property') collectionName = 'property';
 
     const docRef = doc(db, collectionName, resourceId);
-    let updateData = {};
+    let updateData: any = {};
 
     // 2. Switch Action Logic
     switch (action) {
+      case 'promote_plan':
+        const isPro = payload.plan === 'pro';
+        
+        if (isPro) {
+            // === MAKE PRO ===
+            updateData = { 
+                planTier: 'pro',
+                isVerified: true,        
+                featured: true,          
+                isFeatured: true,        
+                verifiedAt: new Date().toISOString(),
+                status: 'active'
+            };
+        } else {
+            // === MAKE FREE ===
+            updateData = { 
+                planTier: 'free',
+                isVerified: false,       
+                featured: false,         
+                isFeatured: false,
+                agentVerified: false
+            };
+        }
+        break;
+
       case 'ban':
-        // BAN USER/AGENT: Disable access, hide profile
         updateData = { 
           status: 'banned', 
           isBanned: true,
-          planTier: 'free' // Strip paid status
+          planTier: 'free',
+          featured: false, 
+          isFeatured: false,
+          isVerified: false
         };
         break;
 
@@ -121,49 +179,26 @@ export async function PATCH(request: Request) {
         break;
 
       case 'verify':
-        // VERIFY AGENT/HOTEL: Give blue tick
         updateData = { 
           isVerified: true, 
-          agentVerified: true, // For properties
+          agentVerified: true, 
           verifiedAt: new Date().toISOString() 
         };
         break;
 
-      case 'promote_plan':
-        // GIVE PRO/PREMIUM: Update plan tier
-        updateData = { 
-          planTier: payload.plan, // 'pro' or 'premium'
-          isVerified: true // Auto-verify paid users
-        };
-        break;
-
       case 'feature':
-        // FEATURE ITEM: Put on homepage
         updateData = { 
-          featured: payload.featured, // true/false
+          featured: payload.featured, 
           isFeatured: payload.featured 
         };
         break;
 
       case 'archive':
-        // SOFT DELETE: Hide from public, keep in DB
-        updateData = { 
-          isArchived: true, 
-          status: 'archived' 
-        };
+        updateData = { isArchived: true, status: 'archived', featured: false };
         break;
 
       case 'restore':
-        // RESTORE FROM ARCHIVE
-        updateData = { 
-          isArchived: false, 
-          status: 'available' 
-        };
-        break;
-
-      case 'set_draft':
-        // SET TO DRAFT (Work in progress)
-        updateData = { status: 'draft' };
+        updateData = { isArchived: false, status: 'available' };
         break;
 
       default:
@@ -173,21 +208,32 @@ export async function PATCH(request: Request) {
     // 3. Execute Update
     await updateDoc(docRef, updateData);
 
-    // 4. SPECIAL CASE: If Banning/Promoting an Agent, sync their properties
-    if (resourceType === 'agent' && (action === 'ban' || action === 'promote_plan')) {
-       // Find all properties by this agent and update their visibility
+    // 4. SYNC AGENT PROPERTIES
+    if (resourceType === 'agent' && (action === 'promote_plan' || action === 'ban')) {
+       const isPro = payload?.plan === 'pro';
+       const isBan = action === 'ban';
+
        const q = query(collection(db, 'property'), where('agentId', '==', resourceId));
        const props = await getDocs(q);
-       const batchUpdates = props.docs.map(p => 
-         updateDoc(doc(db, 'property', p.id), { 
-           agentVerified: action === 'promote_plan',
-           isArchived: action === 'ban' // Hide properties if agent is banned
-         })
-       );
-       await Promise.all(batchUpdates);
+       
+       if (!props.empty) {
+           const batch = writeBatch(db);
+           props.docs.forEach(docSnap => {
+               const propRef = doc(db, 'property', docSnap.id);
+               if (isBan) {
+                   batch.update(propRef, { isArchived: true, agentVerified: false, featured: false });
+               } else {
+                   batch.update(propRef, { 
+                       agentVerified: isPro, 
+                       isArchived: false 
+                   });
+               }
+           });
+           await batch.commit();
+       }
     }
 
-    return NextResponse.json({ success: true, message: `Action ${action} completed on ${resourceId}` });
+    return NextResponse.json({ success: true, message: `Action ${action} completed` });
 
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -195,7 +241,7 @@ export async function PATCH(request: Request) {
 }
 
 // =======================================================================
-// 4. DELETE: HARD DELETE (PERMANENT REMOVAL)
+// 4. DELETE: HARD DELETE
 // =======================================================================
 export async function DELETE(request: Request) {
   try {
@@ -204,13 +250,10 @@ export async function DELETE(request: Request) {
     const resourceId = searchParams.get('id');
     const resourceType = searchParams.get('type');
 
-    // 1. Verify S-Admin
     const isSadmin = await checkSuperAdmin(adminUid);
     if (!isSadmin) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
 
-    if (!resourceId || !resourceType) {
-      return NextResponse.json({ error: 'Missing ID or Type' }, { status: 400 });
-    }
+    if (!resourceId || !resourceType) return NextResponse.json({ error: 'Missing ID' }, { status: 400 });
 
     let collectionName = '';
     if (resourceType === 'user') collectionName = 'users';
@@ -218,7 +261,6 @@ export async function DELETE(request: Request) {
     if (resourceType === 'hotel') collectionName = 'hotels';
     if (resourceType === 'property') collectionName = 'property';
 
-    // 2. Perform Hard Delete
     await deleteDoc(doc(db, collectionName, resourceId));
 
     return NextResponse.json({ success: true, message: 'Permanently deleted' });

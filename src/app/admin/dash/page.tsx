@@ -4,22 +4,24 @@ import React, { useState, useEffect } from 'react';
 import { 
   Users, Building, Home, Briefcase, 
   Search, ShieldCheck, Ban, Trash2, 
-  CheckCircle, XCircle, Loader2, Menu,
-  MoreVertical, Star, TrendingUp
+  Loader2, Star, TrendingUp, CheckCircle
 } from 'lucide-react';
 
-// --- TYPES (Matches your API) ---
+// --- TYPES (Matches your API & Firestore Data) ---
 interface AdminItem {
   id: string;
   name?: string;
-  title?: string; // For properties
+  agencyName?: string; // Specific to Agents
+  title?: string;      // Specific to Properties
   email?: string;
   role?: string;
   status?: string;
-  planTier?: 'free' | 'pro' | 'premium';
+  planTier?: 'free' | 'pro'; // Only 2 plans now
   isVerified?: boolean;
+  agentVerified?: boolean;
   isArchived?: boolean;
   featured?: boolean;
+  isFeatured?: boolean;
   price?: number;
   location?: any;
   createdAt?: string;
@@ -32,15 +34,9 @@ export default function AdminDashboard() {
   const [data, setData] = useState<AdminItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [adminUid, setAdminUid] = useState(''); // In real app, get this from auth context
-
-  // --- MOCK AUTH (Replace with your actual Auth Context) ---
-  useEffect(() => {
-    // SIMULATION: For testing, we assume we are logged in. 
-    // In production, use: const { user } = useAuth(); setAdminUid(user.uid);
-    const storedUid = localStorage.getItem('sadmin_uid');
-    if (storedUid) setAdminUid(storedUid);
-  }, []);
+  
+  // --- AUTH STATE (Hardcoded to your UID as requested) ---
+  const [adminUid, setAdminUid] = useState('Nj57KK3nJvPbnFjGekxQE4uEW3C2'); 
 
   // --- FETCH DATA ---
   const fetchData = async (resource: string) => {
@@ -48,14 +44,14 @@ export default function AdminDashboard() {
     try {
       // Pass the Admin UID in headers for security check
       const res = await fetch(`/api/admin?resource=${resource}`, {
-        headers: { 'x-admin-uid': adminUid || 'TEST_UID' } 
+        headers: { 'x-admin-uid': adminUid } 
       });
       const json = await res.json();
       if (json.success) {
         setData(json.data);
       } else {
         console.error(json.error);
-        alert('Access Denied: You are not a Super Admin');
+        alert(`Error: ${json.error}`);
       }
     } catch (err) {
       console.error('Fetch error:', err);
@@ -70,17 +66,31 @@ export default function AdminDashboard() {
 
   // --- ACTIONS (The "God Mode" Controls) ---
   const handleAction = async (id: string, type: string, action: string, payload: any = {}) => {
-    if (!confirm(`Are you sure you want to ${action} this ${type}?`)) return;
+    // Confirmation for destructive actions
+    if (action === 'ban' || action === 'archive') {
+       if (!confirm(`Are you sure you want to ${action} this ${type}?`)) return;
+    }
 
     try {
       // 1. Optimistic UI Update (Instant Feedback)
       setData(prev => prev.map(item => {
         if (item.id === id) {
-          if (action === 'ban') return { ...item, status: 'banned', planTier: 'free' };
+          // Logic: If PRO -> Verify & Feature. If FREE -> Unverify & Unfeature.
+          if (action === 'promote_plan') {
+             const isPro = payload.plan === 'pro';
+             return { 
+               ...item, 
+               planTier: payload.plan, 
+               isVerified: isPro,
+               agentVerified: isPro,
+               featured: isPro,
+               isFeatured: isPro 
+             };
+          }
+          if (action === 'ban') return { ...item, status: 'banned', planTier: 'free', isVerified: false, featured: false };
+          if (action === 'unban') return { ...item, status: 'active' };
           if (action === 'verify') return { ...item, isVerified: true };
-          if (action === 'promote_plan') return { ...item, planTier: payload.plan, isVerified: true };
           if (action === 'feature') return { ...item, featured: payload.featured };
-          if (action === 'archive') return { ...item, isArchived: true };
         }
         return item;
       }));
@@ -90,7 +100,7 @@ export default function AdminDashboard() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          adminUid: adminUid || 'TEST_UID',
+          adminUid: adminUid,
           resourceId: id,
           resourceType: type,
           action,
@@ -113,7 +123,7 @@ export default function AdminDashboard() {
       setData(prev => prev.filter(item => item.id !== id));
       await fetch(`/api/admin?id=${id}&type=${type}`, {
         method: 'DELETE',
-        headers: { 'x-admin-uid': adminUid || 'TEST_UID' }
+        headers: { 'x-admin-uid': adminUid }
       });
     } catch (err) {
       alert('Delete failed');
@@ -124,9 +134,11 @@ export default function AdminDashboard() {
   // --- FILTERING ---
   const filteredData = data.filter(item => {
     const search = searchTerm.toLowerCase();
+    // Prioritize Agency Name for agents, then Name, then Title
+    const displayTitle = item.agencyName || item.name || item.title || item.email || '';
+    
     return (
-      item.name?.toLowerCase().includes(search) || 
-      item.title?.toLowerCase().includes(search) || 
+      displayTitle.toLowerCase().includes(search) || 
       item.email?.toLowerCase().includes(search) ||
       item.id.toLowerCase().includes(search)
     );
@@ -154,10 +166,9 @@ export default function AdminDashboard() {
                  <p className="text-sm font-bold truncate">Super Admin</p>
                  <input 
                    type="text" 
-                   placeholder="Enter S-Admin UID" 
                    className="text-[10px] bg-transparent text-slate-400 outline-none w-full"
                    value={adminUid}
-                   onChange={(e) => { setAdminUid(e.target.value); localStorage.setItem('sadmin_uid', e.target.value); }}
+                   onChange={(e) => setAdminUid(e.target.value)}
                  />
               </div>
            </div>
@@ -254,10 +265,19 @@ const MobileNavLink = ({ icon, label, active, onClick }: any) => (
 
 const DataCard = ({ item, type, onAction, onDelete }: any) => {
   const isBanned = item.status === 'banned';
+  // Check different verified fields (agentVerified is for properties)
   const isVerified = item.isVerified || item.agentVerified;
-  const isPro = item.planTier === 'pro' || item.planTier === 'premium';
-  const title = item.name || item.title || item.email || 'Untitled';
-  const subtitle = type === 'properties' ? (item.location?.city || 'No Location') : (item.email || 'No Email');
+  const isPro = item.planTier === 'pro';
+  // Check different featured fields
+  const isFeatured = item.featured || item.isFeatured;
+
+  // TITLE LOGIC: Prefer Agency Name, then Name, then Title (Property), then Email
+  const title = item.agencyName || item.name || item.title || item.email || 'Untitled';
+  
+  const subtitle = type === 'properties' 
+    ? (item.location?.city || 'No Location') 
+    : (item.email || 'No Email');
+    
   const image = item.images?.[0] || item.photoUrl || item.logoUrl || `https://ui-avatars.com/api/?name=${title}&background=random`;
 
   return (
@@ -271,8 +291,8 @@ const DataCard = ({ item, type, onAction, onDelete }: any) => {
           <p className="text-xs text-slate-500 truncate">{subtitle}</p>
           <div className="flex flex-wrap gap-2 mt-2">
             {isVerified && <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-black uppercase rounded flex items-center gap-1"><ShieldCheck size={10}/> Verified</span>}
-            {isPro && <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-[10px] font-black uppercase rounded flex items-center gap-1"><Star size={10}/> {item.planTier}</span>}
-            {item.featured && <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-[10px] font-black uppercase rounded flex items-center gap-1"><TrendingUp size={10}/> Featured</span>}
+            {isPro && <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-[10px] font-black uppercase rounded flex items-center gap-1"><Star size={10}/> Pro</span>}
+            {isFeatured && <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-[10px] font-black uppercase rounded flex items-center gap-1"><TrendingUp size={10}/> Featured</span>}
             {isBanned && <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-black uppercase rounded flex items-center gap-1"><Ban size={10}/> Banned</span>}
           </div>
         </div>
@@ -293,19 +313,37 @@ const DataCard = ({ item, type, onAction, onDelete }: any) => {
            <button onClick={() => onAction(item.id, type === 'properties' ? 'property' : type.slice(0, -1), 'ban')} className="bg-red-50 text-red-600 py-2 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors">Ban User</button>
         )}
 
-        {/* VERIFY / PROMOTE */}
+        {/* VERIFY / PROMOTE (ONLY FOR AGENTS & HOTELS) */}
         {(type === 'agents' || type === 'hotels') && (
             <div className="relative group/menu">
-              <button className="w-full bg-slate-100 text-slate-700 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 transition-colors">Manage Plan</button>
+              <button className={`w-full py-2 rounded-lg text-xs font-bold transition-colors ${isPro ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+                {isPro ? 'Plan: Pro' : 'Plan: Free'}
+              </button>
+              
+              {/* DROPDOWN MENU */}
               <div className="absolute bottom-full left-0 w-full mb-2 bg-white rounded-xl shadow-xl border border-slate-100 p-1 hidden group-hover/menu:block z-10 animate-in zoom-in-95">
-                  <button onClick={() => onAction(item.id, type.slice(0, -1), 'promote_plan', { plan: 'free' })} className="w-full text-left px-3 py-2 hover:bg-slate-50 rounded-lg text-xs font-bold text-slate-600">Downgrade to Free</button>
-                  <button onClick={() => onAction(item.id, type.slice(0, -1), 'promote_plan', { plan: 'pro' })} className="w-full text-left px-3 py-2 hover:bg-purple-50 rounded-lg text-xs font-bold text-purple-600">Upgrade to Pro</button>
-                  <button onClick={() => onAction(item.id, type.slice(0, -1), 'promote_plan', { plan: 'premium' })} className="w-full text-left px-3 py-2 hover:bg-yellow-50 rounded-lg text-xs font-bold text-yellow-600">Upgrade to Premium</button>
+                  <div className="px-3 py-1 text-[9px] font-black text-slate-400 uppercase tracking-wider">Change Plan</div>
+                  
+                  {/* FREE OPTION */}
+                  <button 
+                    onClick={() => onAction(item.id, type.slice(0, -1), 'promote_plan', { plan: 'free' })} 
+                    className="w-full text-left px-3 py-2 hover:bg-slate-50 rounded-lg text-xs font-bold text-slate-600 flex items-center gap-2"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-slate-400"></div> Free (Reset)
+                  </button>
+                  
+                  {/* PRO OPTION */}
+                  <button 
+                    onClick={() => onAction(item.id, type.slice(0, -1), 'promote_plan', { plan: 'pro' })} 
+                    className="w-full text-left px-3 py-2 hover:bg-purple-50 rounded-lg text-xs font-bold text-purple-600 flex items-center gap-2"
+                  >
+                    <div className="w-2 h-2 rounded-full bg-purple-500"></div> Upgrade to Pro
+                  </button>
               </div>
             </div>
         )}
 
-        {/* FEATURE PROPERTY */}
+        {/* FEATURE PROPERTY (Manual control for properties) */}
         {type === 'properties' && (
            <button 
              onClick={() => onAction(item.id, 'property', 'feature', { featured: !item.featured })} 
