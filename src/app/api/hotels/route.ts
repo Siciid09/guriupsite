@@ -22,6 +22,9 @@ export async function GET(request: Request) {
   const city = searchParams.get('city');
 
   try {
+    // =========================================================
+    // 1. SINGLE HOTEL FETCH (WITH PRIVACY GUARD)
+    // =========================================================
     if (id) {
       const docRef = doc(db, 'hotels', id);
       const docSnap = await getDoc(docRef);
@@ -30,30 +33,65 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Hotel not found' }, { status: 404 });
       }
 
-      const hotelData = docSnap.data();
-      const adminId = hotelData.hotelAdminId;
+      const hData = docSnap.data();
+
+      // FIX: Block direct access to Archived or Inactive hotels
+      const isPublic = hData?.isArchived === false && hData?.status === 'available';
+      if (!isPublic) {
+         return NextResponse.json({ error: 'This hotel is currently unavailable' }, { status: 403 });
+      }
+
+      const adminId = hData.hotelAdminId;
       let adminData = {};
 
       if (adminId) {
-        const adminSnap = await getDoc(doc(db, 'users', adminId));
-        if (adminSnap.exists()) adminData = adminSnap.data();
+        // Business-First priority
+        const businessSnap = await getDoc(doc(db, 'hotels', adminId));
+        if (businessSnap.exists()) {
+          adminData = businessSnap.data();
+        } else {
+          const userSnap = await getDoc(doc(db, 'users', adminId));
+          if (userSnap.exists()) adminData = userSnap.data();
+        }
       }
 
       return NextResponse.json(mergeAndNormalizeHotel(docSnap, adminData));
     }
 
+    // =========================================================
+    // 2. HOTEL LIST FETCH (NOW WITH FULL PRIVACY FILTERS)
+    // =========================================================
     const collectionRef = collection(db, 'hotels');
-    const constraints: any[] = [orderBy('createdAt', 'desc'), limit(limitCount)];
+    
+    // FIX: Archive & Status filters added to match mobile strictness
+    const constraints: any[] = [
+      where('isArchived', '==', false),
+      where('status', '==', 'available'),
+      orderBy('createdAt', 'desc'), 
+      limit(limitCount)
+    ];
 
-    if (isFeatured) constraints.push(where('featured', '==', true));
-    if (city && city !== 'All Cities') constraints.push(where('location.city', '==', city));
+    // Auto-Featured based on Paid Tiers
+    if (isFeatured) {
+      constraints.push(where('planTier', 'in', ['pro', 'premium']));
+    }
+    
+    if (city && city !== 'All Cities') {
+      constraints.push(where('location.city', '==', city));
+    }
 
     const q = query(collectionRef, ...constraints);
     const snapshot = await getDocs(q);
     const rawHotels = snapshot.docs;
 
     const adminIds = [...new Set(rawHotels.map(doc => doc.data().hotelAdminId).filter(Boolean))];
-    const adminSnapshots = await Promise.all(adminIds.map(id => getDoc(doc(db, 'users', id))));
+    
+    // Batch fetch admin/business data
+    const adminSnapshots = await Promise.all(adminIds.map(async (adminId) => {
+      const bSnap = await getDoc(doc(db, 'hotels', adminId));
+      if (bSnap.exists()) return bSnap;
+      return await getDoc(doc(db, 'users', adminId));
+    }));
 
     const adminMap: Record<string, any> = {};
     adminSnapshots.forEach(snap => {
@@ -61,8 +99,7 @@ export async function GET(request: Request) {
     });
 
     const mergedData = rawHotels.map(hotelDoc => {
-      const hData = hotelDoc.data();
-      const liveAdmin = adminMap[hData.hotelAdminId] || {};
+      const liveAdmin = adminMap[hotelDoc.data().hotelAdminId] || {};
       return mergeAndNormalizeHotel(hotelDoc, liveAdmin);
     });
 
@@ -77,7 +114,6 @@ export async function GET(request: Request) {
 function mergeAndNormalizeHotel(hotelDoc: DocumentSnapshot, liveAdminData: any) {
   const h = hotelDoc.data()!;
 
-  // Amenities list matches App labels exactly
   let amenitiesList: string[] = [];
   const rawAm = h.amenities;
   if (Array.isArray(rawAm)) {
@@ -91,11 +127,10 @@ function mergeAndNormalizeHotel(hotelDoc: DocumentSnapshot, liveAdminData: any) 
     if (rawAm.hasAC) amenitiesList.push('Air Conditioning');
   }
 
-  // FIXED: Logic strictly matches Flutter 'planTier == pro'
+  // Verification Alignment
   const plan = liveAdminData.planTier || h.planTier || 'free';
-  const isPro = plan === 'pro';
+  const isVerified = plan === 'pro' || plan === 'premium';
 
-  // FIXED: Removed strict discount < price check to match App display logic
   const price = Number(h.pricePerNight) || 0;
   const discount = Number(h.discountPrice) || 0;
   const hasDiscount = h.hasDiscount && discount > 0;
@@ -120,9 +155,10 @@ function mergeAndNormalizeHotel(hotelDoc: DocumentSnapshot, liveAdminData: any) 
     },
     amenities: amenitiesList,
     planTier: plan,
-    isPro: isPro,
-    featured: h.featured || false,
-    contactPhone: liveAdminData.phone || liveAdminData.phoneNumber || h.phone || '',
+    isPro: isVerified,
+    featured: isVerified || h.featured || false,
+    // Locked Features
+    contactPhone: isVerified ? (liveAdminData.whatsappNumber || liveAdminData.phone || liveAdminData.phoneNumber || h.phone || '') : null,
     createdAt: createdAt,
   };
 }

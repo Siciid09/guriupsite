@@ -1,5 +1,3 @@
-// types/index.ts
-
 // --- USER ---
 export interface User {
   uid: string;
@@ -19,13 +17,20 @@ export interface Agent {
   id: string;
   name: string;
   displayName?: string; // Handle legacy field
+  businessName?: string; // ✅ Added to match Business Profile logic
   email: string;
-  phoneNumber: string;
+  phone?: string;       // ✅ Normalized
+  phoneNumber?: string; // Legacy support
+  whatsappNumber?: string; // ✅ Added for Contact Button
   location: string;
   address?: string;
   description?: string;
-  photoURL?: string;
+  photoUrl?: string;    // ✅ Normalized
+  logoUrl?: string;     // ✅ Added for Business Logo
+  photoURL?: string;    // Legacy
   role: 'agent' | 'admin';
+  planTier?: 'free' | 'pro' | 'premium';
+  isVerified?: boolean;
 }
 
 // --- PROPERTY (Aligned with App's Property Model) ---
@@ -34,8 +39,9 @@ export interface Property {
   title: string;
   description?: string;
   type: string; // 'House', 'Apartment', 'Land', 'Commercial', etc.
-  status: string; // 'available', 'rented_out', 'sold'
+  status: string; // 'available', 'rented_out', 'sold', 'draft'
   isForSale: boolean;
+  isArchived?: boolean; // ✅ CRITICAL: Required for Privacy Filtering
   
   // Media
   images: string[];
@@ -52,7 +58,7 @@ export interface Property {
     city: string;
     area: string;
     address?: string;
-    coordinates?: { lat: number; lng: number }; // ✅ Normalized from GeoPoint
+    coordinates?: { latitude: number; longitude: number }; // ✅ Normalized from GeoPoint
   };
 
   // Specs (Flattened from 'features' map to match API normalization)
@@ -67,14 +73,14 @@ export interface Property {
   seatingCapacity?: number;
 
   // Amenities
-  // The API now returns a clean list of strings (e.g., ['Pool', 'Generator'])
   amenities: string[]; 
 
   // Agent Info
   agentId: string;
   agentName: string;
   agentPhoto?: string;
-  agentPhone?: string;
+  agentImage?: string; // ✅ Added for consistency
+  agentPhone?: string | null; // ✅ Nullable for locked phones
   agentVerified: boolean;
   
   // Plan & Verification
@@ -93,6 +99,8 @@ export interface Hotel {
   images: string[];
   rating: number;
   featured: boolean;
+  status?: string; // ✅ Added for Availability check
+  isArchived?: boolean; // ✅ CRITICAL: Required for Privacy Filtering
   
   // Price
   pricePerNight: number;
@@ -106,15 +114,14 @@ export interface Hotel {
     city: string;
     area: string;
     address?: string;
-    coordinates?: { lat: number; lng: number }; // ✅ Normalized from GeoPoint
+    coordinates?: { latitude: number; longitude: number };
   };
 
   // Amenities
-  // The API returns strings like 'Wi-Fi', 'Swimming Pool', 'Air Conditioning'
   amenities: string[]; 
 
   // Contact & Admin
-  contactPhone?: string;
+  contactPhone?: string | null; // ✅ Nullable for locked phones
   hotelAdminId: string;
 
   // Plan
@@ -122,8 +129,6 @@ export interface Hotel {
   isPro: boolean;
   
   createdAt: string;
-  
-  // ✅ REMOVED: 'policies' object (Does not exist in App/Firestore)
   
   roomTypes?: Room[];
 }

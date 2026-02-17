@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 
-// --- TYPES ---
+// --- TYPES (Updated to match your API/Firestore Types) ---
 interface LocationData {
   city?: string;
   area?: string;
@@ -20,7 +20,8 @@ interface Property {
   location: LocationData | string;
   bedrooms?: number;
   bathrooms?: number;
-  size?: number;
+  area?: number; // Added per your types.ts
+  size?: number; // Legacy fallback
   status: string;
   isForSale: boolean;
   planTier?: 'free' | 'pro' | 'premium';
@@ -37,16 +38,22 @@ interface Hotel {
   rating: number;
   planTier?: 'free' | 'pro' | 'premium';
   isPro?: boolean;
+  amenities?: string[]; // Added for dynamic features
 }
 
 interface HomeUIProps {
   featuredProperties: Property[];
   featuredHotels: Hotel[];
-  latestProperties: Property[]; // ADD THIS
-  latestHotels: Hotel[];       // ADD THIS
+  latestProperties: Property[];
+  latestHotels: Hotel[];
 }
 
-const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
+const HomeUI = ({ 
+  featuredProperties = [], 
+  featuredHotels = [], 
+  latestProperties = [], 
+  latestHotels = [] 
+}: HomeUIProps) => {
   const router = useRouter();
   const [isNavOpen, setIsNavOpen] = useState(false);
   const [favorites, setFavorites] = useState<string[]>([]);
@@ -65,7 +72,7 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
   const propertyTypes = ['Any Type', 'Apartment', 'Villa', 'Office', 'House', 'Land', 'Commercial', 'Hall'];
   const hotelRoomTypes = ['Any Room', 'Single Room', 'Double Room', 'Twin Room', 'Triple Room', 'Family Room', 'Suite', 'Deluxe Room', 'Studio Room'];
   const buyPrices = ['Any Price', '$10k - $50k', '$50k - $100k', '$100k - $200k', '$200k+'];
-  const rentPrices = ['Any Price', '$100 - $500', '$500 - $1000', '$1000+'];
+  const rentPrices = ['Any Price', '$0 - $500', '$500 - $1000', '$1000+'];
   const hotelPrices = ['Any Price', '$0 - $50', '$50 - $100', '$100 - $200', '$200 - $500', '$500+'];
 
   // --- HANDLERS ---
@@ -263,10 +270,10 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
         .modern-grow-card:hover .grow-content { transform: translateY(0); }
         
         /* PHONE APP */
-        .app-phone { width: 300px; height: 600px; background: #000; border: 8px solid #333; border-radius: 50px; position: relative; box-shadow: 0 0 0 2px #555, 0 30px 80px -10px rgba(0,101,235,0.3); z-index: 20; transform: rotate(6deg); transition: transform 0.5s ease; }
-        .app-phone:hover { transform: rotate(0deg); }
+        .app-phone { width: 300px; height: 600px; background: #000; border: 8px solid #333; border-radius: 50px; position: relative; box-shadow: 0 0 0 2px #555, 0 30px 80px -10px rgba(0,101,235,0.3); z-index: 20; transform: rotate(0deg); transition: transform 0.5s ease; }
+        @media(min-width: 768px) { .app-phone { transform: rotate(6deg); } .app-phone:hover { transform: rotate(0deg); } }
         .app-phone-screen { width: 100%; height: 100%; border-radius: 42px; overflow: hidden; position: relative; }
-        .app-float-card { position: absolute; bottom: 100px; left: -40px; background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); padding: 20px; border-radius: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); animation: float 6s ease-in-out infinite; }
+        .app-float-card { position: absolute; background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); padding: 20px; border-radius: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.2); animation: float 6s ease-in-out infinite; z-index: 30; }
         @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-15px); } 100% { transform: translateY(0px); } }
       `}</style>
 
@@ -336,76 +343,76 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
                   
                   {/* --- CITY DROPDOWN --- */}
                   <div className="flex flex-1 items-center gap-3 px-4 py-5 w-full border-b md:border-b-0 md:border-r border-gray-200 hover:bg-white transition-colors group rounded-xl relative">
-                     <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center group-hover:bg-[#0065eb] group-hover:text-white transition-colors">
+                      <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center group-hover:bg-[#0065eb] group-hover:text-white transition-colors">
                         <svg className="w-4 h-4 text-[#0065eb] group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                     </div>
-                     <div className="flex flex-col w-full" onClick={() => toggleDropdown('city')}>
+                      </div>
+                      <div className="flex flex-col w-full" onClick={() => toggleDropdown('city')}>
                         <span className="text-[9px] uppercase font-black text-gray-400 tracking-wider mb-0.5">City</span>
                         <div className="flex items-center justify-between cursor-pointer">
                             <span className="text-xs font-bold text-slate-900">{selectedCity}</span>
                             <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                         </div>
-                     </div>
-                     {/* City Menu */}
-                     {openDropdown === 'city' && (
+                      </div>
+                      {/* City Menu */}
+                      {openDropdown === 'city' && (
                         <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-[60] max-h-60 overflow-y-auto">
                            {cities.map((city) => (
                                 <div key={city} onClick={() => selectOption(setSelectedCity, city)} className="px-4 py-3 hover:bg-gray-50 cursor-pointer text-xs font-bold text-slate-700">{city}</div>
                            ))}
                         </div>
-                     )}
+                      )}
                   </div>
 
                   {/* --- TYPE DROPDOWN --- */}
                   <div className="flex flex-1 items-center gap-3 px-4 py-5 w-full border-b md:border-b-0 md:border-r border-gray-200 hover:bg-white transition-colors group rounded-xl relative">
-                     <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition-colors">
+                      <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition-colors">
                         <svg className="w-4 h-4 text-green-600 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
-                     </div>
-                     <div className="flex flex-col w-full" onClick={() => toggleDropdown('type')}>
+                      </div>
+                      <div className="flex flex-col w-full" onClick={() => toggleDropdown('type')}>
                         <span className="text-[9px] uppercase font-black text-gray-400 tracking-wider mb-0.5">{filterTab === 'hotel' ? 'Rooms' : 'Type'}</span>
                         <div className="flex items-center justify-between cursor-pointer">
                             <span className="text-xs font-bold text-slate-900 truncate">{selectedType}</span>
                             <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                         </div>
-                     </div>
-                     {/* Type Menu */}
-                     {openDropdown === 'type' && (
+                      </div>
+                      {/* Type Menu */}
+                      {openDropdown === 'type' && (
                         <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-[60] max-h-60 overflow-y-auto">
                            {getCurrentTypeList().map((type) => (
                                 <div key={type} onClick={() => selectOption(setSelectedType, type)} className="px-4 py-3 hover:bg-gray-50 cursor-pointer text-xs font-bold text-slate-700">{type}</div>
                            ))}
                         </div>
-                     )}
+                      )}
                   </div>
 
                   {/* --- PRICE DROPDOWN --- */}
                   <div className="flex flex-1 items-center gap-3 px-4 py-5 w-full hover:bg-white transition-colors group rounded-xl relative">
-                     <div className="w-9 h-9 bg-orange-100 rounded-full flex items-center justify-center group-hover:bg-orange-500 group-hover:text-white transition-colors">
+                      <div className="w-9 h-9 bg-orange-100 rounded-full flex items-center justify-center group-hover:bg-orange-500 group-hover:text-white transition-colors">
                         <svg className="w-4 h-4 text-orange-600 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                     </div>
-                     <div className="flex flex-col w-full" onClick={() => toggleDropdown('price')}>
+                      </div>
+                      <div className="flex flex-col w-full" onClick={() => toggleDropdown('price')}>
                         <span className="text-[9px] uppercase font-black text-gray-400 tracking-wider mb-0.5">Price</span>
                         <div className="flex items-center justify-between cursor-pointer">
                             <span className="text-xs font-bold text-slate-900 truncate">{selectedPrice}</span>
                             <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                         </div>
-                     </div>
-                     {/* Price Menu */}
-                     {openDropdown === 'price' && (
+                      </div>
+                      {/* Price Menu */}
+                      {openDropdown === 'price' && (
                         <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-[60] max-h-60 overflow-y-auto">
                            {getCurrentPriceList().map((price) => (
                                 <div key={price} onClick={() => selectOption(setSelectedPrice, price)} className="px-4 py-3 hover:bg-gray-50 cursor-pointer text-xs font-bold text-slate-700">{price}</div>
                            ))}
                         </div>
-                     )}
+                      )}
                   </div>
 
                   {/* 3. SEARCH BUTTON (FIXED INSIDE CARD) */}
                   <button 
-                     onClick={handleSearch}
-                     className="bg-[#0065eb] text-white w-full md:w-auto px-8 py-5 font-bold text-xs hover:bg-[#0052c1] transition-colors flex items-center justify-center gap-2 rounded-full shadow-lg shadow-blue-500/30"
+                      onClick={handleSearch}
+                      className="bg-[#0065eb] text-white w-full md:w-auto px-8 py-5 font-bold text-xs hover:bg-[#0052c1] transition-colors flex items-center justify-center gap-2 rounded-full shadow-lg shadow-blue-500/30"
                   >
-                     Search
+                      Search
                   </button>
 
                 </div>
@@ -427,7 +434,7 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
 
             {/* RIGHT SIDE */}
             <div className="hidden lg:flex flex-col items-end w-[45%] h-full justify-center pl-10">
-           <div className="glass-card p-5 w-52 special-service-shape mb-6 self-end mr-20 mt-18">
+               <div className="glass-card p-5 w-52 special-service-shape mb-6 self-end mr-20 mt-18">
                 <h3 className="text-white font-black text-lg">Our Special Service</h3>
               </div>
               
@@ -482,105 +489,14 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {featuredProperties.slice(0, 3).map((property) => {
-                const isVerified = property.planTier === 'pro' || property.planTier === 'premium' || property.agentVerified;
-                
-                let statusLabel = 'For Rent';
-                let statusColor = 'bg-black';
-
-                if (property.status === 'rented_out') {
-                    statusLabel = 'Rented';
-                    statusColor = 'bg-red-600';
-                } else if (property.isForSale) {
-                    statusLabel = 'For Sale';
-                    statusColor = 'bg-[#0065eb]';
-                }
-
-                const locationText = getLocationString(property.location);
-                const isFavorite = favorites.includes(property.id);
-                const propertyPath = `/properties/${property.id}`;
-
-                return (
-                <div key={property.id} className="modern-card group">
-                <Link href={propertyPath} className="absolute inset-0 z-0"></Link>
-
-                <div className="modern-img-wrapper">
-                    <img 
-                        src={property.images && property.images.length > 0 ? property.images[0] : "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1000"} 
-                        alt={property.title} 
-                    />
-                    
-                    <div className={`status-badge ${statusColor}`}>
-                        {statusLabel}
-                    </div>
-                    
-                    {isVerified ? (
-                        <div className="verified-card">
-                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                            <span>Verified</span>
-                        </div>
-                    ) : (
-                        <div className="unverified-card">
-                            <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                            <span>Unverified</span>
-                        </div>
-                    )}
-
-                    <div className="price-badge">
-                        {formatPrice(property.price)}
-                        {!property.isForSale && <span className="text-sm font-normal text-gray-500">/mo</span>}
-                    </div>
-                    
-                    <div className="card-actions">
-                        <div 
-                            className={`action-btn ${isFavorite ? 'active' : ''}`}
-                            onClick={(e) => toggleFavorite(e, property.id)}
-                        >
-                            {isFavorite ? (
-                                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                            ) : (
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
-                            )}
-                        </div>
-                        <div 
-                            className="action-btn"
-                            onClick={(e) => handleShare(e, property.title, propertyPath)}
-                        >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
-                        </div>
-                    </div>
-                </div>
-                <div className="p-6 flex flex-col flex-grow relative pointer-events-none">
-                    <div className="flex justify-between items-start mb-2">
-                    <h4 className="text-xl font-bold text-slate-900 group-hover:text-[#0065eb] transition-colors">{property.title}</h4>
-                    {property.featured && <span className="text-[10px] font-black uppercase tracking-widest bg-yellow-400 text-black px-2 py-0.5 rounded">Featured</span>}
-                    </div>
-                    
-                    <p className="text-gray-500 text-sm font-medium mb-5">{locationText}</p>
-                    
-                    <div className="flex gap-4 text-sm font-bold text-gray-700 mb-6">
-                    <span className="flex items-center gap-1"><span className="text-[#0065eb]">{property.bedrooms || 0}</span> Beds</span>
-                    <span className="w-1 h-1 bg-gray-300 rounded-full self-center"></span>
-                    <span className="flex items-center gap-1"><span className="text-[#0065eb]">{property.bathrooms || 0}</span> Baths</span>
-                    <span className="w-1 h-1 bg-gray-300 rounded-full self-center"></span>
-                    <span className="flex items-center gap-1"><span className="text-[#0065eb]">{property.size|| 0}</span> Sqft</span>
-                    </div>
-                    <div className="mt-auto flex justify-between pt-4 border-t border-gray-100 gap-2 pointer-events-auto">
-                        <Link href={propertyPath} className="border border-gray-200 text-black px-6 py-2.5 rounded-xl text-xs font-black uppercase hover:border-black transition-colors w-full text-center relative z-10">
-                            Details
-                        </Link>
-                        <button className="bg-black text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase hover:bg-[#0065eb] transition-colors w-full relative z-10">
-                            {property.status === 'rented_out' ? 'Rented' : 'Buy Now'}
-                        </button>
-                    </div>
-                </div>
-                </div>
-            )})}
+            {featuredProperties.slice(0, 3).map((property) => (
+               <PropertyCard key={property.id} property={property} favorites={favorites} toggleFavorite={toggleFavorite} handleShare={handleShare} formatPrice={formatPrice} getLocationString={getLocationString} />
+            ))}
           </div>
         </div>
       </section>
 
-      {/* ================= TRENDING HOTELS SECTION ================= */}
+      {/* ================= SECTION 3: TRENDING HOTELS ================= */}
       <section className="bg-white pb-12 reveal">
          <div className="max-w-[1600px] mx-auto px-6">
             <h2 className="text-slate-900 text-4xl font-black leading-tight tracking-tight mb-10 relative inline-block">
@@ -588,78 +504,39 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
                 <span className="gradient-underline"></span>
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {featuredHotels.slice(0, 4).map((hotel) => {
-                    const isHotelVerified = hotel.planTier === 'pro' || hotel.planTier === 'premium' || hotel.isPro;
-                    const hotelLocation = getLocationString(hotel.location);
-                    const hotelPath = `/hotels/${hotel.id}`;
-                    const isFavorite = favorites.includes(hotel.id);
-
-                    return (
-                    <div key={hotel.id} className="hotel-card group relative">
-                        <Link href={hotelPath} className="absolute inset-0 z-0"></Link>
-
-                        <div className="h-64 overflow-hidden relative">
-                            <img 
-                                src={hotel.images && hotel.images.length > 0 ? hotel.images[0] : `https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=600&auto=format&fit=crop`} 
-                                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
-                                alt={hotel.name} 
-                            />
-                            <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">Top Rated</div>
-                             
-                             {isHotelVerified ? (
-                                <div className="verified-card">
-                                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                                    <span>Verified</span>
-                                </div>
-                             ) : (
-                                <div className="unverified-card">
-                                    <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                                    <span>Unverified</span>
-                                </div>
-                             )}
-
-                            <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
-                                <button 
-                                    onClick={(e) => toggleFavorite(e, hotel.id)}
-                                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors shadow-lg ${isFavorite ? 'bg-red-500 text-white' : 'bg-white/90 text-black hover:bg-[#0065eb] hover:text-white'}`}
-                                >
-                                    {isFavorite ? (
-                                        <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                                    ) : (
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
-                                    )}
-                                </button>
-                            </div>
-                        </div>
-                        <div className="p-5 relative pointer-events-none">
-                            <div className="flex justify-between items-start">
-                                <h3 className="text-lg font-bold text-slate-900 leading-tight mb-1">{hotel.name}</h3>
-                                <span className="flex items-center text-xs font-bold text-[#0065eb] gap-1">{hotel.rating || 5.0} <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></span>
-                            </div>
-                            
-                            <p className="text-gray-400 text-xs font-bold mb-3">
-                                {hotelLocation}
-                            </p>
-
-                            <div className="hotel-features">
-                                <span className="hotel-feature">Free Wifi</span>
-                                <span className="hotel-feature">Pool</span>
-                                <span className="hotel-feature">Spa</span>
-                            </div>
-                            <div className="mt-5 flex items-center justify-between pointer-events-auto">
-                                <div className="text-slate-900 font-black text-lg">{formatPrice(hotel.pricePerNight || 120)}<span className="text-xs font-normal text-gray-400">/night</span></div>
-                                <Link href={hotelPath} className="bg-[#0065eb] text-white px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-black transition-colors shadow-lg shadow-blue-500/20 relative z-10">
-                                    Book Now
-                                </Link>
-                            </div>
-                        </div>
-                    </div>
-                )})}
+                {featuredHotels.slice(0, 4).map((hotel) => (
+                   <HotelCard key={hotel.id} hotel={hotel} favorites={favorites} toggleFavorite={toggleFavorite} handleShare={handleShare} formatPrice={formatPrice} getLocationString={getLocationString} />
+                ))}
             </div>
          </div>
       </section>
 
-      {/* ================= SECTION 3: BENTO GRID ================= */}
+      {/* ================= SECTION 4: RECENTLY ADDED ================= */}
+      <section className="bg-slate-50 py-12 reveal">
+        <div className="max-w-[1600px] mx-auto px-6">
+          <h2 className="text-slate-900 text-2xl font-black mb-8">Recently Added</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            {latestProperties.map((property) => (
+              <Link href={`/properties/${property.id}`} key={property.id} className="bg-white p-3 rounded-2xl shadow-sm hover:shadow-md transition-all group block border border-slate-100">
+                <div className="relative h-32 rounded-xl overflow-hidden mb-3 bg-slate-100">
+                   <img src={property.images?.[0] || 'https://placehold.co/600x400?text=No+Image'} className="object-cover w-full h-full group-hover:scale-110 transition-transform duration-500" alt={property.title} />
+                   <div className="absolute top-2 right-2 bg-black/50 backdrop-blur px-2 py-0.5 rounded text-[9px] text-white font-bold uppercase">{property.status === 'rented_out' ? 'Rented' : (property.isForSale ? 'Buy' : 'Rent')}</div>
+                </div>
+                <h4 className="font-bold text-xs text-slate-900 truncate mb-1">{property.title}</h4>
+                <p className="text-xs text-slate-400 mb-2 truncate">{getLocationString(property.location)}</p>
+                <div className="flex items-center justify-between">
+                    <p className="text-[#0065eb] font-black text-xs">{formatPrice(property.price)}</p>
+                    <div className="w-6 h-6 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-[#0065eb] group-hover:text-white transition-colors">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ================= SECTION 5: BENTO GRID ================= */}
       <section className="py-12 px-6 relative reveal" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1470076892663-af684e5e15af?q=80&w=2000')", backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }}>
         <div className="absolute inset-0 bg-[#0a0c10]/90 backdrop-blur-[4px]"></div>
 
@@ -687,7 +564,6 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
               </div>
             </div>
             
-            {/* Instant Booking - IMG BG */}
             <div className="bento-box md:col-span-1 md:row-span-2 p-8 group hover:border-[#0065eb]/50 bento-img-bg" style={{backgroundImage: 'url("https://images.unsplash.com/photo-1522071820081-009f0129c71c?q=80&w=600")'}}>
               <div className="relative z-10 h-full flex flex-col justify-between">
                 <div className="w-14 h-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-3xl border border-white/20 shadow-lg group-hover:bg-[#0065eb] transition-colors">⚡</div>
@@ -698,7 +574,6 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
               </div>
             </div>
 
-            {/* Active Users - IMG BG */}
             <div className="bento-box md:col-span-1 md:row-span-1 p-8 flex items-center justify-center bento-img-bg" style={{backgroundImage: 'url("https://images.unsplash.com/photo-1556761175-5973dc0f32e7?q=80&w=600")'}}>
               <div className="relative z-10 h-full flex flex-col justify-center items-center text-center">
                 <h3 className="text-5xl font-black text-white mb-1">130k+</h3>
@@ -706,7 +581,6 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
               </div>
             </div>
 
-            {/* Verified Listings - IMG BG */}
             <div className="bento-box md:col-span-1 md:row-span-1 p-8 bg-[#0065eb] hover:bg-[#0052c1] cursor-pointer bento-img-bg" style={{backgroundImage: 'url("https://images.unsplash.com/photo-1560518883-ce09059eeffa?q=80&w=600")'}}>
               <div className="relative z-10 h-full flex flex-col justify-between">
                 <h3 className="text-white font-bold text-lg leading-tight">100% Verified <br />Listings</h3>
@@ -717,7 +591,7 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
         </div>
       </section>
 
-      {/* ================= SECTION 4: GROW WITH GURIUP ================= */}
+      {/* ================= SECTION 6: GROW WITH GURIUP ================= */}
       <section className="bg-white py-12 reveal">
         <div className="max-w-[1600px] mx-auto px-6">
           <h2 className="text-4xl font-black text-slate-900 mb-10 tracking-tight relative inline-block">
@@ -763,7 +637,7 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
         </div>
       </section>
 
-      {/* ================= NEW: REFERRAL PROGRAM SECTION ================= */}
+      {/* ================= SECTION 7: REFERRAL PROGRAM ================= */}
       <section className="bg-gradient-to-r from-[#0065eb] to-[#004bb5] py-12 reveal relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-white opacity-10 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2"></div>
         <div className="absolute bottom-0 left-0 w-72 h-72 bg-white opacity-10 rounded-full blur-3xl transform -translate-x-1/3 translate-y-1/3"></div>
@@ -807,11 +681,10 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
         </div>
       </section>
 
-      {/* ================= SECTION 5: MOBILE APP (RESTORED WITH BLOB) ================= */}
+      {/* ================= SECTION 8: MOBILE APP ================= */}
+      {/* ================= SECTION 8: MOBILE APP (UPDATED) ================= */}
       <section className="bg-[#050505] py-12 md:py-20 px-6 relative overflow-hidden reveal">
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[#0065eb] opacity-10 blur-[120px] rounded-full pointer-events-none"></div>
-        
-        {/* === MOVING BLURRED CIRCLES (RESTORED) === */}
         <div className="absolute top-20 left-10 w-32 h-32 bg-blue-600/30 blur-[60px] rounded-full animate-blob pointer-events-none"></div>
         <div className="absolute bottom-20 right-40 w-40 h-40 bg-purple-600/30 blur-[60px] rounded-full animate-blob animation-delay-2000 pointer-events-none"></div>
 
@@ -842,9 +715,12 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
             </div>
           </div>
 
-          <div className="w-full md:w-1/2 flex justify-center md:justify-end relative z-10">
-            {/* RESTORED PHONE CONTAINER WITH mobile.jpg */}
-            <div className="app-phone relative border-[8px] border-slate-800 rounded-[3rem] shadow-2xl h-[600px] w-[320px] bg-black">
+          <div className="w-full md:w-1/2 flex justify-center md:justify-end relative z-10 pt-32 md:pt-0 pb-10 md:pb-0">
+            {/* PHONE CONTAINER: 
+                - Mobile: Pulled up significantly (-translate-y-[15%]) to show bottom nav.
+                - Desktop: Rotated, right aligned.
+            */}
+            <div className="app-phone relative border-[8px] border-slate-800 rounded-[3rem] shadow-2xl h-[600px] w-[320px] bg-black transform -translate-y-[15%] md:translate-y-0 transition-transform">
               <div className="app-phone-screen relative w-full h-full bg-slate-900 overflow-hidden rounded-[2.5rem]">
                 <Image 
                     src="/images/mobile.jpg" 
@@ -854,8 +730,11 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
                 />
               </div>
 
-              {/* FLOAT CARD (Overlay) */}
-              <div className="app-float-card absolute bottom-8 left-1/2 -translate-x-1/2 w-[90%] bg-white p-4 rounded-xl shadow-xl border border-gray-100 z-20">
+              {/* FLOAT CARD: 
+                 - Mobile: Moved UP (-top-24) to clear the phone screen.
+                 - Desktop: Moved LEFT (md:-left-32) and Centered (md:top-1/2).
+              */}
+              <div className="app-float-card absolute -top-24 left-1/2 -translate-x-1/2 w-max md:w-[90%] md:top-1/2 md:bottom-auto md:-left-32 md:-translate-y-1/2 md:translate-x-0 z-20">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 shrink-0 bg-green-500 rounded-full flex items-center justify-center text-white shadow-lg shadow-green-200">
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
@@ -881,5 +760,134 @@ const HomeUI = ({ featuredProperties, featuredHotels }: HomeUIProps) => {
     </>
   );
 };
+
+// --- HELPER COMPONENTS ---
+
+const PropertyCard = ({ property, favorites, toggleFavorite, handleShare, formatPrice, getLocationString }: any) => {
+    const isVerified = property.planTier === 'pro' || property.planTier === 'premium' || property.agentVerified;
+    const isFavorite = favorites.includes(property.id);
+    const propertyPath = `/properties/${property.id}`;
+    
+    // Use 'area' from types.ts, fallback to 'size' for legacy data
+    const displaySize = property.area || property.size || 0;
+
+    let statusLabel = 'For Rent';
+    let statusColor = 'bg-black';
+    let actionLabel = 'Rent Now';
+
+    if (property.status === 'rented_out') { 
+        statusLabel = 'Rented'; 
+        statusColor = 'bg-red-600'; 
+        actionLabel = 'Rented';
+    } 
+    else if (property.isForSale) { 
+        statusLabel = 'For Sale'; 
+        statusColor = 'bg-[#0065eb]'; 
+        actionLabel = 'Buy Now';
+    }
+
+    return (
+        <div className="modern-card group">
+            <Link href={propertyPath} className="absolute inset-0 z-0"></Link>
+            <div className="modern-img-wrapper">
+                <img src={property.images?.[0] || "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1000"} alt={property.title} />
+                <div className={`status-badge ${statusColor}`}>{statusLabel}</div>
+                {isVerified ? (
+                    <div className="verified-card"><svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg><span>Verified</span></div>
+                ) : (
+                    <div className="unverified-card"><svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg><span>Unverified</span></div>
+                )}
+                <div className="price-badge">{formatPrice(property.price)} {!property.isForSale && <span className="text-sm font-normal text-gray-500">/mo</span>}</div>
+                <div className="card-actions">
+                    <div className={`action-btn ${isFavorite ? 'active' : ''}`} onClick={(e) => toggleFavorite(e, property.id)}>
+                        <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    </div>
+                    <div className="action-btn" onClick={(e) => handleShare(e, property.title, propertyPath)}>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
+                    </div>
+                </div>
+            </div>
+            <div className="p-6 flex flex-col flex-grow relative pointer-events-none">
+                <h4 className="text-xl font-bold text-slate-900 group-hover:text-[#0065eb] transition-colors mb-2 line-clamp-1">{property.title}</h4>
+                <p className="text-gray-500 text-sm font-medium mb-5">{getLocationString(property.location)}</p>
+                <div className="flex gap-4 text-sm font-bold text-gray-700 mb-6">
+                    <span className="flex items-center gap-1"><span className="text-[#0065eb]">{property.bedrooms || 0}</span> Beds</span>
+                    <span className="w-1 h-1 bg-gray-300 rounded-full self-center"></span>
+                    <span className="flex items-center gap-1"><span className="text-[#0065eb]">{property.bathrooms || 0}</span> Baths</span>
+                    <span className="w-1 h-1 bg-gray-300 rounded-full self-center"></span>
+                    <span className="flex items-center gap-1"><span className="text-[#0065eb]">{displaySize}</span> Sqft</span>
+                </div>
+                <div className="mt-auto flex justify-between pt-4 border-t border-gray-100 gap-2 pointer-events-auto">
+                    <Link href={propertyPath} className="border border-gray-200 text-black px-6 py-2.5 rounded-xl text-xs font-black uppercase hover:border-black transition-colors w-full text-center relative z-10">Details</Link>
+                    <Link href={propertyPath} className="bg-black text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase hover:bg-[#0065eb] transition-colors w-full text-center flex items-center justify-center relative z-10">{actionLabel}</Link>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+const HotelCard = ({ hotel, favorites, toggleFavorite, handleShare, formatPrice, getLocationString }: any) => {
+    const isVerified = hotel.planTier === 'pro' || hotel.planTier === 'premium' || hotel.isPro;
+    const isFavorite = favorites.includes(hotel.id);
+    const hotelPath = `/hotels/${hotel.id}`;
+    
+    // Dynamic Rating Check
+    const isTopRated = hotel.rating >= 4.5;
+
+    return (
+        <div className="hotel-card group relative">
+            <Link href={hotelPath} className="absolute inset-0 z-0"></Link>
+            <div className="h-64 overflow-hidden relative">
+                <img src={hotel.images?.[0] || `https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=600&auto=format&fit=crop`} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={hotel.name} />
+                
+                {/* Dynamically show Top Rated only if rating is good */}
+                {isTopRated && (
+                     <div className="absolute top-4 left-4 bg-[#0065eb] text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shadow-lg">Top Rated</div>
+                )}
+                
+                {isVerified ? (
+                    <div className="verified-card"><svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg><span>Verified</span></div>
+                ) : (
+                    <div className="unverified-card"><svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg><span>Unverified</span></div>
+                )}
+                
+                <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
+                    <button onClick={(e) => toggleFavorite(e, hotel.id)} className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors shadow-lg ${isFavorite ? 'bg-red-500 text-white' : 'bg-white/90 text-black hover:bg-[#0065eb] hover:text-white'}`}>
+                        <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    </button>
+                    <button onClick={(e) => handleShare(e, hotel.name, hotelPath)} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors shadow-lg bg-white/90 text-black hover:bg-[#0065eb] hover:text-white">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
+                    </button>
+                </div>
+            </div>
+            <div className="p-5 relative pointer-events-none">
+                <div className="flex justify-between items-start">
+                    <h3 className="text-lg font-bold text-slate-900 leading-tight mb-1">{hotel.name}</h3>
+                    <span className="flex items-center text-xs font-bold text-[#0065eb] gap-1">{hotel.rating || 5.0} <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></span>
+                </div>
+                <p className="text-gray-400 text-xs font-bold mb-3">{getLocationString(hotel.location)}</p>
+                
+                {/* DYNAMIC AMENITIES: No more fake data */}
+                <div className="hotel-features">
+                    {hotel.amenities && hotel.amenities.length > 0 ? (
+                        hotel.amenities.slice(0, 3).map((am: string, i: number) => (
+                            <span key={i} className="hotel-feature">{am}</span>
+                        ))
+                    ) : (
+                        // Fallback only if no data
+                        <>
+                            <span className="hotel-feature">Luxury Stay</span>
+                        </>
+                    )}
+                </div>
+
+                <div className="mt-5 flex items-center justify-between pointer-events-auto">
+                    <div className="text-slate-900 font-black text-lg">{formatPrice(hotel.pricePerNight || 120)}<span className="text-xs font-normal text-gray-400">/night</span></div>
+                    <Link href={hotelPath} className="bg-[#0065eb] text-white px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-black transition-colors shadow-lg shadow-blue-500/20 relative z-10">Book Now</Link>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 export default HomeUI;

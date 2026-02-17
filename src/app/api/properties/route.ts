@@ -24,6 +24,9 @@ export async function GET(request: Request) {
     const type = searchParams.get('type');
     const city = searchParams.get('city');
 
+    // =========================================================
+    // 1. SINGLE PROPERTY FETCH (WITH STRICT FILTERS)
+    // =========================================================
     if (id) {
       let propRef = doc(db, 'property', id);
       let propSnap = await getDoc(propRef);
@@ -37,26 +40,43 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Property not found' }, { status: 404 });
       }
 
-      const propertyData = propSnap.data();
-      const agentId = propertyData?.agentId;
+      const pData = propSnap.data();
+
+      // FIX PROBLEM A: Block drafts or archived items from appearing via direct URL
+      const isPublic = pData?.isArchived === false && ['available', 'rented_out'].includes(pData?.status);
+      if (!isPublic) {
+         return NextResponse.json({ error: 'Property is currently private' }, { status: 403 });
+      }
+
+      const agentId = pData?.agentId;
       let agentData = {};
 
       if (agentId) {
-        const agentSnap = await getDoc(doc(db, 'users', agentId));
+        // FIX PROBLEM B: Check 'agents' collection FIRST (Business Source)
+        const agentSnap = await getDoc(doc(db, 'agents', agentId));
         if (agentSnap.exists()) {
           agentData = agentSnap.data();
         } else {
-            const publicAgentSnap = await getDoc(doc(db, 'agents', agentId));
-            if (publicAgentSnap.exists()) agentData = publicAgentSnap.data();
+            // Fallback to 'users' (Auth Source)
+            const userSnap = await getDoc(doc(db, 'users', agentId));
+            if (userSnap.exists()) agentData = userSnap.data();
         }
       }
 
       return NextResponse.json(mergeAndNormalize(propSnap, agentData));
     }
 
-    let collectionName = 'property';
-    const collectionRef = collection(db, collectionName);
-    const constraints: any[] = [limit(limitCount)];
+    // =========================================================
+    // 2. SEARCH LIST FETCH (WITH GLOBAL FILTERS)
+    // =========================================================
+    const collectionRef = collection(db, 'property');
+    
+    // FIX PROBLEM A: Apply hard constraints to exclude Drafts/Archived
+    const constraints: any[] = [
+      where('isArchived', '==', false),
+      where('status', 'in', ['available', 'rented_out']),
+      limit(limitCount)
+    ];
 
     if (isFeatured) constraints.push(where('featured', '==', true));
     if (mode === 'buy') constraints.push(where('isForSale', '==', true));
@@ -69,9 +89,15 @@ export async function GET(request: Request) {
     const rawProperties = snapshot.docs;
 
     const agentIds = [...new Set(rawProperties.map(doc => doc.data()?.agentId).filter(Boolean))];
+    
+    // FIX PROBLEM B: Batch fetch agents with Business-First priority
     const agentSnapshots = await Promise.all(
         agentIds.map(async (agentId) => {
-            try { return await getDoc(doc(db, 'users', agentId)); } catch (e) { return null; }
+            try { 
+              const aSnap = await getDoc(doc(db, 'agents', agentId));
+              if (aSnap.exists()) return aSnap;
+              return await getDoc(doc(db, 'users', agentId)); 
+            } catch (e) { return null; }
         })
     );
 
@@ -84,12 +110,9 @@ export async function GET(request: Request) {
 
     const mergedData = rawProperties.map(propDoc => {
       const pData = propDoc.data();
-      // Only hide if explicitly marked as true; preserves missing fields
-      if (pData?.isArchived === true) return null;
-
       const liveAgent = (pData?.agentId && agentMap[pData.agentId]) ? agentMap[pData.agentId] : {}; 
       return mergeAndNormalize(propDoc, liveAgent);
-    }).filter(Boolean);
+    });
 
     return NextResponse.json(mergedData);
 
@@ -117,9 +140,9 @@ function mergeAndNormalize(propDoc: DocumentSnapshot, liveAgentData: any) {
   const discountPrice = Number(p.discountPrice) || 0;
   const hasValidDiscount = (p.hasDiscount === true) && discountPrice > 0;
 
-  // FIXED: Logic strictly matches Flutter 'planTier == pro'
+  // VERIFICATION LOGIC: Prioritize Live Plan status over static document booleans
   const livePlan = liveAgentData.planTier || p.planTier || 'free';
-  const isPlanVerified = (livePlan === 'pro'); 
+  const isPlanVerified = (livePlan === 'pro' || livePlan === 'premium'); 
   const isManualVerified = (liveAgentData.isVerified === true) || (p.agentVerified === true);
   const finalVerifiedStatus = isPlanVerified || isManualVerified;
 
@@ -143,10 +166,10 @@ function mergeAndNormalize(propDoc: DocumentSnapshot, liveAgentData: any) {
     type: p.type || 'House',
     amenities: amenities,
     agentId: p.agentId || '',
-    agentName: liveAgentData.name || liveAgentData.displayName || p.agentName || 'GuriUp Agent',
-    agentPhoto: liveAgentData.profileImageUrl || liveAgentData.photoURL || p.agentPhoto || null,
-    // FIXED: Phone priority matches App contactPhone
-    agentPhone: p.contactPhone || liveAgentData.phone || liveAgentData.phoneNumber || p.agentPhone,
+    // Business data priority
+    agentName: liveAgentData.businessName || liveAgentData.name || liveAgentData.displayName || p.agentName || 'GuriUp Agent',
+    agentPhoto: liveAgentData.logoUrl || liveAgentData.profileImageUrl || liveAgentData.photoURL || p.agentPhoto || null,
+    agentPhone: finalVerifiedStatus ? (p.contactPhone || liveAgentData.whatsappNumber || liveAgentData.phone || liveAgentData.phoneNumber || p.agentPhone) : null,
     agentVerified: finalVerifiedStatus,
     agentPlanTier: livePlan,
     featured: p.featured || p.isFeatured || false,

@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import Image from 'next/image';
 import { 
   getFeaturedProperties, 
   getLatestProperties, 
@@ -8,7 +9,7 @@ import {
 import HomeUI from '@/components/HomeUI';
 
 // =========================================================
-// 1. SEO METADATA (Your Manually Adjusted Version)
+// 1. SEO METADATA
 // =========================================================
 export const metadata: Metadata = {
   title: "GuriUp | Buy, Rent & Book Properties Across Africa",
@@ -25,7 +26,6 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: "GuriUp Team" }],
   metadataBase: new URL("https://guriup.com"),
-
   openGraph: {
     title: 'GuriUp | The Best Real Estate & Hotel App',
     description: "Discover African's finest real estate and luxury stays. From bustling cities to coastal retreats, GuriUp is the premier platform to find your dream home or book a weekend getaway across the continent. Buy, rent, and explore with confidence. Download the GuriUp app today.",
@@ -42,14 +42,12 @@ export const metadata: Metadata = {
     locale: 'en_US',
     type: 'website',
   },
-
   twitter: {
     card: 'summary_large_image',
     title: 'GuriUp | Real Estate & Hotels',
     description: 'Buy, Rent, and Book with GuriUp in Somaliland.',
     images: ['/images/og-home.jpg'],
   },
-
   robots: {
     index: true,
     follow: true,
@@ -64,23 +62,33 @@ export const metadata: Metadata = {
 };
 
 // =========================================================
-// 2. MAIN PAGE COMPONENT
+// 2. MAIN PAGE COMPONENT (With Safe Fetch + Next/Image)
 // =========================================================
 export default async function HomePage() {
-  // Fetch dynamic data from your updated lib/data.ts
-  const [
-    featuredProperties,
-    latestProperties,
-    featuredHotels,
-    latestHotels,
-  ] = await Promise.all([
-    getFeaturedProperties(),
-    getLatestProperties(),
-    getFeaturedHotels(),
-    getLatestHotels(),
-  ]);
+  // Initialize empty arrays to prevent crash
+  let featuredProperties: any[] = [];
+  let latestProperties: any[] = [];
+  let featuredHotels: any[] = [];
+  let latestHotels: any[] = [];
 
+  // =========================================================
+  // Fix 1: Safe Data Fetch
+  // =========================================================
+  try {
+    [featuredProperties, latestProperties, featuredHotels, latestHotels] = await Promise.all([
+      getFeaturedProperties(),
+      getLatestProperties(),
+      getFeaturedHotels(),
+      getLatestHotels(),
+    ]);
+  } catch (error) {
+    console.error("HOMEPAGE FETCH ERROR:", error);
+    // Page still loads, sections will just be empty
+  }
+
+  // =========================================================
   // 3. STRUCTURED DATA (JSON-LD)
+  // =========================================================
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'RealEstateAgent',
@@ -111,18 +119,23 @@ export default async function HomePage() {
     ]
   };
 
+  // =========================================================
+  // 4. RENDER HOMEPAGE
+  // =========================================================
   return (
     <>
+      {/* JSON-LD Structured Data */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
+      {/* HOME UI Component */}
       <HomeUI 
-        featuredProperties={featuredProperties as any} 
-        featuredHotels={featuredHotels as any} 
-        latestProperties={latestProperties as any} 
-        latestHotels={latestHotels as any} 
+        featuredProperties={featuredProperties} 
+        featuredHotels={featuredHotels} 
+        latestProperties={latestProperties} 
+        latestHotels={latestHotels} 
       />
     </>
   );
