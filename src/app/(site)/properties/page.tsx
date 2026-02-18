@@ -2,12 +2,29 @@ import PropertiesUI from "@/components/templates/PropertiesUI";
 
 export const dynamic = "force-dynamic";
 
-// 1. Define the interface to prevent "any" type errors
-interface PropertyData {
+// 1. Define the full Property interface to match PropertiesUI requirements exactly
+interface Property {
   id: string;
-  agentPlanTier?: string;
-  featured?: boolean;
-  [key: string]: any; 
+  title: string;
+  price: number;
+  discountPrice?: number;
+  hasDiscount?: boolean;
+  isForSale: boolean; 
+  status: string;
+  images: string[];
+  location: { city: string; area: string; };
+  bedrooms: number;
+  bathrooms: number;
+  area?: number; 
+  type: string; 
+  amenities?: string[]; 
+  agentId: string;
+  agentName: string; 
+  agentVerified: boolean; 
+  planTier?: 'free' | 'pro' | 'premium'; 
+  agentPlanTier?: string; 
+  featured: boolean;
+  createdAt: string; 
 }
 
 async function getPropertiesData() {
@@ -24,16 +41,17 @@ async function getPropertiesData() {
     if (!featuredRes.ok) console.error(`Featured API Error: ${featuredRes.status}`);
     if (!allRes.ok) console.error(`All Properties API Error: ${allRes.status}`);
 
-    // 2. FIXED: Changed 'featuredRes.ok.json()' to 'featuredRes.json()'
-    const featuredData: PropertyData[] = featuredRes.ok ? await featuredRes.json() : [];
-    const allData: PropertyData[] = allRes.ok ? await allRes.json() : [];
+    // 2. Parse JSON and cast to the Property array type
+    const featuredData: Property[] = featuredRes.ok ? await featuredRes.json() : [];
+    const allData: Property[] = allRes.ok ? await allRes.json() : [];
 
-    // --- FORCE featured = true for frontend display ---
-    const featuredProperties = featuredData
-      .filter((p: PropertyData) => p.agentPlanTier === "pro" || p.agentPlanTier === "premium")
-      .map((p: PropertyData) => ({ ...p, featured: true }));
+    // --- FILTER & MAP ---
+    // We filter for pro/premium and then ensure 'featured' is true for the UI
+    const featuredProperties: Property[] = featuredData
+      .filter((p: Property) => p.agentPlanTier === "pro" || p.agentPlanTier === "premium")
+      .map((p: Property) => ({ ...p, featured: true }));
 
-    const allProperties = allData;
+    const allProperties: Property[] = allData;
 
     return { featuredProperties, allProperties };
   } catch (error) {
