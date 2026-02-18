@@ -1,42 +1,45 @@
 import PropertiesUI from "@/components/templates/PropertiesUI";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 async function getPropertiesData() {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://guriup.hiigsitech.com';
-  
+  const baseUrl =
+    process.env.NEXT_PUBLIC_BASE_URL || "https://guriup.hiigsitech.com";
+
   try {
-    // 1. Fetch Featured (Strictly filters for Pro/Premium in API)
-    const featuredRes = await fetch(`${baseUrl}/api/properties?featured=true`, { cache: 'no-store' });
-    
-    // 2. Fetch All Listings (Used for the 'Latest' section)
-    const allRes = await fetch(`${baseUrl}/api/properties?limit=300`, { cache: 'no-store' });
+    // --- FETCH DATA ---
+    const [featuredRes, allRes] = await Promise.all([
+      fetch(`${baseUrl}/api/properties?featured=true`, { cache: "no-store" }),
+      fetch(`${baseUrl}/api/properties?limit=300`, { cache: "no-store" }),
+    ]);
 
     if (!featuredRes.ok) console.error(`Featured API Error: ${featuredRes.status}`);
-    if (!allRes.ok) console.error(`All Props API Error: ${allRes.ok}`);
+    if (!allRes.ok) console.error(`All Properties API Error: ${allRes.status}`);
 
-    const featuredProperties = featuredRes.ok ? await featuredRes.json() : [];
-    const allProperties = allRes.ok ? await allRes.json() : [];
+    const featuredData = featuredRes.ok ? await featuredRes.json() : [];
+    const allData = allRes.ok ? await allRes.json() : [];
 
-    // Deduplicate: If a property is already in Featured, don't show it in the main list
-    const featuredIds = new Set(featuredProperties.map((p: any) => p.id));
-    const uniqueOtherProperties = allProperties.filter((p: any) => !featuredIds.has(p.id));
+    // --- FORCE featured = true for frontend display ---
+    const featuredProperties = featuredData
+      .filter(p => p.agentPlanTier === "pro" || p.agentPlanTier === "premium")
+      .map(p => ({ ...p, featured: true }));
 
-    // Combine them. The UI will handle the logic of which ones to put in the slider.
-    return [...featuredProperties, ...uniqueOtherProperties];
+    const allProperties = allData;
 
+    return { featuredProperties, allProperties };
   } catch (error) {
     console.error("PROPERTIES PAGE FETCH ERROR:", error);
-    return [];
+    return { featuredProperties: [], allProperties: [] };
   }
 }
 
 export default async function PropertiesPage() {
-  const allPropertiesForWeb = await getPropertiesData();
+  const { featuredProperties, allProperties } = await getPropertiesData();
 
   return (
-    <PropertiesUI 
-      initialProperties={allPropertiesForWeb} 
+    <PropertiesUI
+      featuredProperties={featuredProperties}
+      allProperties={allProperties}
     />
   );
 }

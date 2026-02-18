@@ -34,14 +34,18 @@ import {
   MessageCircle,
   Loader2,
   AlertCircle,
-  MailCheck,
   Eye,
   EyeOff,
-  ShieldCheck
+  ShieldCheck,
+  Layers,
+  Star,
+  Clock,
+  CreditCard,
+  FileText,
+  Globe
 } from 'lucide-react';
 
 // --- TYPES ---
-// FIXED: Updated roles to match App expectations ('reagent' for Agent, 'hoadmin' for Hotel)
 type Role = 'user' | 'reagent' | 'hoadmin' | null;
 
 export default function SignupPage() {
@@ -66,20 +70,40 @@ function SignupContent() {
 
   // Form Data
   const [formData, setFormData] = useState({
+    // Common
     fullName: '',
     email: '',
     phone: '',
     password: '',
-    businessName: '',
     city: '',
-    licenseNumber: '',
+    
+    // Agent & Hotel Common
+    businessName: '', // Acts as 'Agency Name' or 'Hotel Name'
     whatsappNumber: '',
+    
+    // Agent Specific
+    licenseNumber: '',
+    specialty: 'Residential',
+
+    // Hotel Specific (Added)
+    hotelType: 'Hotel',
+    area: '',
+    pricePerNight: '',
+    roomsCount: '',
+    rating: '3',
+    description: '',
+    phoneCall: '',
+    phoneManager: '',
+    website: '',
+    checkInTime: '12:00 PM',
+    checkOutTime: '10:00 AM',
+    cancellation: 'Free cancellation up to 24 hours',
+    paymentMethods: 'Cash, Zaad, EDahab'
   });
 
   // --- 1. SYNC URL ---
   useEffect(() => {
     const roleParam = searchParams.get('role');
-    // FIXED: Map URL params to correct internal roles
     if (roleParam === 'reagent' || roleParam === 'hoadmin' || roleParam === 'user') {
       setRole(roleParam as Role);
     } else if (roleParam === 'agent') {
@@ -102,7 +126,7 @@ function SignupContent() {
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     setError(null);
   };
@@ -127,10 +151,10 @@ function SignupContent() {
           phoneNumber: user.phoneNumber || null,
           role: 'user', 
           authMethod: 'google',
-          photoUrl: user.photoURL,
+          photoUrl: user.photoURL || "",
           emailVerified: true, 
           createdAt: serverTimestamp(),
-          planTier: 'free', // FIXED: Added default plan tier
+          planTier: 'free',
           favoriteProperties: [],
           favoriteHotels: []
         });
@@ -154,8 +178,17 @@ function SignupContent() {
       if (!formData.fullName || !formData.email || !formData.password || !formData.phone) {
         throw new Error("Please fill in all personal details.");
       }
-      if (role !== 'user' && (!formData.businessName || !formData.city || !formData.whatsappNumber)) {
+      
+      // Validation for Agents
+      if (role === 'reagent' && (!formData.businessName || !formData.city || !formData.whatsappNumber)) {
         throw new Error("Please fill in all business details.");
+      }
+
+      // Validation for Hotels
+      if (role === 'hoadmin') {
+         if (!formData.businessName || !formData.city || !formData.area || !formData.pricePerNight || !formData.roomsCount) {
+             throw new Error("Please fill in all required hotel details.");
+         }
       }
 
       // 2. Create Authentication User
@@ -168,49 +201,122 @@ function SignupContent() {
       // 4. Send Verification Link
       await sendEmailVerification(user);
 
-      // 5. Create Firestore Documents (Marked as NOT verified)
+      // 5. Create Firestore Documents 
+      
+      // --- UPDATED USER DATA STRUCTURE ---
       const userData = {
         uid: user.uid,
-        name: formData.fullName,
-        email: formData.email,
-        phoneNumber: formData.phone,
-        role: role, // This will now be 'reagent' or 'hoadmin'
-        createdAt: serverTimestamp(),
         authMethod: 'email_password',
-        photoUrl: null,
-        emailVerified: false, 
-        planTier: 'free', // FIXED: Default plan tier ensures users are sortable in App
-        favoriteProperties: [],
-        favoriteHotels: []
+        createdAt: serverTimestamp(),
+        email: formData.email,
+        emailVerified: false,
+        name: formData.fullName,
+        phoneNumber: formData.phone,
+        photoUrl: "", 
+        planTier: 'free',
+        role: role, 
+        favoriteHotels: [],
+        favoriteProperties: []
       };
 
-      const agencyData = role !== 'user' ? {
-        uid: user.uid,
-        ownerName: formData.fullName,
-        businessName: formData.businessName,
-        city: formData.city,
-        licenseNumber: formData.licenseNumber || 'PENDING',
-        whatsappNumber: formData.whatsappNumber,
-        phone: formData.phone,
-        type: role,
-        isVerified: false, 
-        createdAt: serverTimestamp(),
-        logoUrl: null,
-      } : null;
+      // --- UPDATED AGENCY/HOTEL DATA STRUCTURE ---
+      let agencyData = null;
 
-      await setDoc(doc(db, 'users', user.uid), userData);
-      
-      if (agencyData) {
-        // FIXED: Determine correct collection based on role
-        // 'reagent' -> 'agents' collection (Matches App logic)
-        // 'hoadmin' -> 'hotels' collection
-        const collectionName = role === 'reagent' ? 'agents' : 'hotels';
-        
-        // FIXED: Writing to 'agents' (or 'hotels') instead of 'agencies'
-        await setDoc(doc(db, collectionName, user.uid), agencyData);
+      if (role === 'reagent') {
+        // ... AGENT LOGIC (UNCHANGED) ...
+        agencyData = {
+          agencyName: formData.businessName,
+          agentVerified: false,
+          analytics: { clicks: 0, leads: 0, views: 0 },
+          averageRating: 0,
+          bio: "",
+          coverPhoto: "",
+          email: formData.email,
+          featured: false,
+          isFeatured: false,
+          isVerified: false,
+          joinDate: serverTimestamp(),
+          languages: ["Somali", "English"],
+          lastUpdated: serverTimestamp(),
+          licenseNumber: formData.licenseNumber || 'PENDING',
+          migratedAt: serverTimestamp(),
+          name: formData.businessName,
+          phone: formData.phone,
+          planTier: 'free',
+          profileImageUrl: "",
+          propertiesSold: 0,
+          specialties: [formData.specialty],
+          status: "active",
+          totalListings: 0,
+          userid: user.uid,
+          verifiedAt: null,
+          city: formData.city,
+          ownerName: formData.fullName,
+          whatsappNumber: formData.whatsappNumber,
+          type: "reagent"
+        };
+      } 
+      else if (role === 'hoadmin') {
+        // ... HOTEL LOGIC (UPDATED TO MATCH YOUR JSON) ...
+        agencyData = {
+            name: formData.businessName, // Hotel Name
+            type: formData.hotelType,
+            city: formData.city,
+            area: formData.area,
+            pricePerNight: Number(formData.pricePerNight) || 0,
+            rating: Number(formData.rating) || 3,
+            roomsCount: Number(formData.roomsCount) || 0,
+            description: formData.description,
+            featured: false,
+            planTierAtUpload: "free",
+            hotelAdminId: user.uid,
+            createdAt: serverTimestamp(),
+            images: [], // User adds later in dashboard
+            location: {
+                area: formData.area,
+                city: formData.city,
+                coordinates: null,
+                latDisplay: null,
+                lngDisplay: null
+            },
+            policies: {
+                cancellation: formData.cancellation,
+                checkInTime: formData.checkInTime,
+                checkOutTime: formData.checkOutTime,
+                paymentMethods: formData.paymentMethods
+            },
+            paymentMethodsList: [], // Derived in app, empty here
+            contact: {
+                phoneCall: formData.phoneCall,
+                phoneManager: formData.phoneManager,
+                phoneWhatsapp: formData.whatsappNumber,
+                website: formData.website
+            }
+        };
       }
 
-      // 6. CRITICAL: Sign Out immediately so they can't access dashboard
+      // Save User Doc
+      await setDoc(doc(db, 'users', user.uid), userData);
+      
+      // Save Agent/Hotel Doc
+      if (agencyData) {
+        const collectionName = role === 'reagent' ? 'agents' : 'hotels';
+        // IMPORTANT: For Hotels, use generated ID or UID? 
+        // Based on your data structure "hotelAdminId", it implies the doc ID might be the UID or auto-id. 
+        // Using UID ensures 1:1 relationship easily.
+        await setDoc(doc(db, collectionName, user.uid), agencyData);
+        
+        // If Hotel, update user with managedHotelId
+        if (role === 'hoadmin') {
+             await setDoc(doc(db, 'users', user.uid), { 
+                 ...userData, 
+                 managedHotelId: user.uid,
+                 isHotelOwner: true 
+             });
+        }
+      }
+
+      // 6. CRITICAL: Sign Out immediately
       await signOut(auth);
 
       // 7. Show Verification Screen
@@ -286,7 +392,8 @@ function SignupContent() {
             <div className="text-center mb-16 animate-in fade-in slide-in-from-bottom-4 duration-700">
               <div className="flex items-center justify-center gap-3 mb-8">
                 <div className="bg-gradient-to-tr from-[#0065eb] to-blue-500 p-2.5 rounded-xl shadow-lg shadow-blue-500/20">
-                       </div>
+                       {/* Logo or Icon can go here */}
+                </div>
                
               </div>
               <h1 className="text-4xl md:text-7xl font-black text-slate-900 mb-6 tracking-tight leading-tight">
@@ -313,7 +420,6 @@ function SignupContent() {
                 title="I'm an Agent"
                 desc="List properties and manage leads."
                 theme="indigo"
-                // FIXED: Set role to 'reagent'
                 onClick={() => updateRole('reagent')}
               />
               <RoleCard 
@@ -321,7 +427,6 @@ function SignupContent() {
                 title="I'm a Hotel"
                 desc="Manage rooms and bookings."
                 theme="orange"
-                // FIXED: Set role to 'hoadmin'
                 onClick={() => updateRole('hoadmin')}
               />
             </div>
@@ -368,14 +473,14 @@ function SignupContent() {
               </div>
 
               {/* Right Side (Form) */}
-              <div className="w-full md:w-7/12 p-8 md:p-12 lg:p-16 relative">
+              <div className="w-full md:w-7/12 p-8 md:p-12 lg:p-16 relative overflow-y-auto max-h-[800px]">
                 <form onSubmit={handleRegister} className="max-w-md mx-auto md:mx-0">
                   
                   {step === 1 && (
                     <div className="animate-in fade-in slide-in-from-right-8 duration-500">
                         <h2 className="text-2xl font-bold text-slate-900 mb-6">Personal Details</h2>
                         
-                        {/* Google Btn */}
+                        {/* Google Btn - KEPT AS REQUESTED */}
                         {role === 'user' && (
                           <div className="mb-8">
                             <button 
@@ -427,24 +532,120 @@ function SignupContent() {
                      </div>
                   )}
 
-                  {step === 2 && (
+                  {step === 2 && role === 'reagent' && (
                     <div className="animate-in fade-in slide-in-from-right-8 duration-500">
                         <button type="button" onClick={() => setStep(1)} className="text-xs font-bold text-slate-400 uppercase tracking-wider hover:text-[#0065eb] mb-4 flex items-center gap-1 transition-colors">
                             <ArrowLeft size={12}/> Back
                         </button>
-                        <h2 className="text-2xl font-bold text-slate-900 mb-6">Business Details</h2>
+                        <h2 className="text-2xl font-bold text-slate-900 mb-6">Agent Details</h2>
                         
                         {error && <div className="mb-6 p-4 bg-red-50 text-red-600 text-sm font-bold rounded-xl flex items-start gap-3 border border-red-100"><AlertCircle size={20} className="shrink-0 mt-0.5"/><span>{error}</span></div>}
 
                         <div className="space-y-5">
-                            <InputGroup label="Business Name" icon={Building} name="businessName" type="text" placeholder="e.g. Horn Properties" value={formData.businessName} onChange={handleChange} />
+                            <InputGroup label="Agency Name" icon={Building} name="businessName" type="text" placeholder="e.g. Horn Properties" value={formData.businessName} onChange={handleChange} />
                             <div className="grid grid-cols-2 gap-4">
                               <InputGroup label="City" icon={MapPin} name="city" type="text" placeholder="Hargeisa" value={formData.city} onChange={handleChange} />
                               <InputGroup label="WhatsApp" icon={MessageCircle} name="whatsappNumber" type="tel" placeholder="+252..." value={formData.whatsappNumber} onChange={handleChange} />
                             </div>
-                            {role === 'reagent' && (
-                              <InputGroup label="License (Optional)" icon={CheckCircle} name="licenseNumber" type="text" placeholder="AG-12345" value={formData.licenseNumber} onChange={handleChange} />
-                            )}
+                            
+                            <SelectGroup 
+                                label="Specialty" 
+                                icon={Layers}
+                                name="specialty" 
+                                value={formData.specialty} 
+                                onChange={handleChange}
+                                options={["Residential", "Commercial", "Land", "Industrial", "Luxury"]}
+                            />
+
+                            <InputGroup label="License (Optional)" icon={CheckCircle} name="licenseNumber" type="text" placeholder="AG-12345" value={formData.licenseNumber} onChange={handleChange} />
+                        </div>
+
+                        <div className="pt-8">
+                          <button type="submit" disabled={loading} className="w-full bg-[#0065eb] text-white py-4 rounded-xl font-bold text-sm hover:bg-[#0052c1] hover:scale-[1.01] transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 disabled:opacity-70 disabled:hover:scale-100">
+                            {loading ? <Loader2 className="animate-spin"/> : 'Create & Verify Account'}
+                          </button>
+                        </div>
+                     </div>
+                  )}
+
+                  {step === 2 && role === 'hoadmin' && (
+                    <div className="animate-in fade-in slide-in-from-right-8 duration-500">
+                        <button type="button" onClick={() => setStep(1)} className="text-xs font-bold text-slate-400 uppercase tracking-wider hover:text-[#0065eb] mb-4 flex items-center gap-1 transition-colors">
+                            <ArrowLeft size={12}/> Back
+                        </button>
+                        <h2 className="text-2xl font-bold text-slate-900 mb-6">Hotel Details</h2>
+                        
+                        {error && <div className="mb-6 p-4 bg-red-50 text-red-600 text-sm font-bold rounded-xl flex items-start gap-3 border border-red-100"><AlertCircle size={20} className="shrink-0 mt-0.5"/><span>{error}</span></div>}
+
+                        <div className="space-y-6">
+                            {/* --- BASIC INFO --- */}
+                            <div>
+                                <h3 className="text-xs font-black uppercase text-[#0065eb] mb-4 tracking-wider">Basic Info</h3>
+                                <div className="space-y-4">
+                                    <InputGroup label="Hotel Name" icon={Building} name="businessName" type="text" placeholder="e.g. Muun Hotel" value={formData.businessName} onChange={handleChange} />
+                                    <SelectGroup 
+                                        label="Hotel Type" 
+                                        icon={Layers}
+                                        name="hotelType" 
+                                        value={formData.hotelType} 
+                                        onChange={handleChange}
+                                        options={['Hotel', 'Resort', 'Lodge', 'Villa', 'Apartment']}
+                                    />
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <InputGroup label="Price/Night ($)" icon={CreditCard} name="pricePerNight" type="number" placeholder="50" value={formData.pricePerNight} onChange={handleChange} />
+                                        <InputGroup label="Total Rooms" icon={Building2} name="roomsCount" type="number" placeholder="100" value={formData.roomsCount} onChange={handleChange} />
+                                    </div>
+                                    <SelectGroup 
+                                        label="Star Rating" 
+                                        icon={Star}
+                                        name="rating" 
+                                        value={formData.rating} 
+                                        onChange={handleChange}
+                                        options={['1', '2', '3', '4', '5']}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* --- LOCATION --- */}
+                            <div>
+                                <h3 className="text-xs font-black uppercase text-[#0065eb] mb-4 tracking-wider">Location</h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <InputGroup label="City" icon={MapPin} name="city" type="text" placeholder="Hargeisa" value={formData.city} onChange={handleChange} />
+                                    <InputGroup label="Area" icon={MapPin} name="area" type="text" placeholder="Jigjiga Yar" value={formData.area} onChange={handleChange} />
+                                </div>
+                            </div>
+
+                            {/* --- CONTACT --- */}
+                            <div>
+                                <h3 className="text-xs font-black uppercase text-[#0065eb] mb-4 tracking-wider">Contact & Policies</h3>
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <InputGroup label="Reception Phone" icon={Phone} name="phoneCall" type="tel" placeholder="+252..." value={formData.phoneCall} onChange={handleChange} />
+                                        <InputGroup label="WhatsApp" icon={MessageCircle} name="whatsappNumber" type="tel" placeholder="+252..." value={formData.whatsappNumber} onChange={handleChange} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <InputGroup label="Manager Phone" icon={Phone} name="phoneManager" type="tel" placeholder="+252..." value={formData.phoneManager} onChange={handleChange} />
+                                        <InputGroup label="Website (Opt)" icon={Globe} name="website" type="text" placeholder="www.hotel.com" value={formData.website} onChange={handleChange} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <InputGroup label="Check-In" icon={Clock} name="checkInTime" type="text" placeholder="12:00 PM" value={formData.checkInTime} onChange={handleChange} />
+                                        <InputGroup label="Check-Out" icon={Clock} name="checkOutTime" type="text" placeholder="10:00 AM" value={formData.checkOutTime} onChange={handleChange} />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* --- DESCRIPTION --- */}
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">Description</label>
+                                <textarea
+                                    name="description"
+                                    value={formData.description}
+                                    onChange={handleChange}
+                                    rows={3}
+                                    className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-[#0065eb]/10 focus:border-[#0065eb] transition-all placeholder:text-slate-300"
+                                    placeholder="Tell us about your hotel..."
+                                ></textarea>
+                            </div>
                         </div>
 
                         <div className="pt-8">
@@ -504,6 +705,32 @@ const InputGroup = ({ label, name, type, placeholder, value, onChange, icon: Ico
         onChange={onChange} 
         className="w-full pl-11 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-[#0065eb]/10 focus:border-[#0065eb] transition-all placeholder:text-slate-300 hover:bg-slate-50/80 hover:border-slate-300" 
       />
+    </div>
+  </div>
+);
+
+// New Select Dropdown for Specialties & Hotel Types
+const SelectGroup = ({ label, name, value, onChange, icon: Icon, options }: any) => (
+  <div>
+    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">{label}</label>
+    <div className="relative group">
+      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb] transition-colors">
+        <Icon size={18} strokeWidth={2.5} />
+      </div>
+      <select
+        name={name}
+        value={value}
+        onChange={onChange}
+        className="w-full pl-11 pr-10 py-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:ring-4 focus:ring-[#0065eb]/10 focus:border-[#0065eb] transition-all hover:bg-slate-50/80 hover:border-slate-300 appearance-none cursor-pointer"
+      >
+        {options.map((opt: string) => (
+            <option key={opt} value={opt}>{opt}</option>
+        ))}
+      </select>
+      {/* Custom arrow for styling consistency */}
+      <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-slate-400">
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+      </div>
     </div>
   </div>
 );

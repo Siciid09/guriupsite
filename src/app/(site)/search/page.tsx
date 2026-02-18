@@ -9,7 +9,8 @@ import {
   query, 
   where, 
   getDocs, 
-  limit
+  limit,
+  orderBy
 } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { 
@@ -22,7 +23,9 @@ import {
   Star,
   ArrowLeft,
   FilterX,
-  Loader2
+  Loader2,
+  ShieldCheck,
+  Award
 } from 'lucide-react';
 
 // --- TYPES ---
@@ -37,17 +40,20 @@ interface Property {
   id: string;
   title: string;
   price: number;
+  discountPrice?: number;
+  hasDiscount?: boolean;
   images: string[];
   location: LocationData | string;
-  bedrooms?: number;
-  bathrooms?: number;
-  area?: number;
+  bedrooms: number;
+  bathrooms: number;
+  area: number;
   status: string;
   isForSale: boolean;
   type: string;
   planTier?: 'free' | 'pro' | 'premium';
   agentVerified?: boolean;
   featured?: boolean;
+  agentId?: string;
 }
 
 interface Hotel {
@@ -102,13 +108,16 @@ function SearchContent() {
         const priceParam = searchParams.get('price');
 
         // 2. Determine Collection & Constraints
-        // Note: App uses 'property' (singular) and 'hotels' (plural)
         const collectionName = currentMode === 'hotel' ? 'hotels' : 'property';
         const collectionRef = collection(db, collectionName);
         const constraints = [];
 
         // CRITICAL FIX: Exclude Archived Items
-        constraints.push(where('isArchived', '==', false));
+        if (currentMode !== 'hotel') {
+            constraints.push(where('isArchived', '==', false));
+            // Only show active statuses
+            constraints.push(where('status', 'in', ['available', 'rented_out'])); 
+        }
 
         // -- Filter: City --
         if (cityParam !== 'All Cities') {
@@ -151,7 +160,11 @@ function SearchContent() {
             constraints.push(where(priceField, '<=', max));
         }
 
-        // Limit results
+        // Sort by creation date (newest first) if possible
+        // Note: Firestore requires composite indexes for complex sorts with filters. 
+        // If index is missing, remove 'orderBy' or create it in Firebase Console.
+        // constraints.push(orderBy('createdAt', 'desc')); 
+
         constraints.push(limit(50));
 
         // 3. Execute Query
@@ -161,28 +174,52 @@ function SearchContent() {
         const results = snapshot.docs.map(doc => {
             const data = doc.data();
             
-            // Standardize Hotel Amenities to String Array
-            let amenitiesArray: string[] = [];
+            // --- HOTEL PARSING ---
             if (currentMode === 'hotel') {
+                 let amenitiesArray: string[] = [];
                  if (Array.isArray(data.amenities)) {
                      amenitiesArray = data.amenities;
                  } else if (typeof data.amenities === 'object' && data.amenities !== null) {
-                     // Convert legacy boolean map to array
                      if (data.amenities.hasWifi) amenitiesArray.push('Wi-Fi');
                      if (data.amenities.hasPool) amenitiesArray.push('Pool');
                      if (data.amenities.hasGym) amenitiesArray.push('Gym');
                      if (data.amenities.hasRestaurant) amenitiesArray.push('Restaurant');
                      if (data.amenities.hasParking) amenitiesArray.push('Parking');
                  }
+
+                 return {
+                    id: doc.id,
+                    ...data,
+                    pricePerNight: Number(data.pricePerNight) || 0,
+                    amenities: amenitiesArray
+                 };
             }
+
+            // --- PROPERTY PARSING (FIXED 0 DATA ISSUE) ---
+            // Explicitly check root level AND 'features' object
+            const beds = data.bedrooms ?? data.features?.bedrooms ?? 0;
+            const baths = data.bathrooms ?? data.features?.bathrooms ?? 0;
+            const size = data.size ?? data.area ?? data.features?.area ?? data.features?.size ?? 0;
+            
+            const price = Number(data.price) || 0;
+            const discountPrice = Number(data.discountPrice) || 0;
 
             return { 
                 id: doc.id, 
                 ...data,
-                // Price Safety Check
-                price: Number(data.price) || 0,
-                pricePerNight: Number(data.pricePerNight) || 0,
-                amenities: amenitiesArray 
+                title: data.title || 'Untitled Property',
+                price: price,
+                discountPrice: discountPrice,
+                hasDiscount: (data.hasDiscount === true) && discountPrice > 0,
+                location: data.location || 'Unknown Location',
+                bedrooms: Number(beds),
+                bathrooms: Number(baths),
+                area: Number(size),
+                status: data.status || 'available',
+                isForSale: data.isForSale ?? true,
+                images: data.images || [],
+                planTier: data.planTier,
+                agentVerified: data.agentVerified
             };
         });
 
@@ -305,8 +342,8 @@ function SearchContent() {
                                         <span className="text-xs font-black text-slate-900">{hotel.rating || 'New'}</span>
                                     </div>
                                     {isVerified && (
-                                        <div className="absolute bottom-3 right-3 bg-green-500 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-lg">
-                                            Verified
+                                        <div className="absolute bottom-3 right-3 bg-blue-600 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-lg">
+                                            Verified Hotel
                                         </div>
                                     )}
                                 </div>
@@ -339,9 +376,13 @@ function SearchContent() {
 
                     {/* CASE 2: PROPERTIES */}
                     {mode !== 'hotel' && properties.map((property) => {
+                        // Logic: Check Plan Tier strictly
                         const isVerified = property.planTier === 'pro' || property.planTier === 'premium' || property.agentVerified;
                         const statusLabel = property.status === 'rented_out' ? 'Rented' : (property.isForSale ? 'For Sale' : 'For Rent');
                         const statusColor = property.status === 'rented_out' ? 'bg-red-500' : (property.isForSale ? 'bg-[#0065eb]' : 'bg-slate-900');
+                        
+                        // Price Display (Discount Logic)
+                        const finalPrice = (property.hasDiscount && (property.discountPrice || 0) > 0) ? property.discountPrice : property.price;
 
                         return (
                             <div key={property.id} className="group bg-white rounded-[2rem] overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 border border-slate-100 flex flex-col cursor-pointer">
@@ -358,11 +399,20 @@ function SearchContent() {
                                     <div className={`absolute top-3 left-3 ${statusColor} text-white px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-lg`}>
                                         {statusLabel}
                                     </div>
-                                    {isVerified && (
-                                        <div className="absolute bottom-3 right-3 bg-green-500 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-lg">
-                                            Verified
-                                        </div>
-                                    )}
+                                    
+                                    {/* Verification & Feature Badges */}
+                                    <div className="absolute bottom-3 right-3 flex flex-col gap-1 items-end">
+                                        {property.featured && (
+                                            <div className="bg-yellow-400 text-yellow-900 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-lg">
+                                                <Award size={10} /> Featured
+                                            </div>
+                                        )}
+                                        {isVerified && (
+                                            <div className="bg-blue-600 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-lg">
+                                                <ShieldCheck size={10} /> Verified
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {/* Content Area */}
@@ -389,8 +439,14 @@ function SearchContent() {
                                     </div>
                                     <div className="mt-auto flex items-center justify-between pointer-events-auto pt-4 border-t border-slate-50">
                                         <div>
-                                            <span className="text-2xl font-black text-slate-900">{formatPrice(property.price)}</span>
+                                            <span className="text-2xl font-black text-slate-900">{formatPrice(finalPrice || 0)}</span>
                                             {!property.isForSale && <span className="text-xs font-bold text-slate-400">/mo</span>}
+                                            {/* Discount Tag */}
+                                            {property.hasDiscount && (
+                                                <span className="ml-2 text-xs text-red-400 line-through font-bold">
+                                                    {formatPrice(property.price)}
+                                                </span>
+                                            )}
                                         </div>
                                         <Link href={`/properties/${property.id}`} className="px-6 py-2.5 border border-slate-200 text-slate-900 text-xs font-black uppercase rounded-xl hover:border-slate-900 hover:bg-slate-900 hover:text-white transition-colors">
                                             Details

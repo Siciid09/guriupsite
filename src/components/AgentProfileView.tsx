@@ -11,9 +11,11 @@ import {
   query, 
   where, 
   getDocs, 
-  Timestamp 
+  Timestamp,
+  addDoc,      // Added for rating submission
+  serverTimestamp 
 } from 'firebase/firestore';
-import { db } from '../app/lib/firebase'; 
+import { db } from '@/app/lib/firebase'; // Ensure this matches your path
 
 // --- ICONS ---
 const Icons = {
@@ -28,7 +30,9 @@ const Icons = {
   Bath: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>,
   Square: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>,
   Star: () => <svg className="w-4 h-4 text-amber-400 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>,
-  BackArrow: () => <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+  BackArrow: () => <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>,
+  StarOutline: () => <svg className="w-6 h-6 text-gray-300 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>, // For rating input
+  StarFillBig: () => <svg className="w-6 h-6 text-amber-400 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
 };
 
 // --- DATA TYPES ---
@@ -67,7 +71,7 @@ interface Property {
   isArchived: boolean;
 }
 
-const AgentProfilePage = () => {
+export default function AgentProfileView() {
   const params = useParams();
   const agentDocId = params.id as string; 
 
@@ -80,6 +84,11 @@ const AgentProfilePage = () => {
   // UI State
   const [isContactModalOpen, setContactModalOpen] = useState(false);
 
+  // Rating State
+  const [userRating, setUserRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+
   useEffect(() => {
     if (!agentDocId) return;
 
@@ -89,7 +98,13 @@ const AgentProfilePage = () => {
 
         // 1. Fetch Agent Profile
         const agentDocRef = doc(db, 'agents', agentDocId);
-        const agentSnap = await getDoc(agentDocRef);
+        let agentSnap = await getDoc(agentDocRef);
+
+        // Fallback: Check 'users' collection if not in 'agents'
+        if (!agentSnap.exists()) {
+           const userRef = doc(db, 'users', agentDocId);
+           agentSnap = await getDoc(userRef);
+        }
 
         if (!agentSnap.exists()) {
           setError('Agent not found');
@@ -105,7 +120,7 @@ const AgentProfilePage = () => {
             joinedString = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
         }
 
-        const plan = data.planTier ?? 'free';
+        const plan = (data.planTier || 'free').toLowerCase();
         const linkedUserId = data.userid || agentSnap.id; 
 
         const agentData: AgentProfile = {
@@ -114,12 +129,13 @@ const AgentProfilePage = () => {
           name: data.name ?? 'Unknown Agent',
           agencyName: data.agencyName || 'Independent Agent',
           bio: data.bio ?? 'No bio provided.',
-          profileImageUrl: data.profileImageUrl ?? '',
+          profileImageUrl: data.profileImageUrl || data.photoUrl || '',
           coverPhoto: data.coverPhoto ?? '',
           phone: data.phone ?? '',
           email: data.email ?? '',
-          location: data.city ?? 'Hargeisa, Somaliland',
-          planTier: plan,
+          // Logic: Global Location Fallback
+          location: data.city || data.location || 'Unknown Location',
+          planTier: plan as any,
           joinedDate: joinedString,
           totalListings: data.totalListings ?? 0,
           propertiesSold: data.propertiesSold ?? 0,
@@ -130,7 +146,7 @@ const AgentProfilePage = () => {
 
         setAgent(agentData);
 
-        // 2. Fetch Properties
+        // 2. Fetch REAL Properties (To get accurate count)
         const q = query(
             collection(db, 'property'),
             where('agentId', '==', linkedUserId), 
@@ -143,10 +159,8 @@ const AgentProfilePage = () => {
         querySnapshot.forEach((doc) => {
             const pData = doc.data();
             
-            // Filter drafts
             if (pData.status === 'draft') return;
 
-            // --- FIX: Location Formatting ---
             let locString = 'Unknown Location';
             if (pData.location) {
                 if (typeof pData.location === 'string') locString = pData.location;
@@ -158,8 +172,6 @@ const AgentProfilePage = () => {
                 }
             }
 
-            // --- FIX: Robust Bed/Bath/Area Reading ---
-            // Checking both root level and nested 'features' map used in some app versions
             const beds = pData.bedrooms ?? pData.features?.bedrooms ?? 0;
             const baths = pData.bathrooms ?? pData.features?.bathrooms ?? 0;
             const size = pData.size ?? pData.area ?? pData.features?.area ?? pData.features?.size ?? 0;
@@ -193,7 +205,11 @@ const AgentProfilePage = () => {
     fetchData();
   }, [agentDocId]);
 
+  // --- LOGIC: PRO STATUS & RATING ---
   const isVerified = agent?.planTier === 'pro' || agent?.planTier === 'premium';
+  
+  // Logic: Force 5.0 for Pro, otherwise use real average
+  const displayRating = isVerified ? 5.0 : (agent?.averageRating || 0);
 
   // Sort properties: Sold last, Rented last
   const sortedProperties = [...properties].sort((a, b) => {
@@ -217,6 +233,27 @@ const AgentProfilePage = () => {
     } else {
       const cleanPhone = agent.phone.replace(/[^0-9]/g, '');
       window.open(`https://wa.me/${cleanPhone}`, '_blank');
+    }
+  };
+
+  const submitRating = async () => {
+    if (userRating === 0 || !agent) return;
+    setIsSubmittingRating(true);
+    try {
+        await addDoc(collection(db, 'reviews'), {
+            targetId: agent.id,
+            targetType: 'agent',
+            rating: userRating,
+            createdAt: serverTimestamp(),
+            status: 'pending' // Moderation
+        });
+        alert("Thank you! Your rating has been submitted.");
+        setUserRating(0);
+    } catch (e) {
+        console.error(e);
+        alert("Failed to submit rating.");
+    } finally {
+        setIsSubmittingRating(false);
     }
   };
 
@@ -307,28 +344,37 @@ const AgentProfilePage = () => {
 
                     {/* Stats Grid */}
                     <div className="grid grid-cols-2 gap-3 mb-8">
+                        {/* Logic: Use REAL count of properties, not static field */}
                         <div className="bg-gray-50 p-5 rounded-3xl text-center border border-gray-100 flex flex-col items-center justify-center">
-                            <div className="text-3xl font-black text-slate-900 mb-1">{agent.totalListings}</div>
+                            <div className="text-3xl font-black text-slate-900 mb-1">{sortedProperties.length}</div>
                             <div className="text-[10px] uppercase font-black text-gray-400 tracking-widest">Listings</div>
                         </div>
                         <div className="bg-gray-50 p-5 rounded-3xl text-center border border-gray-100 flex flex-col items-center justify-center">
                             <div className="text-3xl font-black text-slate-900 mb-1">{agent.propertiesSold}</div>
                             <div className="text-[10px] uppercase font-black text-gray-400 tracking-widest">Sold</div>
                         </div>
+                        
+                        {/* Logic: Rating Display (Forced 5.0 for Pro) */}
                         <div className="col-span-2 bg-[#F0F7FF] p-5 rounded-3xl flex items-center justify-between border border-blue-100">
                             <div className="flex flex-col items-start">
-                                <div className="text-2xl font-black text-slate-900">{agent.averageRating}</div>
-                                <div className="text-[10px] uppercase font-black text-blue-600 tracking-widest">Rating</div>
+                                <div className="text-2xl font-black text-slate-900">{displayRating.toFixed(1)}</div>
+                                <div className="text-[10px] uppercase font-black text-blue-600 tracking-widest">
+                                    {isVerified ? 'Pro Agent Rating' : 'Agent Rating'}
+                                </div>
                             </div>
                             <div className="flex gap-1">
-                                {/* FIX: Using 5 Stars instead of ticks */}
-                                {[1,2,3,4,5].map(i => <Icons.Star key={i} />)}
+                                {/* Visually show stars based on displayRating */}
+                                {[1,2,3,4,5].map(i => (
+                                    <div key={i}>
+                                        {i <= Math.round(displayRating) ? <Icons.Star /> : <Icons.StarOutline />}
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     </div>
 
                     {/* Contact Actions */}
-                    <div className="space-y-3">
+                    <div className="space-y-3 mb-8">
                         <button className="w-full bg-[#0065eb] hover:bg-[#0052c1] text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-xl shadow-blue-500/20 active:scale-95">
                             <Icons.Chat />
                             Start Secure Chat
@@ -349,6 +395,35 @@ const AgentProfilePage = () => {
                                 WhatsApp
                             </button>
                         </div>
+                    </div>
+
+                    {/* NEW: Interactive Rate Agent Section */}
+                    <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
+                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 text-center">Rate this Agent</h4>
+                        <div className="flex justify-center gap-2 mb-4">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                                <button
+                                    key={star}
+                                    onMouseEnter={() => setHoverRating(star)}
+                                    onMouseLeave={() => setHoverRating(0)}
+                                    onClick={() => setUserRating(star)}
+                                    className="transition-transform hover:scale-110 focus:outline-none"
+                                >
+                                    {star <= (hoverRating || userRating) ? (
+                                        <Icons.StarFillBig />
+                                    ) : (
+                                        <Icons.StarOutline />
+                                    )}
+                                </button>
+                            ))}
+                        </div>
+                        <button 
+                            onClick={submitRating}
+                            disabled={userRating === 0 || isSubmittingRating}
+                            className={`w-full py-2.5 rounded-xl text-xs font-bold uppercase tracking-wide transition-all ${userRating > 0 ? 'bg-slate-900 text-white shadow-lg' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+                        >
+                            {isSubmittingRating ? 'Submitting...' : 'Submit Rating'}
+                        </button>
                     </div>
 
                     {/* Bio & Specialties */}
@@ -372,10 +447,11 @@ const AgentProfilePage = () => {
 
             {/* ================= RIGHT SIDE: PROPERTIES ================= */}
             <div className="flex-1 w-full mt-8 md:mt-0">
-                {/* Header (Replaces Tab) */}
+                {/* Header */}
                 <div className="flex items-center gap-4 mb-8">
                     <div className="bg-white px-6 py-2 rounded-full shadow-sm border border-gray-200">
                         <span className="text-sm font-black text-slate-900 uppercase tracking-wide">Active Listings</span>
+                        {/* Logic: Actual Count */}
                         <span className="ml-2 bg-blue-100 text-[#0065eb] px-2 py-0.5 rounded-full text-xs font-bold">{sortedProperties.length}</span>
                     </div>
                 </div>
@@ -499,5 +575,3 @@ const PropertyCard = ({ property }: { property: Property }) => {
         </Link>
     )
 }
-
-export default AgentProfilePage;

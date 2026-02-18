@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 
 // --- TYPES (Updated to match your API/Firestore Types) ---
 interface LocationData {
@@ -67,6 +68,9 @@ const HomeUI = ({
   const [selectedType, setSelectedType] = useState('Any Type'); 
   const [selectedPrice, setSelectedPrice] = useState('Any Price');
 
+  // --- FEATURED SLIDER STATE ---
+  const [featIndex, setFeatIndex] = useState(0);
+
   // --- FILTER DATA ---
   const cities = ['Hargeisa', 'Mogadishu', 'Berbera', 'Burco', 'Boorama', 'All Cities'];
   const propertyTypes = ['Any Type', 'Apartment', 'Villa', 'Office', 'House', 'Land', 'Commercial', 'Hall'];
@@ -83,6 +87,15 @@ const HomeUI = ({
     setSelectedType(tab === 'hotel' ? 'Any Room' : 'Any Type');
     setSelectedPrice('Any Price');
     setOpenDropdown(null);
+  };
+
+  const slideFeatured = (direction: 'left' | 'right') => {
+    if (direction === 'left') {
+      setFeatIndex(prev => (prev === 0 ? 0 : prev - 3));
+    } else {
+      // Don't scroll past the end
+      setFeatIndex(prev => (prev + 3 >= featuredProperties.length ? 0 : prev + 3));
+    }
   };
 
   const handleSearch = () => {
@@ -186,6 +199,9 @@ const HomeUI = ({
       if (filterTab === 'rent') return rentPrices;
       return buyPrices;
   };
+
+  // Get the current 3 items to show for featured properties
+  const visibleFeatured = featuredProperties.slice(featIndex, featIndex + 3);
 
   return (
     <>
@@ -475,23 +491,53 @@ const HomeUI = ({
         </div>
       </section>
 
-      {/* ================= SECTION 2: FEATURED PROPERTIES ================= */}
+      {/* ================= SECTION 2: FEATURED PROPERTIES (PAGINATED) ================= */}
       <section className="bg-[#fafbfc] py-12 relative z-20 reveal">
         <div className="max-w-[1600px] mx-auto px-6">
-          <div className="flex justify-between items-end mb-12">
+          
+          {/* SLIDER HEADER WITH CONTROLS */}
+          <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
             <div>
               <h2 className="text-slate-900 text-4xl font-black leading-tight tracking-tight relative inline-block">
                 Latest Featured Properties
                 <span className="gradient-underline"></span>
               </h2>
+              <p className="text-slate-500 mt-2 font-medium">Handpicked properties from our verified pro agents.</p>
             </div>
-            <button className="hidden md:block border border-slate-200 px-6 py-3 rounded-full font-bold hover:bg-black hover:text-white transition-all text-sm">View All Listings</button>
+
+            <div className="flex items-center gap-3">
+               {/* CONTROLS */}
+               <div className="flex items-center gap-2 mr-2">
+                 <button 
+                   onClick={() => slideFeatured('left')}
+                   disabled={featIndex === 0}
+                   className={`p-3 rounded-full border border-slate-200 transition-all ${featIndex === 0 ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'bg-white hover:bg-slate-100 text-slate-700 hover:border-slate-300 shadow-sm'}`}
+                 >
+                   <ChevronLeft size={20} />
+                 </button>
+                 <button 
+                   onClick={() => slideFeatured('right')}
+                   disabled={featIndex + 3 >= featuredProperties.length}
+                   className={`p-3 rounded-full border border-slate-200 transition-all ${featIndex + 3 >= featuredProperties.length ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'bg-white hover:bg-slate-100 text-slate-700 hover:border-slate-300 shadow-sm'}`}
+                 >
+                   <ChevronRight size={20} />
+                 </button>
+               </div>
+               
+               {/* VIEW ALL BUTTON (BLUE BG) */}
+               <Link href="/properties?featured=true" className="px-6 py-3 bg-[#0065eb] hover:bg-blue-600 text-white rounded-full font-bold text-sm transition-all shadow-lg shadow-blue-500/30 flex items-center gap-2">
+                 View All <ArrowRight size={16} />
+               </Link>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {featuredProperties.slice(0, 3).map((property) => (
+            {visibleFeatured.map((property) => (
                <PropertyCard key={property.id} property={property} favorites={favorites} toggleFavorite={toggleFavorite} handleShare={handleShare} formatPrice={formatPrice} getLocationString={getLocationString} />
             ))}
+            {visibleFeatured.length === 0 && (
+              <div className="col-span-full py-12 text-center text-gray-400 font-bold">No featured properties available at the moment.</div>
+            )}
           </div>
         </div>
       </section>
@@ -682,7 +728,6 @@ const HomeUI = ({
       </section>
 
       {/* ================= SECTION 8: MOBILE APP ================= */}
-      {/* ================= SECTION 8: MOBILE APP (UPDATED) ================= */}
       <section className="bg-[#050505] py-12 md:py-20 px-6 relative overflow-hidden reveal">
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[#0065eb] opacity-10 blur-[120px] rounded-full pointer-events-none"></div>
         <div className="absolute top-20 left-10 w-32 h-32 bg-blue-600/30 blur-[60px] rounded-full animate-blob pointer-events-none"></div>
@@ -716,10 +761,7 @@ const HomeUI = ({
           </div>
 
           <div className="w-full md:w-1/2 flex justify-center md:justify-end relative z-10 pt-32 md:pt-0 pb-10 md:pb-0">
-            {/* PHONE CONTAINER: 
-                - Mobile: Pulled up significantly (-translate-y-[15%]) to show bottom nav.
-                - Desktop: Rotated, right aligned.
-            */}
+            {/* PHONE CONTAINER */}
             <div className="app-phone relative border-[8px] border-slate-800 rounded-[3rem] shadow-2xl h-[600px] w-[320px] bg-black transform -translate-y-[15%] md:translate-y-0 transition-transform">
               <div className="app-phone-screen relative w-full h-full bg-slate-900 overflow-hidden rounded-[2.5rem]">
                 <Image 
@@ -730,10 +772,7 @@ const HomeUI = ({
                 />
               </div>
 
-              {/* FLOAT CARD: 
-                 - Mobile: Moved UP (-top-24) to clear the phone screen.
-                 - Desktop: Moved LEFT (md:-left-32) and Centered (md:top-1/2).
-              */}
+              {/* FLOAT CARD */}
               <div className="app-float-card absolute -top-24 left-1/2 -translate-x-1/2 w-max md:w-[90%] md:top-1/2 md:bottom-auto md:-left-32 md:-translate-y-1/2 md:translate-x-0 z-20">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 shrink-0 bg-green-500 rounded-full flex items-center justify-center text-white shadow-lg shadow-green-200">

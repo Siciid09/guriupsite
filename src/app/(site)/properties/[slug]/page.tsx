@@ -1,17 +1,16 @@
 import { Metadata } from 'next';
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/app/lib/firebase'; // ⚠️ Check path
+import { db } from '@/app/lib/firebase';
 import PropertyDetailView, { Property, Agent } from '@/components/templates/PropertyClientView';
 
 type Props = {
   params: Promise<{ slug: string }>
 };
 
-// --- FIX: Helper to convert Firebase Timestamps to Strings ---
+// --- Helper: Convert Firebase Timestamps to Strings ---
 const sanitizeData = (data: any) => {
   if (!data) return null;
   
-  // deeply clone the object to avoid mutating the original
   const sanitized = JSON.parse(JSON.stringify(data));
   
   if (data.createdAt?.seconds) sanitized.createdAt = new Date(data.createdAt.seconds * 1000).toISOString();
@@ -30,17 +29,46 @@ async function getPropertyData(slug: string) {
 
   // Get raw data
   const rawProperty = { id: propertySnap.id, ...propertySnap.data() };
-  
-  // --- FIX: Sanitize Property Data ---
   const property = sanitizeData(rawProperty) as Property;
   
   let agent: Agent | null = null;
+  
   if (property.agentId) {
-    const agentRef = doc(db, 'users', property.agentId);
-    const agentSnap = await getDoc(agentRef);
+    // --- FIX 1: Check 'agents' collection first (for Pro/Business accounts) ---
+    let agentRef = doc(db, 'agents', property.agentId);
+    let agentSnap = await getDoc(agentRef);
+
+    // --- FIX 2: Fallback to 'users' if not found in agents ---
+    if (!agentSnap.exists()) {
+      agentRef = doc(db, 'users', property.agentId);
+      agentSnap = await getDoc(agentRef);
+    }
+
     if (agentSnap.exists()) {
-      // --- FIX: Sanitize Agent Data ---
-      agent = sanitizeData(agentSnap.data()) as Agent;
+      const rawAgent = agentSnap.data();
+      const sanitizedAgent = sanitizeData(rawAgent);
+
+      // --- FIX 3: Normalize Name & Verification (Match route.ts logic) ---
+      // Determine Plan & Verification
+      const planTier = (rawAgent.planTier || 'free').toLowerCase();
+      const isPro = planTier === 'pro' || planTier === 'premium';
+      const isVerified = isPro || rawAgent.isVerified === true;
+
+      // Prioritize Agency/Business Name over User Name
+      const finalName = rawAgent.agencyName || rawAgent.businessName || rawAgent.displayName || rawAgent.name || 'GuriUp Agent';
+      const finalPhoto = rawAgent.logoUrl || rawAgent.profileImageUrl || rawAgent.photoURL || null;
+
+      // Construct the Agent object explicitly to ensure the View gets what it needs
+      agent = {
+        ...sanitizedAgent,
+        name: finalName,            // Overwrites personal name with Agency name
+        planTier: planTier,         // Ensures 'pro' is passed
+        isVerified: isVerified,     // Explicitly sets verification
+        photoURL: finalPhoto,       // Ensures logo is used if available
+        // Preserve other fields
+        email: rawAgent.email,
+        phone: rawAgent.phone || rawAgent.whatsappNumber
+      } as Agent;
     }
   }
 
@@ -96,6 +124,6 @@ export default async function PropertyPage({ params }: Props) {
     );
   }
 
-  // Pass CLEAN data to Client Component
+  // Pass CLEAN, NORMALIZED data to Client Component
   return <PropertyDetailView initialProperty={data.property} initialAgent={data.agent} />;
 }

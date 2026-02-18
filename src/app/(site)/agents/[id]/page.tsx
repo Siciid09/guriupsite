@@ -1,20 +1,23 @@
 import { Metadata } from 'next';
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/app/lib/firebase'; // Ensure this matches your path
-import AgentProfileView from '@/components/AgentProfileView'; // Ensure this matches your path
+import { db } from '@/app/lib/firebase';
+import AgentProfileView from '@/components/AgentProfileView';
 
-// --- FIX: Define params as a Promise ---
 type Props = {
   params: Promise<{ id: string }>
 };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  // --- FIX: Await the params object before using it ---
   const { id } = await params;
 
-  // Now 'id' is a valid string, so Firebase won't crash
   const docRef = doc(db, 'agents', id);
-  const snap = await getDoc(docRef);
+  let snap = await getDoc(docRef);
+
+  // Fallback to users collection if not in agents
+  if (!snap.exists()) {
+     const userRef = doc(db, 'users', id);
+     snap = await getDoc(userRef);
+  }
 
   if (!snap.exists()) {
     return {
@@ -24,12 +27,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   const data = snap.data();
+  // Global text fallback (no specific city hardcoded)
+  const locationText = data.city || data.location || 'your area';
+  
   const title = `${data.name} | ${data.agencyName || 'Real Estate Agent'}`;
   const description = data.bio 
     ? data.bio.substring(0, 160) + '...' 
-    : `Contact ${data.name} for the best property deals in ${data.city || 'town'}.`;
+    : `Contact ${data.name} for the best property deals in ${locationText}.`;
   
-  const imageUrl = data.profileImageUrl || data.coverPhoto || '';
+  const imageUrl = data.profileImageUrl || data.photoUrl || data.coverPhoto || '';
 
   return {
     title: title,
@@ -49,12 +55,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-// --- FIX: Update the Main Component Props too ---
 export default async function AgentPage({ params }: Props) {
-  // We don't strictly need to await params here if we aren't using the ID 
-  // inside this component (since AgentProfileView handles the logic), 
-  // but it's good practice.
-  await params; 
-  
+  await params;
   return <AgentProfileView />;
 }

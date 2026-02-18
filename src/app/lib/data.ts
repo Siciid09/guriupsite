@@ -94,32 +94,35 @@ async function mergeAgentsWithProperties(properties: any[]) {
 
 export async function getFeaturedProperties(): Promise<Property[]> {
   // 1. RELAXED QUERY: Only ask for 'featured'. 
-  // We fetch 10 items to make sure we have enough left after filtering.
-  // We DO NOT filter by status/archived here to avoid "Missing Index" or "Empty List" errors.
+  // We fetch 20 items (increased from 10) to ensure we have enough left after filtering for Pro agents.
   const q = query(
     collection(db, 'property'), 
     where('featured', '==', true), 
-    limit(10) 
+    limit(20) 
   );
   
   const snapshot = await getDocs(q);
   const rawData = snapshot.docs.map(doc => transformDoc<Property>(doc));
 
   // 2. SMART FILTER: Handle "Missing" fields gracefully
-  const filteredData = rawData
-    .filter(p => {
-      // Hide if explicitly archived (but show if field is missing)
-      if (p.isArchived === true) return false;
+  const activeData = rawData.filter(p => {
+    // Hide if explicitly archived (but show if field is missing)
+    if (p.isArchived === true) return false;
 
-      // Hide if explicitly draft or sold
-      if (p.status === 'draft' || p.status === 'sold') return false;
+    // Hide if explicitly draft or sold
+    if (p.status === 'draft' || p.status === 'sold') return false;
 
-      // Show if available, rented, OR if status is missing/undefined
-      return true;
-    })
+    // Show if available, rented, OR if status is missing/undefined
+    return true;
+  });
+
+  // 3. MERGE AGENTS to get the 'planTier'
+  const mergedData = await mergeAgentsWithProperties(activeData);
+
+  // 4. STRICT FILTER: Only show properties where agent is 'pro' or 'premium'
+  return mergedData
+    .filter(p => p.planTier === 'pro' || p.planTier === 'premium')
     .slice(0, 3); // Only show the top 3
-
-  return await mergeAgentsWithProperties(filteredData);
 }
 
 // REPLACE THIS FUNCTION IN app-lib-data.ts
