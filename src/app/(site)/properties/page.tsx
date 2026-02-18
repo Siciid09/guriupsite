@@ -2,12 +2,12 @@ import PropertiesUI from "@/components/templates/PropertiesUI";
 
 export const dynamic = "force-dynamic";
 
-// 1. Define the interface to fix the "any" type error
+// 1. Define the interface to prevent "any" type errors
 interface PropertyData {
   id: string;
   agentPlanTier?: string;
   featured?: boolean;
-  [key: string]: any; // Allows for other property fields without strictly defining all 700 lines
+  [key: string]: any; 
 }
 
 async function getPropertiesData() {
@@ -24,12 +24,11 @@ async function getPropertiesData() {
     if (!featuredRes.ok) console.error(`Featured API Error: ${featuredRes.status}`);
     if (!allRes.ok) console.error(`All Properties API Error: ${allRes.status}`);
 
-    // 2. Cast the json response to our interface array
-    const featuredData: PropertyData[] = featuredRes.ok ? await featuredRes.ok.json() : [];
+    // 2. FIXED: Changed 'featuredRes.ok.json()' to 'featuredRes.json()'
+    const featuredData: PropertyData[] = featuredRes.ok ? await featuredRes.json() : [];
     const allData: PropertyData[] = allRes.ok ? await allRes.json() : [];
 
     // --- FORCE featured = true for frontend display ---
-    // Now 'p' is recognized as PropertyData, fixing the build error
     const featuredProperties = featuredData
       .filter((p: PropertyData) => p.agentPlanTier === "pro" || p.agentPlanTier === "premium")
       .map((p: PropertyData) => ({ ...p, featured: true }));
