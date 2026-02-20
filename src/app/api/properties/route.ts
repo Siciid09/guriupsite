@@ -28,15 +28,29 @@ export async function GET(request: Request) {
     // =========================================================
     // 1. SINGLE PROPERTY FETCH
     // =========================================================
+  // =========================================================
+    // 1. SINGLE PROPERTY FETCH (Dual Lookup: Slug -> ID)
+    // =========================================================
     if (id) {
-      const propRef = doc(db, 'property', id);
-      const propSnap = await getDoc(propRef);
+      let propSnap: any = null;
+      let pData: any = null;
+
+      // PRIORITY 1: Search by Slug
+      const slugQuery = query(collection(db, 'property'), where('slug', '==', id), limit(1));
+      const slugDocs = await getDocs(slugQuery);
+
+      if (!slugDocs.empty) {
+        propSnap = slugDocs.docs[0];
+        pData = propSnap.data();
+      } else {
+        // PRIORITY 2: Fallback to direct ID fetch
+        propSnap = await getDoc(doc(db, 'property', id));
+        if (propSnap.exists()) pData = propSnap.data();
+      }
       
-      if (!propSnap.exists()) {
+      if (!pData) {
         return NextResponse.json({ error: 'Property not found' }, { status: 404 });
       }
-
-      const pData = propSnap.data();
       const isPublic = pData?.isArchived === false && ['available', 'rented_out'].includes(pData?.status);
       
       if (!isPublic) {
@@ -122,8 +136,9 @@ function mergeAndNormalize(propDoc: DocumentSnapshot, liveAgentData: any) {
   const discountPrice = Number(p.discountPrice) || 0;
   const hasValidDiscount = (p.hasDiscount === true) && discountPrice > 0;
 
-  return {
+ return {
     id: propDoc.id,
+    slug: p.slug || null,
     title: p.title || 'Untitled Property',
     price: price,
     discountPrice: hasValidDiscount ? discountPrice : 0,

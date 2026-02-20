@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '@/app/lib/firebase';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
@@ -15,6 +17,7 @@ interface LocationData {
 
 interface Property {
   id: string;
+  slug?: string;
   title: string;
   price: number;
   images: string[];
@@ -60,11 +63,12 @@ const HomeUI = ({
   const [favorites, setFavorites] = useState<string[]>([]);
 
   // --- FILTER STATE ---
+ // --- FILTER STATE ---
   const [filterTab, setFilterTab] = useState<'buy' | 'rent' | 'hotel'>('buy');
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   
   // Selection State
-  const [selectedCity, setSelectedCity] = useState('Hargeisa');
+  const [selectedCity, setSelectedCity] = useState('All Cities');
   const [selectedType, setSelectedType] = useState('Any Type'); 
   const [selectedPrice, setSelectedPrice] = useState('Any Price');
 
@@ -72,7 +76,26 @@ const HomeUI = ({
   const [featIndex, setFeatIndex] = useState(0);
 
   // --- FILTER DATA ---
-  const cities = ['Hargeisa', 'Mogadishu', 'Berbera', 'Burco', 'Boorama', 'All Cities'];
+  const [cities, setCities] = useState<string[]>(['All Cities']);
+
+  // Fetch dynamic cities from Firebase
+  useEffect(() => {
+    const fetchCities = async () => {
+      try {
+        const q = query(collection(db, 'cities'), where('isVerified', '==', true));
+        const snap = await getDocs(q);
+        const fetched = snap.docs.map(doc => {
+          const name = doc.data().name || '';
+          // Capitalize first letter of each word
+          return name.replace(/\b\w/g, (l: string) => l.toUpperCase());
+        });
+        setCities(['All Cities', ...fetched]);
+      } catch (e) {
+        console.error("Failed to fetch cities:", e);
+      }
+    };
+    fetchCities();
+  }, []);
   const propertyTypes = ['Any Type', 'Apartment', 'Villa', 'Office', 'House', 'Land', 'Commercial', 'Hall'];
   const hotelRoomTypes = ['Any Room', 'Single Room', 'Double Room', 'Twin Room', 'Triple Room', 'Family Room', 'Suite', 'Deluxe Room', 'Studio Room'];
   const buyPrices = ['Any Price', '$10k - $50k', '$50k - $100k', '$100k - $200k', '$200k+'];
@@ -563,7 +586,7 @@ const HomeUI = ({
           <h2 className="text-slate-900 text-2xl font-black mb-8">Recently Added</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {latestProperties.map((property) => (
-              <Link href={`/properties/${property.id}`} key={property.id} className="bg-white p-3 rounded-2xl shadow-sm hover:shadow-md transition-all group block border border-slate-100">
+              <Link href={`/properties/${property.slug || property.id}`} key={property.id} className="bg-white p-3 rounded-2xl shadow-sm hover:shadow-md transition-all group block border border-slate-100">
                 <div className="relative h-32 rounded-xl overflow-hidden mb-3 bg-slate-100">
                    <img src={property.images?.[0] || 'https://placehold.co/600x400?text=No+Image'} className="object-cover w-full h-full group-hover:scale-110 transition-transform duration-500" alt={property.title} />
                    <div className="absolute top-2 right-2 bg-black/50 backdrop-blur px-2 py-0.5 rounded text-[9px] text-white font-bold uppercase">{property.status === 'rented_out' ? 'Rented' : (property.isForSale ? 'Buy' : 'Rent')}</div>
@@ -697,14 +720,14 @@ const HomeUI = ({
                     
                     <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
                         <button 
-                            onClick={() => router.push('/referrals')}
+                            onClick={() => router.push('/referral')}
                             className="bg-white text-[#0065eb] px-8 py-4 rounded-xl font-bold text-sm shadow-xl hover:bg-gray-100 transition-all flex items-center justify-center gap-2"
                         >
                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
                            Share Your Link
                         </button>
                         <button 
-                            onClick={() => router.push('/referrals')}
+                            onClick={() => router.push('/referral')}
                             className="border border-white/30 text-white px-8 py-4 rounded-xl font-bold text-sm hover:bg-white/10 transition-all"
                         >
                            How it Works
@@ -805,7 +828,7 @@ const HomeUI = ({
 const PropertyCard = ({ property, favorites, toggleFavorite, handleShare, formatPrice, getLocationString }: any) => {
     const isVerified = property.planTier === 'pro' || property.planTier === 'premium' || property.agentVerified;
     const isFavorite = favorites.includes(property.id);
-    const propertyPath = `/properties/${property.id}`;
+    const propertyPath = `/properties/${property.slug || property.id}`;
     
     // Use 'area' from types.ts, fallback to 'size' for legacy data
     const displaySize = property.area || property.size || 0;

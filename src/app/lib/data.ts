@@ -75,6 +75,11 @@ async function mergeAgentsWithProperties(properties: any[]) {
 
     return {
       ...p,
+      // --- GUARANTEED FIX: Normalize specs from nested 'features' object ---
+      bedrooms: Number(p.bedrooms || p.features?.bedrooms || 0),
+      bathrooms: Number(p.bathrooms || p.features?.bathrooms || 0),
+      area: Number(p.area || p.size || p.features?.area || p.features?.size || 0),
+      
       // Prioritize business name, fall back to user name
       agentName: agentData.businessName || agentData.name || agentData.displayName || p.agentName || 'GuriUp Agent',
       agentVerified: isVerified,
@@ -164,17 +169,25 @@ export async function getAllProperties(): Promise<Property[]> {
 }
 
 export async function getPropertyBySlug(slug: string): Promise<Property | null> {
-  const docRef = doc(db, 'property', slug);
-  const docSnap = await getDoc(docRef);
-  
-  if (!docSnap.exists()) return null;
+  let docSnap: any = null;
+
+  // PRIORITY 1: Search by slug field
+  const slugQuery = query(collection(db, 'property'), where('slug', '==', slug), limit(1));
+  const slugDocs = await getDocs(slugQuery);
+
+  if (!slugDocs.empty) {
+    docSnap = slugDocs.docs[0];
+  } else {
+    // PRIORITY 2: Fallback to direct ID fetch
+    docSnap = await getDoc(doc(db, 'property', slug));
+  }
+
+  if (!docSnap || !docSnap.exists()) return null;
   
   const data = docSnap.data();
   
   // Strict Privacy Guard for Direct Access
-  // If explicitly archived, return null.
   if (data.isArchived === true) return null;
-  // If status exists and is draft, return null. (If status missing, allow it).
   if (data.status && !['available', 'rented_out'].includes(data.status)) return null;
 
   const transformed = transformDoc<Property>(docSnap as QueryDocumentSnapshot<DocumentData>);
@@ -218,14 +231,25 @@ export async function getLatestHotels(): Promise<Hotel[]> {
 // =======================================================================
 
 export async function getAgentDetails(agentId: string): Promise<Agent | null> {
-  // 1. Check Agents
-  const agentRef = doc(db, 'agents', agentId);
-  const agentSnap = await getDoc(agentRef);
-  if (agentSnap.exists()) return transformDoc<Agent>(agentSnap as QueryDocumentSnapshot<DocumentData>);
+  let agentSnap: any = null;
 
-  // 2. Check Users
-  const userRef = doc(db, 'users', agentId);
-  const userSnap = await getDoc(userRef);
+  // 1. Check Agents collection by Slug
+  const slugQuery = query(collection(db, 'agents'), where('slug', '==', agentId), limit(1));
+  const slugDocs = await getDocs(slugQuery);
+
+  if (!slugDocs.empty) {
+    agentSnap = slugDocs.docs[0];
+  } else {
+    // 2. Fallback to Check Agents collection by ID
+    agentSnap = await getDoc(doc(db, 'agents', agentId));
+  }
+
+  if (agentSnap && agentSnap.exists()) {
+    return transformDoc<Agent>(agentSnap as QueryDocumentSnapshot<DocumentData>);
+  }
+
+  // 3. Ultimate Fallback to Users collection (Auth ID only)
+  const userSnap = await getDoc(doc(db, 'users', agentId));
   return userSnap.exists() ? transformDoc<Agent>(userSnap as QueryDocumentSnapshot<DocumentData>) : null;
 }
 
@@ -259,9 +283,20 @@ export async function getAllHotels(): Promise<Hotel[]> {
 }
 
 export async function getHotelBySlug(slug: string): Promise<Hotel | null> {
-  const docRef = doc(db, 'hotels', slug);
-  const docSnap = await getDoc(docRef);
-  return docSnap.exists() ? transformDoc<Hotel>(docSnap as QueryDocumentSnapshot<DocumentData>) : null;
+  let docSnap: any = null;
+
+  // PRIORITY 1: Search by slug field
+  const slugQuery = query(collection(db, 'hotels'), where('slug', '==', slug), limit(1));
+  const slugDocs = await getDocs(slugQuery);
+
+  if (!slugDocs.empty) {
+    docSnap = slugDocs.docs[0];
+  } else {
+    // PRIORITY 2: Fallback to direct ID
+    docSnap = await getDoc(doc(db, 'hotels', slug));
+  }
+
+  return docSnap && docSnap.exists() ? transformDoc<Hotel>(docSnap as QueryDocumentSnapshot<DocumentData>) : null;
 }
 
 export async function getHotelRooms(hotelId: string): Promise<Room[]> {

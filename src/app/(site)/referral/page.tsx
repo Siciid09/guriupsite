@@ -81,7 +81,7 @@ export default function ReferralSystem() {
   };
 
   const fullReferralLink = userData?.referralCode 
-    ? `${origin}/register?ref=${userData.referralCode}` 
+    ? `${origin}/invites/${userData.referralCode}` 
     : '';
 
   const handleCopy = () => {

@@ -21,11 +21,24 @@ const sanitizeData = (data: any) => {
 };
 
 // 1. FETCH DATA HELPER (Runs on Server)
-async function getPropertyData(slug: string) {
-  const propertyRef = doc(db, 'property', slug);
-  const propertySnap = await getDoc(propertyRef);
+// 1. FETCH DATA HELPER (Runs on Server)
+import { collection, query, where, limit, getDocs } from 'firebase/firestore'; // Make sure these are imported at the top!
 
-  if (!propertySnap.exists()) return null;
+async function getPropertyData(slug: string) {
+  let propertySnap: any = null;
+
+  // PRIORITY 1: Search by slug field
+  const slugQuery = query(collection(db, 'property'), where('slug', '==', slug), limit(1));
+  const slugDocs = await getDocs(slugQuery);
+
+  if (!slugDocs.empty) {
+    propertySnap = slugDocs.docs[0];
+  } else {
+    // PRIORITY 2: Fallback to direct ID fetch
+    propertySnap = await getDoc(doc(db, 'property', slug));
+  }
+
+  if (!propertySnap || !propertySnap.exists()) return null;
 
   // Get raw data
   const rawProperty = { id: propertySnap.id, ...propertySnap.data() };

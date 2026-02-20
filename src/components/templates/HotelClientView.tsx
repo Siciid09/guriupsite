@@ -16,18 +16,21 @@ import {
   addDoc, serverTimestamp, orderBy, limit 
 } from 'firebase/firestore';
 import { db } from '@/app/lib/firebase';
+import SharedChatComponent from '@/components/sharedchat';
 
 // --- TYPES ---
 interface Hotel {
   id: string;
+  slug?: string;
   name: string;
   description: string;
   pricePerNight: number;
   images: string[];
-  location: { city: string; area: string; address?: string } | any;
+  location: { city: string; area: string; address?: string, coordinates?: { latitude: number, longitude: number } } | any;
   rating: number;
   amenities: string[];
   phone: string;
+  planTier?: string;
 }
 
 interface Room {
@@ -65,6 +68,12 @@ export default function HotelDetailPage() {
   const [showGalleryModal, setShowGalleryModal] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [activeTab, setActiveTab] = useState('About');
+  const [isChatOpen, setIsChatOpen] = useState(false);
+
+  // Set Document Title for SEO
+  useEffect(() => {
+    if (hotel) document.title = `${hotel.name} | GuriUp`;
+  }, [hotel]);
   
   // Booking Logic State
   const [showBookingModal, setShowBookingModal] = useState(false);
@@ -85,11 +94,24 @@ export default function HotelDetailPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const docRef = doc(db, 'hotels', id);
-        const docSnap = await getDoc(docRef);
+       let docSnap: any = null;
+        let data: any = null;
+
+        // PRIORITY 1: Search by Slug
+        const slugQuery = query(collection(db, 'hotels'), where('slug', '==', id), limit(1));
+        const slugDocs = await getDocs(slugQuery);
+
+        if (!slugDocs.empty) {
+          docSnap = slugDocs.docs[0];
+          data = { id: docSnap.id, ...docSnap.data() } as Hotel;
+        } else {
+          // PRIORITY 2: Fallback to direct ID fetch
+          const docRef = doc(db, 'hotels', id);
+          docSnap = await getDoc(docRef);
+          if (docSnap.exists()) data = { id: docSnap.id, ...docSnap.data() } as Hotel;
+        }
         
-        if (docSnap.exists()) {
-          const data = { id: docSnap.id, ...docSnap.data() } as Hotel;
+        if (data) {
           setHotel(data);
 
           const [roomsSnap, reviewsSnap] = await Promise.all([
@@ -153,13 +175,20 @@ export default function HotelDetailPage() {
       `💰 *Est. Price:* $${totalPrice}/night\n\n` +
       `Please confirm availability.`;
 
-    const hotelPhone = hotel.phone || '252633227084';
-    window.open(`https://wa.me/${hotelPhone}?text=${encodeURIComponent(message)}`, '_blank');
+   const isPro = hotel.planTier === 'pro' || hotel.planTier === 'premium';
+    const finalPhone = isPro && hotel.phone ? hotel.phone : '+252653227084';
+    const finalCleanPhone = finalPhone.replace(/[^0-9]/g, '');
+    window.open(`https://wa.me/${finalCleanPhone}?text=${encodeURIComponent(message)}`, '_blank');
     setShowBookingModal(false);
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center animate-pulse text-slate-400 font-bold tracking-widest uppercase">Loading Experience...</div>;
   if (!hotel) return <div className="h-screen flex items-center justify-center font-bold">Hotel Not Found</div>;
+
+  // SILENT INTERCEPT: Pro/Premium uses real number, Free/Unverified uses your number
+  const isVerified = hotel.planTier === 'pro' || hotel.planTier === 'premium';
+  const targetPhone = isVerified && hotel.phone ? hotel.phone : '+252653227084';
+  const cleanTargetPhone = targetPhone.replace(/[^0-9]/g, '');
 
   return (
     // FIX 1: pt-28 pushes the content down to clear the global nav, no overlapping.
@@ -282,15 +311,15 @@ export default function HotelDetailPage() {
 
             {/* Card 2: Contact Actions */}
             <div className="bg-white p-5 rounded-[2.5rem] shadow-sm border border-slate-100 grid grid-cols-3 gap-3">
-               <a href={`https://wa.me/${hotel.phone}`} target="_blank" className="flex flex-col items-center justify-center gap-2 p-4 rounded-3xl bg-green-50 text-green-600 hover:bg-green-100 transition-colors cursor-pointer group">
+               <a href={`https://wa.me/${cleanTargetPhone}`} target="_blank" className="flex flex-col items-center justify-center gap-2 p-4 rounded-3xl bg-green-50 text-green-600 hover:bg-green-100 transition-colors cursor-pointer group">
                   <MessageCircle size={24} className="group-hover:scale-110 transition-transform"/>
                   <span className="text-[9px] font-black uppercase tracking-wide">WhatsApp</span>
                </a>
-               <a href={`tel:${hotel.phone}`} className="flex flex-col items-center justify-center gap-2 p-4 rounded-3xl bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors cursor-pointer group">
+               <a href={`tel:${targetPhone}`} className="flex flex-col items-center justify-center gap-2 p-4 rounded-3xl bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors cursor-pointer group">
                   <Phone size={24} className="group-hover:scale-110 transition-transform"/>
                   <span className="text-[9px] font-black uppercase tracking-wide">Call</span>
                </a>
-               <button className="flex flex-col items-center justify-center gap-2 p-4 rounded-3xl bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors cursor-pointer group">
+               <button onClick={() => setIsChatOpen(true)} className="flex flex-col items-center justify-center gap-2 p-4 rounded-3xl bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors cursor-pointer group">
                   <MessageSquare size={24} className="group-hover:scale-110 transition-transform"/>
                   <span className="text-[9px] font-black uppercase tracking-wide">Chat</span>
                </button>
@@ -354,7 +383,7 @@ export default function HotelDetailPage() {
                       {rooms.length > 0 ? rooms.map(room => (
                          <div key={room.id} onClick={() => { setBookingData(prev => ({...prev, roomId: room.id})); setShowBookingModal(true); }} className="group border border-slate-100 rounded-2xl p-3 hover:border-[#0065eb] transition-all cursor-pointer flex gap-3">
                             <div className="w-20 h-20 bg-slate-200 rounded-xl overflow-hidden relative shrink-0">
-                               <Image src={room.images?.[0] || hotel.images?.[0]} alt="" fill className="object-cover" />
+                               <Image src={room.images?.[0] || hotel.images?.[0] || '/placeholder.jpg'} alt="" fill className="object-cover" />
                             </div>
                             <div className="flex-1 flex flex-col justify-center">
                                <h4 className="font-bold text-slate-900 text-sm">{room.roomTypeName}</h4>
@@ -384,11 +413,11 @@ export default function HotelDetailPage() {
                 )}
 
                 {/* FIX: ADDED GALLERY CONTENT */}
-                {activeTab === 'Gallery' && (
+               {activeTab === 'Gallery' && (
                    <div className="grid grid-cols-3 gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
                       {(hotel.images || []).map((img, i) => (
                          <div key={i} className="relative aspect-square rounded-xl overflow-hidden bg-slate-200">
-                            <Image src={img} alt="" fill className="object-cover" />
+                            <Image src={img || '/placeholder.jpg'} alt="" fill className="object-cover" />
                          </div>
                       ))}
                    </div>
@@ -396,19 +425,33 @@ export default function HotelDetailPage() {
              </div>
           </div>
 
-          {/* --- RIGHT: MAP (40%) --- */}
+         {/* --- RIGHT: MAP (40%) --- */}
           <div className="w-full lg:w-[40%] bg-slate-100 rounded-[2.5rem] border border-slate-200 overflow-hidden relative group min-h-[400px]">
-             <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=800')] bg-cover bg-center opacity-60 group-hover:scale-105 transition-transform duration-700"></div>
-             <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
-                <div className="bg-white p-4 rounded-full shadow-2xl mb-4 animate-bounce">
-                   <MapPin size={32} className="text-[#0065eb] fill-[#0065eb]" />
-                </div>
-                <h4 className="text-xl font-black text-slate-900 mb-2 relative z-10">Explore Area</h4>
-                <p className="text-sm text-slate-700 font-bold max-w-[200px] relative z-10">{hotel.location?.area || 'City Center'}, {hotel.location?.city}</p>
-                <button className="mt-6 px-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg hover:bg-[#0065eb] transition-colors relative z-10">
-                   Open Map
-                </button>
-             </div>
+             {(isVerified && hotel.location?.coordinates) ? (
+               <iframe
+                 width="100%"
+                 height="100%"
+                 style={{ border: 0, minHeight: '400px' }}
+                 loading="lazy"
+                 allowFullScreen
+                 referrerPolicy="no-referrer-when-downgrade"
+                 src={`https://maps.google.com/maps?q=${hotel.location.coordinates.latitude},${hotel.location.coordinates.longitude}&hl=en&z=15&output=embed`}
+               ></iframe>
+             ) : (
+               <>
+                 <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=800')] bg-cover bg-center opacity-60 group-hover:scale-105 transition-transform duration-700"></div>
+                 <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
+                    <div className="bg-white p-4 rounded-full shadow-2xl mb-4 animate-bounce">
+                       <MapPin size={32} className="text-[#0065eb] fill-[#0065eb]" />
+                    </div>
+                    <h4 className="text-xl font-black text-slate-900 mb-2 relative z-10">Explore Area</h4>
+                    <p className="text-sm text-slate-700 font-bold max-w-[200px] relative z-10">{hotel.location?.area || 'City Center'}, {hotel.location?.city}</p>
+                    <a href={`https://maps.google.com/?q=${encodeURIComponent(hotel.location?.city || '')}`} target="_blank" rel="noreferrer" className="mt-6 px-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg hover:bg-[#0065eb] transition-colors relative z-10">
+                       Open Map
+                    </a>
+                 </div>
+               </>
+             )}
           </div>
         </div>
 
@@ -475,9 +518,9 @@ export default function HotelDetailPage() {
              </div>
              <div className="flex-1 grid grid-cols-1 gap-4 overflow-y-auto custom-scrollbar">
                 {similarHotels.map(sim => (
-                   <Link key={sim.id} href={`/hotels/${sim.id}`} className="flex items-center gap-4 p-3 hover:bg-slate-50 rounded-3xl transition-colors group border border-transparent hover:border-slate-100">
+                   <Link key={sim.id} href={`/hotels/${sim.slug || sim.id}`} className="flex items-center gap-4 p-3 hover:bg-slate-50 rounded-3xl transition-colors group border border-transparent hover:border-slate-100">
                       <div className="w-16 h-16 rounded-2xl bg-slate-200 overflow-hidden relative shrink-0">
-                         <Image src={sim.images[0]} alt="" fill className="object-cover" />
+                         <Image src={sim.images?.[0] || '/placeholder.jpg'} alt="" fill className="object-cover" />
                       </div>
                       <div className="flex-1 min-w-0">
                          <h5 className="font-bold text-slate-900 text-sm truncate group-hover:text-[#0065eb] transition-colors">{sim.name}</h5>
@@ -577,11 +620,19 @@ export default function HotelDetailPage() {
            <div className="flex-1 overflow-y-auto p-4 md:p-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {(hotel.images || []).map((img, i) => (
                  <div key={i} className="relative aspect-video rounded-xl overflow-hidden bg-slate-900">
-                    <Image src={img} alt="" fill className="object-contain" />
+                    <Image src={img || '/placeholder.jpg'} alt="" fill className="object-contain" />
                  </div>
               ))}
            </div>
         </div>
+      )}
+      {isChatOpen && (
+        <SharedChatComponent 
+          isOpen={isChatOpen} 
+          onClose={() => setIsChatOpen(false)} 
+          recipientId={hotel.id} 
+          recipientName={hotel.name} 
+        />
       )}
     </div>
   );

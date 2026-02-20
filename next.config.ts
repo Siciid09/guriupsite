@@ -38,6 +38,14 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "*.googleusercontent.com", // Catches lh4, lh5, etc.
       },
+
+      // Add this new block for placehold.co
+      {
+        protocol: 'https',
+        hostname: 'placehold.co',
+        port: '',
+        pathname: '/**',
+      },
     ],
   },
 };

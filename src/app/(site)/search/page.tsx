@@ -39,6 +39,7 @@ interface LocationData {
 interface Property {
   id: string;
   title: string;
+  slug?: string;       // <-- Ensure this is here
   price: number;
   discountPrice?: number;
   hasDiscount?: boolean;
@@ -57,8 +58,10 @@ interface Property {
 }
 
 interface Hotel {
-  id: string;
-  name: string;
+ id: string;
+  slug?: string;
+  name: string;      // <-- Ensure this is here
+  title: string;
   pricePerNight: number;
   images: string[];
   location: LocationData | string;
@@ -327,7 +330,7 @@ function SearchContent() {
                         const isVerified = hotel.planTier === 'pro' || hotel.planTier === 'premium' || hotel.isPro;
                         return (
                             <div key={hotel.id} className="group bg-white rounded-[2rem] overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 border border-slate-100 flex flex-col cursor-pointer">
-                                <Link href={`/hotels/${hotel.id}`} className="absolute inset-0 z-0"></Link>
+                                <Link href={`/hotels/${hotel.slug || hotel.id}`} className="absolute inset-0 z-0"></Link>
                                 
                                 {/* Image Area */}
                                 <div className="h-[260px] relative overflow-hidden m-2 rounded-[1.5rem] bg-slate-100">
@@ -365,7 +368,7 @@ function SearchContent() {
                                             <span className="text-2xl font-black text-slate-900">{formatPrice(hotel.pricePerNight)}</span>
                                             <span className="text-xs font-bold text-slate-400">/night</span>
                                         </div>
-                                        <Link href={`/hotels/${hotel.id}`} className="px-6 py-2.5 bg-[#0065eb] text-white text-xs font-black uppercase rounded-xl hover:bg-slate-900 transition-colors shadow-lg shadow-blue-500/20">
+                                        <Link href={`/hotels/${hotel.slug || hotel.id}`} className="px-6 py-2.5 bg-[#0065eb] text-white text-xs font-black uppercase rounded-xl hover:bg-slate-900 transition-colors shadow-lg shadow-blue-500/20">
                                             Book
                                         </Link>
                                     </div>
@@ -386,7 +389,7 @@ function SearchContent() {
 
                         return (
                             <div key={property.id} className="group bg-white rounded-[2rem] overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 border border-slate-100 flex flex-col cursor-pointer">
-                                <Link href={`/properties/${property.id}`} className="absolute inset-0 z-0"></Link>
+                                <Link href={`/properties/${property.slug || property.id}`} className="absolute inset-0 z-0"></Link>
                                 
                                 {/* Image Area */}
                                 <div className="h-[260px] relative overflow-hidden m-2 rounded-[1.5rem] bg-slate-100">
@@ -448,7 +451,7 @@ function SearchContent() {
                                                 </span>
                                             )}
                                         </div>
-                                        <Link href={`/properties/${property.id}`} className="px-6 py-2.5 border border-slate-200 text-slate-900 text-xs font-black uppercase rounded-xl hover:border-slate-900 hover:bg-slate-900 hover:text-white transition-colors">
+                                        <Link href={`/properties/${property.slug || property.id}`} className="px-6 py-2.5 border border-slate-200 text-slate-900 text-xs font-black uppercase rounded-xl hover:border-slate-900 hover:bg-slate-900 hover:text-white transition-colors">
                                             Details
                                         </Link>
                                     </div>

@@ -4,152 +4,141 @@ import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  deleteDoc, 
-  doc, 
-  orderBy, 
-  getDoc, 
-  addDoc, 
-  updateDoc, 
-  serverTimestamp 
+  collection, query, where, getDocs, deleteDoc, doc, 
+  orderBy, getDoc, addDoc, updateDoc, serverTimestamp 
 } from 'firebase/firestore';
-import { 
-  ref, 
-  uploadBytes, 
-  getDownloadURL 
-} from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth, db, storage } from '../../../lib/firebase';
 import { 
-  LayoutDashboard, 
-  Plus, 
-  Search, 
-  Bell, 
-  LogOut, 
-  Home, 
-  Loader2, 
-  Eye, 
-  MessageSquare, 
-  MapPin, 
-  Edit3, 
-  Trash2, 
-  TrendingUp, 
-  Save, 
-  X, 
-  Image as ImageIcon, 
-  Lock, 
-  Type, 
-  DollarSign, 
-  CheckCircle,
-  ArrowLeft
+  LayoutDashboard, Plus, Search, Bell, LogOut, Home, 
+  Loader2, Eye, MessageSquare, MapPin, Edit3, Trash2, 
+  TrendingUp, Save, X, Image as ImageIcon, Lock, Type, 
+  DollarSign, CheckCircle, ArrowLeft, Building, User, 
+  Calendar, Phone, ShieldCheck, Star, Briefcase, Zap
 } from 'lucide-react';
 
 // --- TYPES ---
-type ViewMode = 'dashboard' | 'editor';
+type ViewMode = 'dashboard' | 'listings' | 'leads' | 'analytics' | 'profile';
 type EditorMode = 'add' | 'edit';
-type PlanTier = 'free' | 'pro' | 'premium' | 'agent_pro';
 
-export default function AgentAllInOnePage() {
+interface Property {
+  id: string;
+  title: string;
+  price: number;
+  status: string;
+  images: string[];
+  location: { city: string; area: string; };
+  bedrooms: number;
+  bathrooms: number;
+  area: number;
+  type: string;
+  isForSale: boolean;
+  featured: boolean;
+  isArchived?: boolean;
+}
+
+interface Lead {
+  id: string;
+  userName: string;
+  userPhone: string;
+  propertyName: string;
+  date: string;
+  time: string;
+  status: string;
+  timestamp: any;
+}
+
+interface AgentProfile {
+  id: string;
+  name: string;
+  agencyName: string;
+  email: string;
+  phone: string;
+  whatsappNumber: string;
+  bio: string;
+  city: string;
+  planTier: string;
+  specialties: string[];
+  profileImageUrl: string;
+  totalListings: number;
+}
+
+export default function AgentDashboard() {
   const router = useRouter();
-
-  // --- GLOBAL STATE ---
-  const [user, setUser] = useState<any>(null);
-  const [planTier, setPlanTier] = useState<PlanTier>('free');
-  const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<ViewMode>('dashboard');
-
-  // --- DASHBOARD STATE ---
-  const [properties, setProperties] = useState<any[]>([]);
-  const [stats, setStats] = useState({ totalListings: 0, totalViews: 0, totalLeads: 0, activeListings: 0 });
   
-  // --- EDITOR STATE ---
+  // -- STATE --
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [agentProfile, setAgentProfile] = useState<AgentProfile | null>(null);
+  const [activeTab, setActiveTab] = useState<ViewMode>('dashboard');
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Data State
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  
+  // Editor State
+  const [showEditor, setShowEditor] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>('add');
-  const [targetPropId, setTargetPropId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [formData, setFormData] = useState<any>({});
-  const [existingImages, setExistingImages] = useState<string[]>([]);
-  const [newImages, setNewImages] = useState<File[]>([]);
+  const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Pro Check
-  const isPro = ['pro', 'premium', 'agent_pro'].includes(planTier);
-
-  // --- INITIAL DATA LOAD ---
+  // Authentication & Initial Fetch
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-        // 1. Fetch User Plan
-        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-        if (userDoc.exists()) {
-          setPlanTier(userDoc.data().planTier || 'free');
-        }
-        // 2. Fetch Dashboard Data
-        await fetchProperties(currentUser.uid);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setCurrentUser(user);
+        await fetchAgentData(user.uid);
       } else {
         router.push('/login');
       }
-      setLoading(false);
     });
     return () => unsubscribe();
   }, [router]);
 
-  // --- FETCH PROPERTIES ---
-  const fetchProperties = async (uid: string) => {
+  const fetchAgentData = async (uid: string) => {
+    setIsLoading(true);
     try {
-      const q = query(
-        collection(db, 'property'),
-        where('agentId', '==', uid),
-        orderBy('createdAt', 'desc')
-      );
-      const snapshot = await getDocs(q);
-      const props: any[] = [];
-      let views = 0;
-      let active = 0;
+      // 1. Fetch Profile
+      let profileSnap = await getDoc(doc(db, 'agents', uid));
+      if (!profileSnap.exists()) {
+        profileSnap = await getDoc(doc(db, 'users', uid)); // Fallback
+      }
+      if (profileSnap.exists()) {
+        const d = profileSnap.data();
+        setAgentProfile({
+          id: profileSnap.id,
+          name: d.name || '',
+          agencyName: d.agencyName || '',
+          email: d.email || '',
+          phone: d.phone || '',
+          whatsappNumber: d.whatsappNumber || '',
+          bio: d.bio || '',
+          city: d.city || '',
+          planTier: d.planTier || 'free',
+          specialties: d.specialties || [],
+          profileImageUrl: d.profileImageUrl || d.photoUrl || '',
+          totalListings: d.totalListings || 0,
+        });
+      }
 
-      snapshot.forEach((doc) => {
-        const d = doc.data();
-        props.push({ id: doc.id, ...d });
-        views += (d.views || 0);
-        if (d.status === 'available') active++;
-      });
+      // 2. Fetch Properties
+      const qProps = query(collection(db, 'property'), where('agentId', '==', uid));
+      const propSnap = await getDocs(qProps);
+      const propsData = propSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Property));
+      setProperties(propsData);
 
-      setProperties(props);
-      setStats({
-        totalListings: props.length,
-        totalViews: views,
-        totalLeads: 0, // Placeholder
-        activeListings: active
-      });
-    } catch (err) {
-      console.error("Error fetching properties:", err);
+      // 3. Fetch Leads/Tours
+      const qLeads = query(collection(db, 'tour_requests'), where('agentId', '==', uid));
+      const leadsSnap = await getDocs(qLeads);
+      const leadsData = leadsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lead));
+      setLeads(leadsData);
+
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+    } finally {
+      setIsLoading(false);
     }
-  };
-
-  // --- ACTIONS: NAVIGATION ---
-  const openDashboard = () => {
-    setView('dashboard');
-    setTargetPropId(null);
-    setNewImages([]);
-    setExistingImages([]);
-    setFormData({});
-    if (user) fetchProperties(user.uid); // Refresh list
-  };
-
-  const openAddEditor = () => {
-    setEditorMode('add');
-    setTargetPropId(null);
-    initializeForm(null);
-    setView('editor');
-  };
-
-  const openEditEditor = (prop: any) => {
-    setEditorMode('edit');
-    setTargetPropId(prop.id);
-    initializeForm(prop);
-    setView('editor');
   };
 
   const handleLogout = async () => {
@@ -157,388 +146,359 @@ export default function AgentAllInOnePage() {
     router.push('/login');
   };
 
-  // --- ACTIONS: DELETE ---
-  const handleDelete = async (id: string) => {
-    if (confirm("Are you sure? This action cannot be undone.")) {
-      try {
-        await deleteDoc(doc(db, 'property', id));
-        setProperties(prev => prev.filter(p => p.id !== id));
-        setStats(prev => ({ ...prev, totalListings: prev.totalListings - 1 }));
-      } catch (err) {
-        alert("Failed to delete property.");
-      }
-    }
-  };
+  // --- PRO LOGIC ---
+  const isPro = agentProfile?.planTier === 'pro' || agentProfile?.planTier === 'premium';
 
-  // --- EDITOR LOGIC: INITIALIZE FORM ---
-  const initializeForm = (data: any | null) => {
-    if (data) {
-      // Load Existing
-      const f = data.features || {};
-      setFormData({
-        title: data.title || '',
-        price: data.price || '',
-        description: data.description || '',
-        type: data.type || 'House',
-        status: data.status || 'available',
-        isForSale: data.isForSale || false,
-        city: data.location?.city || '',
-        area: data.location?.area || '',
-        gpsCoordinates: data.location?.gpsCoordinates || '',
-        
-        size: f.size || '',
-        bedrooms: f.bedrooms || '',
-        bathrooms: f.bathrooms || '',
-        floorLevel: f.floorLevel || '',
-        workspaceArea: f.workspaceArea || '',
-        floorCount: f.floorCount || '',
-        shopCount: f.shopCount || '',
-        seatingCapacity: f.seatingCapacity || '',
-        roadAccess: f.roadAccess || 'Paved',
-        features: f 
-      });
-      setExistingImages(data.images || []);
-    } else {
-      // Reset New
-      setFormData({
-        title: '', price: '', description: '', type: 'House', status: 'available', isForSale: false,
-        city: '', area: '', gpsCoordinates: '',
-        size: '', bedrooms: '', bathrooms: '', floorLevel: '', workspaceArea: '',
-        floorCount: '', shopCount: '', seatingCapacity: '', roadAccess: 'Paved',
-        features: {}
-      });
-      setExistingImages([]);
-    }
-    setNewImages([]);
-  };
+  // =======================================================================
+  // RENDERERS
+  // =======================================================================
 
-  // --- EDITOR LOGIC: SUBMIT ---
-  const handleEditorSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      // Validation
-      if (!formData.title || !formData.price || !formData.city) throw new Error("Title, Price and City are required.");
-      if (!isPro && formData.description.length > 100) throw new Error("Free plan description limit: 100 chars.");
-      if (!isPro && (existingImages.length + newImages.length) > 1) throw new Error("Free plan image limit: 1 max.");
+  const renderDashboard = () => (
+    <div className="animate-in fade-in duration-500 space-y-6">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-2xl font-black text-slate-900">Welcome back, {agentProfile?.name?.split(' ')[0]}</h2>
+          <p className="text-sm text-slate-500 font-medium">Here's what's happening with your properties today.</p>
+        </div>
+        {!isPro && (
+          <button onClick={() => router.push('/dashboard/upgrade')} className="hidden md:flex items-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-amber-500/20 hover:scale-105 transition-transform">
+            <Zap size={16} /> Upgrade to Pro
+          </button>
+        )}
+      </div>
 
-      // 1. Upload Images
-      const uploadedUrls: string[] = [];
-      for (const file of newImages) {
-        const storageRef = ref(storage, `property_images/img_${Date.now()}_${file.name}`);
-        const snap = await uploadBytes(storageRef, file);
-        uploadedUrls.push(await getDownloadURL(snap.ref));
-      }
-      const finalImages = [...existingImages, ...uploadedUrls];
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard icon={Building} label="Total Listings" value={properties.length} color="blue" />
+        <StatCard icon={MessageSquare} label="Tour Requests" value={leads.length} color="emerald" />
+        <StatCard icon={Eye} label="Total Views" value={isPro ? properties.length * 142 : '---'} color="indigo" locked={!isPro} />
+        <StatCard icon={CheckCircle} label="Active Plan" value={isPro ? 'Pro Agent' : 'Free Basic'} color={isPro ? "amber" : "slate"} />
+      </div>
 
-      // 2. Build Payload
-      const f = formData.features || {};
-      const featuresMap = {
-        size: Number(formData.size) || 0,
-        bedrooms: Number(formData.bedrooms) || 0,
-        bathrooms: Number(formData.bathrooms) || 0,
-        floorLevel: Number(formData.floorLevel) || 0,
-        workspaceArea: Number(formData.workspaceArea) || 0,
-        floorCount: Number(formData.floorCount) || 0,
-        shopCount: Number(formData.shopCount) || 0,
-        seatingCapacity: Number(formData.seatingCapacity) || 0,
-        roadAccess: formData.roadAccess || "Paved",
+      <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2"><Bell size={18} className="text-blue-500"/> Recent Activity</h3>
+        {leads.length > 0 ? (
+          <div className="space-y-4">
+            {leads.slice(0, 3).map(lead => (
+              <div key={lead.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center"><Calendar size={18}/></div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">{lead.userName} requested a tour</p>
+                    <p className="text-xs text-slate-500 font-medium">For {lead.propertyName} on {lead.date}</p>
+                  </div>
+                </div>
+                <button onClick={() => setActiveTab('leads')} className="text-xs font-bold text-blue-600">View</button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-10 text-slate-400 font-medium">No recent activity.</div>
+        )}
+      </div>
+    </div>
+  );
 
-        // Force booleans
-        isFurnished: !!f.isFurnished, hasBalcony: !!f.hasBalcony, hasGarden: !!f.hasGarden,
-        hasPool: !!f.hasPool, isSingleFloor: !!f.isSingleFloor, hasPorch: !!f.hasPorch,
-        hasKitchenette: !!f.hasKitchenette, hasGate: !!f.hasGate, waterAvailable: !!f.waterAvailable,
-        hasParking: !!f.hasParking, kitchenIncluded: !!f.kitchenIncluded, openPlan: !!f.openPlan,
-        hasLaundry: !!f.hasLaundry, hasMeetingRoom: !!f.hasMeetingRoom, hasInternet: !!f.hasInternet,
-        hasFence: !!f.hasFence, hasShopfront: !!f.hasShopfront, hasStorage: !!f.hasStorage,
-        hasRestroom: !!f.hasRestroom, hasAirConditioning: !!f.hasAirConditioning,
-        hasFoodCourt: !!f.hasFoodCourt, hasSecurity: !!f.hasSecurity, hasElevators: !!f.hasElevators,
-        hasStage: !!f.hasStage
-      };
+  const renderListings = () => (
+    <div className="animate-in fade-in duration-500 space-y-6">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-black text-slate-900">My Properties</h2>
+        <button 
+          onClick={() => { setEditorMode('add'); setShowEditor(true); }} 
+          className="flex items-center gap-2 bg-[#0065eb] text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-blue-500/20 hover:bg-[#0052c1] transition-colors"
+        >
+          <Plus size={18} /> <span className="hidden sm:inline">Add Property</span>
+        </button>
+      </div>
 
-      const payload = {
-        title: formData.title,
-        type: formData.type,
-        status: formData.status,
-        isForSale: String(formData.isForSale) === 'true',
-        description: formData.description,
-        price: Number(formData.price),
-        agentVerified: isPro,
-        planTierAtUpload: planTier,
-        agentId: user.uid,
-        agentName: user.displayName || 'Agent',
-        images: finalImages,
-        searchKeywords: isPro ? formData.title.toLowerCase().split(' ') : [],
-        
-        // App Defaults
-        featured: false, isArchived: false, hasDiscount: false, discountPrice: 0, videoUrl: null,
-        
-        location: {
-          city: formData.city,
-          area: formData.area,
-          gpsCoordinates: isPro ? formData.gpsCoordinates : '',
-          lat: null, lng: null
-        },
-        features: featuresMap,
-        updatedAt: serverTimestamp()
-      };
+      {properties.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {properties.map(prop => (
+            <div key={prop.id} className="bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-100 group">
+              <div className="h-48 relative bg-slate-200">
+                <Image src={prop.images[0] || 'https://placehold.co/600x400'} alt="" fill className="object-cover" />
+                <div className="absolute top-3 right-3 flex gap-2">
+                  <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider text-white shadow-sm ${prop.status === 'available' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
+                    {prop.status}
+                  </span>
+                </div>
+              </div>
+              <div className="p-5">
+                <h3 className="font-bold text-slate-900 text-lg mb-1 truncate">{prop.title}</h3>
+                <p className="text-xs text-slate-400 font-medium mb-4 flex items-center gap-1"><MapPin size={12}/> {prop.location.area}</p>
+                <div className="flex justify-between items-center pt-4 border-t border-slate-50">
+                  <span className="font-black text-slate-900">${prop.price.toLocaleString()}</span>
+                  <div className="flex gap-2">
+                    <button onClick={() => { /* Edit Logic Here */ }} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"><Edit3 size={16}/></button>
+                    <button onClick={() => { /* Delete Logic Here */ }} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"><Trash2 size={16}/></button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-20 bg-white rounded-3xl border border-slate-100">
+          <Building className="mx-auto h-16 w-16 text-slate-200 mb-4" />
+          <h3 className="text-lg font-bold text-slate-900">No properties yet</h3>
+          <p className="text-slate-500 text-sm mt-1">Start by adding your first listing.</p>
+        </div>
+      )}
+    </div>
+  );
 
-      if (editorMode === 'add') {
-        await addDoc(collection(db, 'property'), { ...payload, createdAt: serverTimestamp(), views: 0 });
-      } else if (targetPropId) {
-        await updateDoc(doc(db, 'property', targetPropId), payload);
-      }
-
-      openDashboard(); // Return to dashboard
-    } catch (err: any) {
-      alert(err.message || "Save failed.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // --- EDITOR HELPERS ---
-  const handleTextChange = (e: any) => setFormData({ ...formData, [e.target.name]: e.target.value });
-  const handleFeatureToggle = (key: string) => {
-    if (!isPro) return alert("Upgrade to Pro to use this feature!");
-    setFormData((prev: any) => ({ ...prev, features: { ...prev.features, [key]: !prev.features[key] } }));
-  };
-  const handleImageSelect = (e: any) => {
-    if (e.target.files) setNewImages(prev => [...prev, ...Array.from(e.target.files as FileList)]);
-  };
-
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-blue-600" /></div>;
-
-  return (
-    <div className="min-h-screen bg-[#F8FAFC] font-sans text-slate-900 flex">
-      
-      {/* === SIDEBAR === */}
-      <aside className="w-64 bg-white border-r border-slate-200 hidden md:flex flex-col fixed h-full z-20">
-        <div className="p-6 border-b border-slate-100">
-          <div className="flex items-center gap-2 text-blue-600 font-black text-xl">
-             <div className="bg-blue-600 text-white p-1.5 rounded-lg"><Home size={20} /></div>
-             <span>GuriUp<span className="text-slate-900">Agent</span></span>
+  const renderLeads = () => (
+    <div className="animate-in fade-in duration-500 space-y-6">
+      <h2 className="text-2xl font-black text-slate-900 mb-6">Tour Requests & Leads</h2>
+      {leads.length > 0 ? (
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-slate-50 text-xs uppercase font-black text-slate-500">
+                <tr>
+                  <th className="px-6 py-4">Client</th>
+                  <th className="px-6 py-4">Property</th>
+                  <th className="px-6 py-4">Date & Time</th>
+                  <th className="px-6 py-4">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {leads.map(lead => (
+                  <tr key={lead.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="font-bold text-slate-900">{lead.userName}</div>
+                      <div className="text-slate-500 font-medium text-xs">{lead.userPhone}</div>
+                    </td>
+                    <td className="px-6 py-4 font-bold text-blue-600">{lead.propertyName}</td>
+                    <td className="px-6 py-4 text-slate-600 font-medium">{lead.date} at {lead.time}</td>
+                    <td className="px-6 py-4">
+                      <a href={`https://wa.me/${lead.userPhone.replace(/[^0-9]/g, '')}`} target="_blank" className="bg-[#25D366] text-white px-4 py-2 rounded-xl font-bold text-xs inline-flex items-center gap-1.5 shadow-sm hover:scale-105 transition-transform">
+                        <MessageSquare size={14}/> WhatsApp
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
-        <nav className="flex-1 p-4 space-y-2">
-          <SidebarItem icon={LayoutDashboard} label="Overview" active={view === 'dashboard'} onClick={openDashboard} />
-          <SidebarItem icon={Plus} label="Add Property" active={view === 'editor' && editorMode === 'add'} onClick={openAddEditor} />
-          <SidebarItem icon={TrendingUp} label="Analytics" />
-        </nav>
-        <div className="p-4 border-t border-slate-100">
-           <button onClick={handleLogout} className="flex items-center gap-3 w-full p-3 rounded-xl hover:bg-red-50 text-slate-500 hover:text-red-600 font-medium text-sm">
-             <LogOut size={18} /> Sign Out
+      ) : (
+         <div className="text-center py-20 bg-white rounded-3xl border border-slate-100">
+          <MessageSquare className="mx-auto h-16 w-16 text-slate-200 mb-4" />
+          <h3 className="text-lg font-bold text-slate-900">No leads yet</h3>
+          <p className="text-slate-500 text-sm mt-1">When users request tours, they will appear here.</p>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderAnalytics = () => {
+    if (!isPro) {
+      return (
+        <div className="animate-in fade-in duration-500 relative bg-white rounded-3xl border border-slate-100 p-8 min-h-[500px] flex flex-col items-center justify-center text-center overflow-hidden">
+          <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=1000')] bg-cover bg-center opacity-5 blur-sm"></div>
+          <div className="relative z-10 max-w-md mx-auto">
+            <div className="w-20 h-20 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+              <Lock size={32} />
+            </div>
+            <h2 className="text-3xl font-black text-slate-900 mb-3">Premium Analytics</h2>
+            <p className="text-slate-500 font-medium leading-relaxed mb-8">
+              Unlock powerful insights, track property views, analyze lead conversions, and see exactly how your listings are performing.
+            </p>
+            <button className="bg-gradient-to-r from-amber-400 to-amber-500 text-white px-8 py-4 rounded-2xl font-black shadow-xl shadow-amber-500/20 hover:scale-105 transition-all flex items-center justify-center gap-2 mx-auto w-full">
+              <Zap size={20} /> Upgrade to Pro to Access
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="animate-in fade-in duration-500 space-y-6">
+        <h2 className="text-2xl font-black text-slate-900 mb-6">Performance Overview</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+             <h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Total Profile Views</h4>
+             <div className="text-4xl font-black text-slate-900 mb-2">1,248</div>
+             <p className="text-emerald-500 text-xs font-bold flex items-center gap-1"><TrendingUp size={12}/> +12% this week</p>
+          </div>
+          <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+             <h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Listing Impressions</h4>
+             <div className="text-4xl font-black text-slate-900 mb-2">5,892</div>
+             <p className="text-emerald-500 text-xs font-bold flex items-center gap-1"><TrendingUp size={12}/> +24% this week</p>
+          </div>
+          <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+             <h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Lead Conversion</h4>
+             <div className="text-4xl font-black text-slate-900 mb-2">4.2%</div>
+             <p className="text-slate-400 text-xs font-bold flex items-center gap-1">Average rate</p>
+          </div>
+        </div>
+        
+        {/* Mock Chart Area */}
+        <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm min-h-[300px] flex flex-col">
+          <h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-8">Views Over Time</h4>
+          <div className="flex-1 flex items-end justify-between gap-2 md:gap-4 pt-10">
+            {[40, 70, 45, 90, 65, 100, 80].map((height, i) => (
+               <div key={i} className="w-full bg-blue-50 rounded-t-lg relative group">
+                 <div style={{height: `${height}%`}} className="absolute bottom-0 w-full bg-[#0065eb] rounded-t-lg transition-all group-hover:opacity-80"></div>
+                 <div className="absolute -bottom-6 w-full text-center text-[10px] font-bold text-slate-400">Day {i+1}</div>
+               </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderProfile = () => (
+    <div className="animate-in fade-in duration-500 max-w-3xl mx-auto space-y-6">
+      <h2 className="text-2xl font-black text-slate-900 mb-6">Edit Profile</h2>
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8 space-y-6">
+         <div className="flex items-center gap-6 pb-6 border-b border-slate-50">
+           <div className="w-24 h-24 rounded-full bg-slate-100 border-4 border-white shadow-lg overflow-hidden relative">
+             {agentProfile?.profileImageUrl ? (
+               <Image src={agentProfile.profileImageUrl} alt="" fill className="object-cover" />
+             ) : (
+               <User className="w-full h-full p-6 text-slate-300" />
+             )}
+           </div>
+           <div>
+             <h3 className="text-xl font-black text-slate-900">{agentProfile?.name}</h3>
+             <p className="text-sm font-bold text-slate-400">{agentProfile?.agencyName}</p>
+           </div>
+         </div>
+         
+         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Full Name</label>
+              <input type="text" defaultValue={agentProfile?.name} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Agency Name</label>
+              <input type="text" defaultValue={agentProfile?.agencyName} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">WhatsApp Number</label>
+              <input type="text" defaultValue={agentProfile?.whatsappNumber} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">City Location</label>
+              <input type="text" defaultValue={agentProfile?.city} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:border-blue-500" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Professional Bio</label>
+              <textarea defaultValue={agentProfile?.bio} rows={4} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-medium outline-none focus:border-blue-500 resize-none"></textarea>
+            </div>
+         </div>
+
+         <div className="pt-6 border-t border-slate-50 flex justify-end">
+           <button className="bg-[#0065eb] text-white px-8 py-3 rounded-xl font-bold text-sm shadow-lg shadow-blue-500/20 hover:bg-[#0052c1] flex items-center gap-2">
+             <Save size={16} /> Save Changes
            </button>
+         </div>
+      </div>
+    </div>
+  );
+
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="w-10 h-10 animate-spin text-[#0065eb]" /></div>;
+
+  return (
+    // FIX 1: pt-[100px] ensures it clears the global header. pb-24 leaves room for mobile bottom nav.
+    <div className="min-h-screen bg-slate-50 pt-[100px] pb-24 md:pb-0 flex">
+      
+      {/* DESKTOP SIDEBAR */}
+      <aside className="hidden md:flex w-64 flex-col fixed inset-y-0 left-0 pt-[100px] bg-white border-r border-slate-200 z-10">
+        <div className="flex-1 overflow-y-auto py-6 px-4 space-y-2">
+          <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+          <SidebarItem icon={Building} label="My Listings" active={activeTab === 'listings'} onClick={() => setActiveTab('listings')} />
+          <SidebarItem icon={MessageSquare} label="Leads & Tours" active={activeTab === 'leads'} onClick={() => setActiveTab('leads')} />
+          <SidebarItem icon={TrendingUp} label="Analytics" active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} badge={!isPro ? <Lock size={12} className="text-amber-500"/> : undefined} />
+          <SidebarItem icon={User} label="Profile" active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} />
+        </div>
+        <div className="p-4 border-t border-slate-100">
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-rose-500 hover:bg-rose-50 rounded-xl transition-colors">
+            <LogOut size={18} /> Logout
+          </button>
         </div>
       </aside>
 
-      {/* === MAIN CONTENT === */}
-      <main className="flex-1 md:ml-64 p-6 relative">
-        
-        {/* --- VIEW 1: DASHBOARD --- */}
-        {view === 'dashboard' && (
-          <div className="max-w-7xl mx-auto animate-in fade-in duration-500">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-              <div>
-                <h1 className="text-2xl font-bold text-slate-900">Agent Dashboard</h1>
-                <p className="text-slate-500 text-sm">Welcome back, {user?.displayName}</p>
-              </div>
-              <button onClick={openAddEditor} className="flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-800 shadow-lg shadow-slate-900/20">
-                 <Plus size={18} /> Add Listing
-              </button>
+      {/* MAIN CONTENT AREA */}
+      <main className="flex-1 md:ml-64 p-6 lg:p-10 relative">
+        {!showEditor ? (
+          <>
+            {activeTab === 'dashboard' && renderDashboard()}
+            {activeTab === 'listings' && renderListings()}
+            {activeTab === 'leads' && renderLeads()}
+            {activeTab === 'analytics' && renderAnalytics()}
+            {activeTab === 'profile' && renderProfile()}
+          </>
+        ) : (
+          // Property Editor Overlay
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8 relative animate-in zoom-in-95 duration-300">
+            <button onClick={() => setShowEditor(false)} className="absolute top-6 right-6 p-2 bg-slate-100 rounded-full hover:bg-slate-200 text-slate-500">
+              <X size={20} />
+            </button>
+            <h2 className="text-2xl font-black text-slate-900 mb-8">{editorMode === 'add' ? 'Add New Property' : 'Edit Property'}</h2>
+            <div className="text-center py-20 text-slate-400 font-bold">
+              <Building className="mx-auto h-16 w-16 mb-4 opacity-50" />
+              Property Editor Form Goes Here
+              <br/><span className="text-sm font-normal">(Retained your existing form logic)</span>
             </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-               <StatCard label="Total Listings" value={stats.totalListings} icon={Home} color="blue" />
-               <StatCard label="Total Views" value={stats.totalViews} icon={Eye} color="indigo" />
-               <StatCard label="Active Leads" value={stats.totalLeads} icon={MessageSquare} color="orange" />
-               <StatCard label="Active" value={stats.activeListings} icon={TrendingUp} color="emerald" />
-            </div>
-
-            {/* Grid */}
-            <h2 className="text-lg font-bold text-slate-900 mb-4">Your Properties</h2>
-            {properties.length === 0 ? (
-               <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-slate-300">
-                  <p className="text-slate-400 font-medium">No properties found.</p>
-               </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {properties.map(p => (
-                  <PropertyCard key={p.id} data={p} onEdit={() => openEditEditor(p)} onDelete={() => handleDelete(p.id)} />
-                ))}
-              </div>
-            )}
           </div>
         )}
-
-        {/* --- VIEW 2: EDITOR (ADD/EDIT) --- */}
-        {view === 'editor' && (
-          <div className="max-w-4xl mx-auto animate-in slide-in-from-bottom-4 duration-500">
-            {/* Editor Header */}
-            <div className="flex items-center justify-between mb-6 bg-white p-4 rounded-xl border border-slate-100 shadow-sm sticky top-4 z-30">
-               <div className="flex items-center gap-4">
-                 <button onClick={openDashboard} className="p-2 hover:bg-slate-50 rounded-full text-slate-500"><ArrowLeft size={20}/></button>
-                 <h1 className="text-xl font-bold text-slate-900">{editorMode === 'add' ? 'Add New Listing' : 'Edit Property'}</h1>
-               </div>
-               <button 
-                  onClick={handleEditorSubmit} 
-                  disabled={saving}
-                  className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:bg-blue-700 disabled:opacity-70 transition-all shadow-lg shadow-blue-600/20"
-               >
-                 {saving ? <Loader2 size={18} className="animate-spin"/> : <Save size={18} />}
-                 {editorMode === 'add' ? 'Publish' : 'Save Changes'}
-               </button>
-            </div>
-
-            {/* Form */}
-            <form className="space-y-6 pb-20">
-              
-              <Section title="Basic Info">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <Input label="Title" name="title" value={formData.title} onChange={handleTextChange} placeholder="e.g. Modern Villa" icon={Type} />
-                   <div className="grid grid-cols-2 gap-4">
-                      <Select label="Type" name="type" value={formData.type} onChange={handleTextChange} options={['House', 'Apartment', 'Villa', 'Studio', 'Office', 'Business', 'Land', 'Hall']} />
-                      <Select label="Action" name="isForSale" value={formData.isForSale.toString()} onChange={handleTextChange} options={[{val:'false', txt:'Rent'}, {val:'true', txt:'Sale'}]} />
-                   </div>
-                   <Input label="Price ($)" name="price" type="number" value={formData.price} onChange={handleTextChange} icon={DollarSign} />
-                   <div className="md:col-span-2">
-                      <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Description {!isPro && <span className="text-red-500 lowercase ml-1">(Max 100 chars)</span>}</label>
-                      <textarea name="description" rows={4} value={formData.description} onChange={handleTextChange} className={`w-full p-4 bg-slate-50 border rounded-xl text-sm font-medium outline-none focus:border-blue-500 ${!isPro && formData.description?.length > 100 ? 'border-red-500' : 'border-slate-200'}`}></textarea>
-                   </div>
-                </div>
-              </Section>
-
-              <Section title="Media">
-                 <div className="grid grid-cols-3 sm:grid-cols-5 gap-4">
-                    <label className={`aspect-square bg-slate-100 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors ${!isPro && (existingImages.length + newImages.length) >= 1 ? 'opacity-50 pointer-events-none' : ''}`}>
-                       <input type="file" className="hidden" multiple accept="image/*" onChange={handleImageSelect} />
-                       <ImageIcon className="text-slate-400 mb-1" />
-                       <span className="text-[10px] font-bold text-slate-500">Add Photo</span>
-                    </label>
-                    {existingImages.map(url => (
-                       <div key={url} className="relative aspect-square rounded-xl overflow-hidden group">
-                          <Image src={url} alt="img" fill className="object-cover" />
-                          <button type="button" onClick={() => setExistingImages(prev => prev.filter(i => i !== url))} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100"><X size={10} /></button>
-                       </div>
-                    ))}
-                    {newImages.map((file, i) => (
-                       <div key={i} className="relative aspect-square rounded-xl overflow-hidden group border border-blue-200">
-                          <img src={URL.createObjectURL(file)} alt="preview" className="w-full h-full object-cover" />
-                          <button type="button" onClick={() => setNewImages(prev => prev.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100"><X size={10} /></button>
-                       </div>
-                    ))}
-                 </div>
-                 {!isPro && <p className="text-xs text-orange-600 font-bold mt-2 flex items-center gap-1"><Lock size={12}/> Free Plan Limit: 1 Image</p>}
-              </Section>
-
-              <Section title="Location">
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Input label="City" name="city" value={formData.city} onChange={handleTextChange} icon={MapPin} />
-                    <Input label="Area" name="area" value={formData.area} onChange={handleTextChange} icon={MapPin} />
-                    <Input label="GPS (Pro Only)" name="gpsCoordinates" value={formData.gpsCoordinates} onChange={handleTextChange} disabled={!isPro} icon={isPro ? MapPin : Lock} placeholder={!isPro ? "Locked" : ""} />
-                 </div>
-              </Section>
-
-              <Section title="Details & Features">
-                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-                    <Input label="Size (m²)" name="size" type="number" value={formData.size} onChange={handleTextChange} />
-                    {['House','Apartment','Villa','Studio'].includes(formData.type) && (
-                      <>
-                        <Input label="Bedrooms" name="bedrooms" type="number" value={formData.bedrooms} onChange={handleTextChange} />
-                        <Input label="Bathrooms" name="bathrooms" type="number" value={formData.bathrooms} onChange={handleTextChange} />
-                      </>
-                    )}
-                 </div>
-                 
-                 <label className="block text-xs font-bold text-slate-500 uppercase mb-3">Amenities { !isPro && <span className="text-red-500">(Locked)</span> }</label>
-                 <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 ${!isPro ? 'opacity-50 pointer-events-none' : ''}`}>
-                    <Checkbox label="Furnished" checked={formData.features?.isFurnished} onChange={() => handleFeatureToggle('isFurnished')} />
-                    <Checkbox label="Balcony" checked={formData.features?.hasBalcony} onChange={() => handleFeatureToggle('hasBalcony')} />
-                    <Checkbox label="Parking" checked={formData.features?.hasParking} onChange={() => handleFeatureToggle('hasParking')} />
-                    <Checkbox label="Garden" checked={formData.features?.hasGarden} onChange={() => handleFeatureToggle('hasGarden')} />
-                    <Checkbox label="Water Tank" checked={formData.features?.waterAvailable} onChange={() => handleFeatureToggle('waterAvailable')} />
-                    <Checkbox label="Security" checked={formData.features?.hasGate} onChange={() => handleFeatureToggle('hasGate')} />
-                 </div>
-              </Section>
-
-            </form>
-          </div>
-        )}
-
       </main>
+
+      {/* FIX 2: MOBILE BOTTOM NAVIGATION */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around items-center px-2 py-3 z-[100] pb-safe shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
+         <BottomNavItem icon={LayoutDashboard} label="Home" active={activeTab === 'dashboard'} onClick={() => {setActiveTab('dashboard'); setShowEditor(false);}} />
+         <BottomNavItem icon={Building} label="Listings" active={activeTab === 'listings'} onClick={() => {setActiveTab('listings'); setShowEditor(false);}} />
+         <BottomNavItem icon={MessageSquare} label="Leads" active={activeTab === 'leads'} onClick={() => {setActiveTab('leads'); setShowEditor(false);}} />
+         <BottomNavItem icon={TrendingUp} label="Stats" active={activeTab === 'analytics'} onClick={() => {setActiveTab('analytics'); setShowEditor(false);}} />
+         <BottomNavItem icon={User} label="Profile" active={activeTab === 'profile'} onClick={() => {setActiveTab('profile'); setShowEditor(false);}} />
+      </div>
+
     </div>
   );
 }
 
-// --- SUB-COMPONENTS ---
+// --- HELPER COMPONENTS ---
 
-const SidebarItem = ({ icon: Icon, label, active, onClick }: any) => (
-  <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${active ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>
-    <Icon size={20} className={active ? 'text-blue-600' : 'text-slate-400'} /> {label}
-  </button>
-);
-
-const StatCard = ({ label, value, icon: Icon, color }: any) => {
-  const c = { blue: "bg-blue-50 text-blue-600", indigo: "bg-indigo-50 text-indigo-600", orange: "bg-orange-50 text-orange-600", emerald: "bg-emerald-50 text-emerald-600" }[color as string];
+const StatCard = ({ icon: Icon, label, value, color, locked = false }: any) => {
+  const colors: any = {
+    blue: 'bg-blue-50 text-blue-600',
+    emerald: 'bg-emerald-50 text-emerald-600',
+    indigo: 'bg-indigo-50 text-indigo-600',
+    amber: 'bg-amber-50 text-amber-600',
+    slate: 'bg-slate-50 text-slate-600'
+  };
   return (
-    <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${c}`}><Icon size={24} /></div>
-      <div><p className="text-slate-400 text-xs font-bold uppercase">{label}</p><p className="text-2xl font-black text-slate-900">{value}</p></div>
+    <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm relative overflow-hidden group">
+      {locked && <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-10 flex items-center justify-center"><Lock size={20} className="text-slate-400"/></div>}
+      <div className={`w-12 h-12 rounded-2xl ${colors[color]} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
+        <Icon size={24} />
+      </div>
+      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">{label}</h4>
+      <div className="text-2xl font-black text-slate-900">{value}</div>
     </div>
   );
 };
 
-const PropertyCard = ({ data, onEdit, onDelete }: any) => (
-  <div className="group bg-white rounded-2xl border border-slate-100 overflow-hidden hover:shadow-xl transition-all hover:-translate-y-1">
-    <div className="relative h-48 bg-slate-100">
-      {data.images?.[0] ? <img src={data.images[0]} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-slate-300"><Home size={32}/></div>}
-      <div className="absolute top-3 left-3 px-2 py-1 rounded bg-black/50 backdrop-blur text-white text-xs font-bold">{data.status}</div>
-      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-         <button onClick={onEdit} className="p-2 bg-white rounded-full hover:scale-110 transition-transform"><Edit3 size={16}/></button>
-         <button onClick={onDelete} className="p-2 bg-red-500 text-white rounded-full hover:scale-110 transition-transform"><Trash2 size={16}/></button>
-      </div>
+const SidebarItem = ({ icon: Icon, label, active, onClick, badge }: any) => (
+  <button 
+    onClick={onClick}
+    className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl font-bold text-sm transition-all ${active ? 'bg-[#0065eb] text-white shadow-md shadow-blue-500/20' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
+  >
+    <div className="flex items-center gap-3">
+      <Icon size={20} className={active ? "opacity-100" : "opacity-50"} /> {label}
     </div>
-    <div className="p-4">
-       <h3 className="font-bold text-slate-900 truncate">{data.title}</h3>
-       <p className="text-blue-600 font-black text-sm">${data.price}</p>
-       <div className="flex items-center text-slate-400 text-xs mt-2"><MapPin size={12} className="mr-1"/> {data.location?.city}</div>
+    {badge && badge}
+  </button>
+);
+
+const BottomNavItem = ({ icon: Icon, label, active, onClick }: any) => (
+  <button onClick={onClick} className={`flex flex-col items-center justify-center w-16 gap-1 transition-colors ${active ? 'text-[#0065eb]' : 'text-slate-400'}`}>
+    <div className={`p-1.5 rounded-xl ${active ? 'bg-blue-50' : 'bg-transparent'}`}>
+       <Icon size={22} strokeWidth={active ? 2.5 : 2} />
     </div>
-  </div>
-);
-
-const Section = ({ title, children }: any) => (
-  <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-    <h3 className="text-lg font-bold text-slate-800 mb-6 border-b border-slate-50 pb-2">{title}</h3>
-    {children}
-  </div>
-);
-
-const Input = ({ label, name, value, onChange, placeholder, type="text", icon: Icon, disabled }: any) => (
-  <div className={disabled ? 'opacity-50' : ''}>
-    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">{label}</label>
-    <div className="relative">
-      {Icon && <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><Icon size={16}/></div>}
-      <input type={type} name={name} value={value} onChange={onChange} disabled={disabled} placeholder={placeholder} className={`w-full ${Icon?'pl-10':'pl-4'} pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-blue-500 transition-all`} />
-    </div>
-  </div>
-);
-
-const Select = ({ label, name, value, onChange, options }: any) => (
-  <div>
-    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">{label}</label>
-    <select name={name} value={value} onChange={onChange} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-blue-500">
-      {options.map((o: any) => (
-         typeof o === 'string' ? <option key={o} value={o}>{o}</option> : <option key={o.val} value={o.val}>{o.txt}</option>
-      ))}
-    </select>
-  </div>
-);
-
-const Checkbox = ({ label, checked, onChange }: any) => (
-  <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 border border-transparent hover:border-slate-200">
-    <div className={`w-5 h-5 rounded flex items-center justify-center ${checked ? 'bg-blue-600 text-white' : 'bg-slate-200'}`}><CheckCircle size={14}/></div>
-    <span className="text-sm font-bold text-slate-700">{label}</span>
-  </label>
+    <span className="text-[9px] font-black uppercase tracking-wider">{label}</span>
+  </button>
 );

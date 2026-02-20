@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 // 1. Define the full Property interface to match PropertiesUI requirements exactly
 interface Property {
   id: string;
+  slug?: string;
   title: string;
   price: number;
   discountPrice?: number;
@@ -28,8 +29,10 @@ interface Property {
 }
 
 async function getPropertiesData() {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_BASE_URL || "https://guriup.hiigsitech.com";
+  const baseUrl = 
+    process.env.NODE_ENV === 'development' 
+      ? "http://localhost:3000" 
+      : (process.env.NEXT_PUBLIC_BASE_URL || "https://guriup.hiigsitech.com");
 
   try {
     // --- FETCH DATA ---

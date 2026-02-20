@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '@/app/lib/firebase';
 import Image from 'next/image';
 import { 
   MapPin, Home, Award, ShieldCheck, ChevronDown, 
@@ -16,6 +18,7 @@ import {
 
 interface Property {
   id: string;
+  slug?: string;
   title: string;
   price: number;
   discountPrice?: number;
@@ -51,9 +54,6 @@ const PROPERTY_CATEGORIES = [
   { name: 'Commercial', label: 'Commercial', sub: 'Business', icon: <Zap size={16}/>, color: 'bg-orange-50 text-orange-600' },
 ];
 
-const POPULAR_CITIES = ['All Cities', 'Mogadishu', 'Hargeisa', 'Berbera', 'Garowe', 'Bosaso', 'Jigjiga', 'Nairobi', 'Djibouti'];
-const AMENITIES_LIST = ['Furnished', 'Garden', 'Balcony', 'Pool', 'Parking', 'Gate', 'Gym', 'Ocean View', 'AC', 'Security', 'Elevator', 'Meeting Room', 'Internet', 'Water Available'];
-
 // =======================================================================
 //  MAIN COMPONENT
 // =======================================================================
@@ -79,6 +79,27 @@ export default function PropertiesUI({
   const [selectedCity, setSelectedCity] = useState('All Cities');
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 1000000]);
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
+  
+  // Dynamic Cities
+  const [popularCities, setPopularCities] = useState<string[]>(['All Cities']);
+
+  // Fetch dynamic cities from Firebase
+  useEffect(() => {
+    const fetchCities = async () => {
+      try {
+        const q = query(collection(db, 'cities'), where('isVerified', '==', true));
+        const snap = await getDocs(q);
+        const fetched = snap.docs.map(doc => {
+          const name = doc.data().name || '';
+          return name.replace(/\b\w/g, (l: string) => l.toUpperCase());
+        });
+        setPopularCities(['All Cities', ...fetched]);
+      } catch (e) {
+        console.error("Failed to fetch cities:", e);
+      }
+    };
+    fetchCities();
+  }, []);
 
   // Dropdowns
   const [isCatDropdownOpen, setIsCatDropdownOpen] = useState(false);
@@ -155,6 +176,8 @@ export default function PropertiesUI({
 
   const currentCategoryLabel = PROPERTY_CATEGORIES.find(c => c.name === selectedCategory)?.label || 'All Properties';
 
+  const AMENITIES_LIST = ['Furnished', 'Garden', 'Balcony', 'Pool', 'Parking', 'Gate', 'Gym', 'Ocean View', 'AC', 'Security', 'Elevator', 'Meeting Room', 'Internet', 'Water Available'];
+
   return (
     <div className="bg-white font-sans text-slate-900 overflow-x-hidden">
       <style jsx global>{`
@@ -211,9 +234,9 @@ export default function PropertiesUI({
                 <div className="flex-1 overflow-hidden"><p className="text-[9px] font-black uppercase text-slate-400">Location</p><span className="font-bold text-sm text-slate-900">{selectedCity}</span></div>
                 <ChevronDown size={14} className="text-slate-400" />
               </button>
-              {isCityDropdownOpen && (
+           {isCityDropdownOpen && (
                 <div className="absolute top-full left-0 right-0 mt-3 bg-white rounded-[1.5rem] shadow-2xl p-2 z-[999] border border-slate-100 max-h-60 overflow-y-auto">
-                  {POPULAR_CITIES.map(city => (
+                  {popularCities.map(city => (
                     <button key={city} onClick={() => { setSelectedCity(city); setIsCityDropdownOpen(false); }} className={`w-full text-left p-3 hover:bg-blue-50 rounded-xl font-bold text-sm ${selectedCity === city ? 'text-blue-600 bg-blue-50' : ''}`}>{city}</button>
                   ))}
                 </div>
@@ -255,10 +278,7 @@ export default function PropertiesUI({
         </div>
       </section>
 
-      {/* ================= FEATURED PROPERTIES (PRO/PREMIUM ONLY) ================= *
-
-      {/* ================= FEATURED PROPERTIES ================= */}
-      {/* REMOVED THE CONDITIONAL CHECK so it always renders for debugging */}
+      {/* ================= FEATURED PROPERTIES (PRO/PREMIUM ONLY) ================= */}
       <section className="bg-blue-50/50 py-10 px-6 border-y border-blue-100">
         <div className="max-w-[1400px] mx-auto">
           <div className="flex justify-between items-center mb-8">
@@ -290,8 +310,6 @@ export default function PropertiesUI({
           )}
         </div>
       </section>
-
-
 
       {/* ================= LATEST LISTINGS (ALL MIXED) ================= */}
       <section className="py-10 px-6 bg-white">
@@ -346,7 +364,7 @@ function PropertyCard({ property, isFeatured = false, compact = false }: { prope
   const displayPrice = (property.hasDiscount && (property.discountPrice || 0) > 0) ? property.discountPrice : property.price;
 
   return (
-    <Link href={`/properties/${property.id}`} className="group block h-full">
+    <Link href={`/properties/${property.slug || property.id}`} className="group block h-full">
       <div className="relative overflow-hidden rounded-[2rem] border border-slate-100 bg-white transition-all duration-500 hover:shadow-xl h-full flex flex-col">
         <div className={`relative ${compact ? 'h-48' : 'h-64'} bg-slate-200 overflow-hidden`}>
           <Image src={property.images?.[0] || 'https://placehold.co/600x400'} alt={property.title} fill className="object-cover transition-transform duration-700 group-hover:scale-110" loading="lazy" />

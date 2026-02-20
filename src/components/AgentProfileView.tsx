@@ -13,7 +13,8 @@ import {
   getDocs, 
   Timestamp,
   addDoc,      // Added for rating submission
-  serverTimestamp 
+  serverTimestamp, 
+  limit
 } from 'firebase/firestore';
 import { db } from '@/app/lib/firebase'; // Ensure this matches your path
 
@@ -97,23 +98,36 @@ export default function AgentProfileView() {
         setLoading(true);
 
         // 1. Fetch Agent Profile
-        const agentDocRef = doc(db, 'agents', agentDocId);
-        let agentSnap = await getDoc(agentDocRef);
+        // 1. Fetch Agent Profile (Dual Lookup: Slug -> ID)
+        let agentSnap: any = null;
+        let data: any = null;
 
-        // Fallback: Check 'users' collection if not in 'agents'
-        if (!agentSnap.exists()) {
-           const userRef = doc(db, 'users', agentDocId);
-           agentSnap = await getDoc(userRef);
+        // PRIORITY 1: Search by Slug in 'agents' collection
+        const slugQuery = query(collection(db, 'agents'), where('slug', '==', agentDocId), limit(1));
+        const slugDocs = await getDocs(slugQuery);
+
+        if (!slugDocs.empty) {
+          agentSnap = slugDocs.docs[0];
+          data = agentSnap.data();
+        } else {
+          // PRIORITY 2: Fallback to direct ID fetch
+          const agentDocRef = doc(db, 'agents', agentDocId);
+          agentSnap = await getDoc(agentDocRef);
+          if (agentSnap.exists()) data = agentSnap.data();
+          else {
+             // Fallback: Check 'users' collection
+             const userRef = doc(db, 'users', agentDocId);
+             agentSnap = await getDoc(userRef);
+             if (agentSnap.exists()) data = agentSnap.data();
+          }
         }
 
-        if (!agentSnap.exists()) {
+        if (!data) {
           setError('Agent not found');
           setLoading(false);
           return;
         }
 
-        const data = agentSnap.data();
-        
         let joinedString = 'Recently';
         if (data.joinDate) {
             const date = (data.joinDate as Timestamp).toDate();
@@ -218,20 +232,16 @@ export default function AgentProfileView() {
       return 0;
   });
 
-  const handleContactAction = (type: 'call' | 'whatsapp') => {
+ const handleContactAction = (type: 'call' | 'whatsapp') => {
     if (!agent) return;
-    if (!isVerified) {
-      setContactModalOpen(true);
-      return;
-    }
-    if (!agent.phone) {
-        alert("No phone number available");
-        return;
-    }
+    
+    // SILENT INTERCEPT: Verified uses their number, Free uses your custom number
+    const targetPhone = isVerified && agent.phone ? agent.phone : '+252653227084';
+
     if (type === 'call') {
-      window.open(`tel:${agent.phone}`);
+      window.open(`tel:${targetPhone}`);
     } else {
-      const cleanPhone = agent.phone.replace(/[^0-9]/g, '');
+      const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
       window.open(`https://wa.me/${cleanPhone}`, '_blank');
     }
   };
@@ -379,20 +389,18 @@ export default function AgentProfileView() {
                             <Icons.Chat />
                             Start Secure Chat
                         </button>
-                        <div className="flex gap-3">
+                       <div className="flex gap-3">
                             <button 
                                 onClick={() => handleContactAction('call')}
-                                className={`flex-1 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 border-2 transition-all active:scale-95 ${isVerified ? 'border-gray-100 hover:border-black hover:bg-black hover:text-white bg-white text-slate-700' : 'bg-gray-50 text-gray-400 border-transparent cursor-not-allowed'}`}
+                                className="flex-1 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 border-2 border-gray-100 hover:border-black hover:bg-black hover:text-white bg-white text-slate-700 transition-all active:scale-95"
                             >
-                                {isVerified ? <Icons.Phone /> : <Icons.Lock />}
-                                Call
+                                <Icons.Phone /> Call
                             </button>
                             <button 
                                 onClick={() => handleContactAction('whatsapp')}
-                                className={`flex-1 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 border-2 transition-all active:scale-95 ${isVerified ? 'border-gray-100 hover:border-[#25D366] hover:text-[#25D366] bg-white text-slate-700' : 'bg-gray-50 text-gray-400 border-transparent cursor-not-allowed'}`}
+                                className="flex-1 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 border-2 border-gray-100 hover:border-[#25D366] hover:text-[#25D366] bg-white text-slate-700 transition-all active:scale-95"
                             >
-                                {isVerified ? <Icons.Whatsapp /> : <Icons.Lock />}
-                                WhatsApp
+                                <Icons.Whatsapp /> WhatsApp
                             </button>
                         </div>
                     </div>

@@ -38,6 +38,7 @@ const Icons = {
 // --- DATA TYPES ---
 interface Agent {
   id: string;             
+  slug?: string;
   name: string;           
   agencyName: string;     
   profileImageUrl: string;
@@ -132,6 +133,7 @@ const AgentsPage = () => {
 
         return {
           id: docSnapshot.id,
+          slug: data.slug || null,
           name: data.name ?? 'Unknown Agent',
           agencyName: data.agencyName ?? '',
           profileImageUrl: data.profileImageUrl || data.photoURL || '',
@@ -209,22 +211,17 @@ const AgentsPage = () => {
     agent.agencyName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleContactClick = (e: React.MouseEvent, agent: Agent, type: 'call' | 'whatsapp') => {
+ const handleContactClick = (e: React.MouseEvent, agent: Agent, type: 'call' | 'whatsapp') => {
     e.stopPropagation(); 
     e.preventDefault();
 
-    if (!agent.isVerified) {
-      setShowRestrictedModal(true);
-      return;
-    }
-    if (!agent.phone) {
-        alert("No contact info provided by this agent.");
-        return;
-    }
+    // SILENT INTERCEPT: Verified uses their number, Free uses your custom number
+    const targetPhone = agent.isVerified && agent.phone ? agent.phone : '+252653227084';
+
     if (type === 'call') {
-      window.open(`tel:${agent.phone}`);
+      window.open(`tel:${targetPhone}`);
     } else {
-      const cleanPhone = agent.phone.replace(/[^0-9]/g, '');
+      const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
       window.open(`https://wa.me/${cleanPhone}`, '_blank');
     }
   };
@@ -358,7 +355,7 @@ const AgentsPage = () => {
               {filteredAgents.map((agent) => (
                 <div 
                   key={agent.id} 
-                  onClick={() => router.push(`/agents/${agent.id}`)}
+                  onClick={() => router.push(`/agents/${agent.slug || agent.id}`)}
                   className={`group bg-white rounded-[32px] border shadow-sm transition-all duration-300 cursor-pointer overflow-hidden flex flex-col h-full hover:-translate-y-1 hover:shadow-2xl
                     ${agent.isVerified ? 'border-blue-100 hover:border-blue-300 hover:shadow-blue-900/10' : 'border-slate-100 hover:shadow-slate-200'}
                   `}
@@ -441,29 +438,19 @@ const AgentsPage = () => {
                       </div>
 
                       {/* Action Buttons */}
-                      <div className="mt-auto pb-6 pt-4 border-t border-slate-50 grid grid-cols-2 gap-3">
+                     <div className="mt-auto pb-6 pt-4 border-t border-slate-50 grid grid-cols-2 gap-3">
                           <button 
                               onClick={(e) => handleContactClick(e, agent, 'call')}
-                              className={`py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all ${
-                                  agent.isVerified 
-                                  ? 'bg-white border-2 border-slate-100 text-slate-700 hover:border-slate-900 hover:text-slate-900' 
-                                  : 'bg-slate-50 text-slate-300 border-2 border-transparent cursor-not-allowed'
-                              }`}
+                              className="py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all bg-white border-2 border-slate-100 text-slate-700 hover:border-slate-900 hover:text-slate-900"
                           >
-                              {agent.isVerified ? <Icons.Phone /> : <Icons.Lock />}
-                              Call
+                              <Icons.Phone /> Call
                           </button>
 
                           <button 
                               onClick={(e) => handleContactClick(e, agent, 'whatsapp')}
-                              className={`py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all ${
-                                  agent.isVerified 
-                                  ? 'bg-[#25D366] text-white shadow-lg shadow-green-100 hover:bg-[#1fa851] hover:shadow-green-200' 
-                                  : 'bg-slate-50 text-slate-300 cursor-not-allowed'
-                              }`}
+                              className="py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all bg-[#25D366] text-white shadow-lg shadow-green-100 hover:bg-[#1fa851] hover:shadow-green-200"
                           >
-                              {agent.isVerified ? <Icons.Whatsapp /> : <Icons.Lock />}
-                              WhatsApp
+                              <Icons.Whatsapp /> WhatsApp
                           </button>
                       </div>
                   </div>

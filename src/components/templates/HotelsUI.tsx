@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '@/app/lib/firebase';
 import Image from 'next/image';
 import { 
   MapPin, Users, Search, 
@@ -16,6 +18,7 @@ import {
 // =======================================================================
 interface Hotel {
   id: string;
+  slug?: string;
   name: string;
   pricePerNight: number;
   displayPrice?: number;
@@ -45,10 +48,6 @@ const HOTEL_TYPES = [
   'Conference/Convention Hotel', 'Casino Hotel', 'Eco-Hotel', '5 Star'
 ];
 
-const POPULAR_CITIES = [
-  'Mogadishu', 'Hargeisa', 'Berbera', 'Garowe', 'Bosaso', 'Jigjiga', 'Nairobi', 'Djibouti'
-];
-
 const getAmenityIcon = (amenity: string) => {
   if (amenity.includes('Wi-Fi')) return <Wifi size={14} />;
   if (amenity.includes('Pool')) return <Wind size={14} />;
@@ -70,9 +69,29 @@ const HotelsUI = ({ featuredHotels, allHotels }: HotelsUIProps) => {
   const [favorites, setFavorites] = useState<string[]>([]);
 
   // Search State
-  const [searchDestination, setSearchDestination] = useState('');
+const [searchDestination, setSearchDestination] = useState('');
   const [searchType, setSearchType] = useState('');
   
+  // Dynamic Cities
+  const [popularCities, setPopularCities] = useState<string[]>([]);
+
+  useEffect(() => {
+    const fetchCities = async () => {
+      try {
+        const q = query(collection(db, 'cities'), where('isVerified', '==', true));
+        const snap = await getDocs(q);
+        const fetched = snap.docs.map(doc => {
+          const name = doc.data().name || '';
+          return name.replace(/\b\w/g, (l: string) => l.toUpperCase());
+        });
+        setPopularCities(fetched);
+      } catch (e) {
+        console.error("Failed to fetch cities:", e);
+      }
+    };
+    fetchCities();
+  }, []);
+
   // Dropdown UI States
   const [isCityDropdownOpen, setIsCityDropdownOpen] = useState(false);
   const [isTypeDropdownOpen, setIsTypeDropdownOpen] = useState(false);
@@ -242,7 +261,7 @@ const HotelsUI = ({ featuredHotels, allHotels }: HotelsUIProps) => {
               {isCityDropdownOpen && (
                 <div className="absolute top-full left-0 mt-4 w-[280px] bg-white rounded-[1.5rem] shadow-2xl p-2 z-[9999] max-h-60 overflow-y-auto">
                   <button onClick={() => { setSearchDestination(''); setIsCityDropdownOpen(false); }} className="w-full text-left px-4 py-3 rounded-[1rem] hover:bg-slate-50 text-sm font-bold text-slate-500">Anywhere</button>
-                  {POPULAR_CITIES.map((c) => <button key={c} onClick={() => { setSearchDestination(c); setIsCityDropdownOpen(false); }} className="w-full flex items-center gap-3 p-3 rounded-[1rem] hover:bg-slate-50 font-bold text-sm text-slate-900"><MapPin size={16} className="text-slate-400"/> {c}</button>)}
+                  {popularCities.map((c) => <button key={c} onClick={() => { setSearchDestination(c); setIsCityDropdownOpen(false); }} className="w-full flex items-center gap-3 p-3 rounded-[1rem] hover:bg-slate-50 font-bold text-sm text-slate-900"><MapPin size={16} className="text-slate-400"/> {c}</button>)}
                 </div>
               )}
             </div>
@@ -324,7 +343,7 @@ const HotelCard = ({ hotel, onShare, isFavorite, onToggleFavorite }: any) => {
            <button onClick={(e) => onToggleFavorite(e, hotel.id)} className={`p-2.5 rounded-full backdrop-blur-md transition-all ${isFavorite ? 'bg-red-500 text-white' : 'bg-white/20 text-white hover:bg-white hover:text-red-500'}`}><Heart size={18} className={isFavorite ? 'fill-white' : ''} /></button>
            <button onClick={(e) => onShare(e, hotel.id)} className="bg-white/20 backdrop-blur-md hover:bg-white text-white hover:text-slate-900 p-2.5 rounded-full transition-all"><Share2 size={18} /></button>
        </div>
-      <Link href={`/hotels/${hotel.id}`} className="block flex-1 flex flex-col">
+      <Link href={`/hotels/${hotel.slug || hotel.id}`} className="block flex-1 flex flex-col">
         <div className="h-64 overflow-hidden relative bg-slate-200">
           <Image src={hotel.images[0] || 'https://placehold.co/600x400'} alt={hotel.name} fill className="object-cover transition-transform duration-700 group-hover:scale-110" />
           <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg"><Star size={12} className="fill-yellow-400 text-yellow-400" /><span className="text-xs font-black text-slate-900">{hotel.rating.toFixed(1)}</span></div>
@@ -348,12 +367,12 @@ const HotelListCard = ({ hotel, onShare, isFavorite, onToggleFavorite }: any) =>
   const isPro = hotel.planTier === 'pro' || hotel.planTier === 'premium' || hotel.isPro;
   return (
     <div className="group relative bg-white rounded-[2rem] border border-transparent hover:border-slate-100 hover:shadow-xl transition-all duration-300 p-3">
-      <Link href={`/hotels/${hotel.id}`} className="block">
+      <Link href={`/hotels/${hotel.slug || hotel.id}`} className="block">
         <div className="h-48 rounded-[1.5rem] overflow-hidden relative mb-4 bg-slate-200">
           <Image src={hotel.images[0] || 'https://placehold.co/600x400'} alt={hotel.name} fill className="object-cover transition-transform duration-500 group-hover:scale-110" />
           <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0">
                <button onClick={(e) => onToggleFavorite(e, hotel.id)} className={`p-2 rounded-full backdrop-blur-sm shadow-sm ${isFavorite ? 'bg-red-500 text-white' : 'bg-white/30 text-white hover:bg-white hover:text-red-500'}`}><Heart size={14} className={isFavorite ? 'fill-white' : ''}/></button>
-               <button onClick={(e) => { e.preventDefault(); onShare(e, hotel.id); }} className="bg-white/30 hover:bg-white text-white hover:text-black p-2 rounded-full backdrop-blur-sm shadow-sm"><Share2 size={14} /></button>
+               <button onClick={(e) => { e.preventDefault(); onShare(e, hotel.slug || hotel.id); }} className="bg-white/30 hover:bg-white text-white hover:text-black p-2 rounded-full backdrop-blur-sm shadow-sm"><Share2 size={14} /></button>
           </div>
           <div className="absolute top-3 left-3 bg-white/90 backdrop-blur px-2 py-1 rounded-lg flex items-center gap-1 text-[10px] font-black shadow-sm"><Star size={10} className="fill-orange-400 text-orange-400" /> {hotel.rating}</div>
         </div>

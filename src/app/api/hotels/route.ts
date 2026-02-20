@@ -187,6 +187,7 @@ function mergeAndNormalizeHotel(hotelDoc: DocumentSnapshot, liveAdminData: any) 
 
   return {
     id: hotelDoc.id,
+    slug: h.slug || null,
     name: h.name || 'Untitled Hotel',
     pricePerNight: Number(h.pricePerNight) || 0,
     hasDiscount,

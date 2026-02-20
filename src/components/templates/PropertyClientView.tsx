@@ -8,6 +8,7 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from '../../app/lib/firebase'; 
 import { onAuthStateChanged, User } from 'firebase/auth';
+import SharedChatComponent from '@/components/sharedchat';
 import { 
   MapPin, MessageSquare, Calendar, ChevronLeft, ChevronRight, X, 
   ShieldCheck, Share2, Heart, Phone, Home, Ruler, 
@@ -18,6 +19,7 @@ import {
 // --- TYPES ---
 export interface Property {
   id: string;
+  slug?: string;
   title: string;
   price: number;
   description: string;
@@ -42,6 +44,7 @@ export interface Property {
 
 export interface Agent {
   uid: string;
+  slug?: string;
   name: string;
   email: string;
   photoUrl: string;
@@ -95,19 +98,17 @@ const BookingModal = ({ isOpen, onClose, property, agent }: { isOpen: boolean; o
         userName: formData.name, userPhone: formData.phone, userId: currentUser?.uid || 'anonymous_web',
         date: formData.date, time: formData.time, timestamp: serverTimestamp(), status: 'pending', platform: 'web'
       });
-      if (isAgentPro(agent)) {
-        const agentPhone = property.contactPhone || agent?.phone || "252633227084";
-        const msg = `Salaam, waxan rabaa inan dalbado booqasho guri: '${property.title}'.\nTaariikhda: ${formData.date}\nSaacada: ${formData.time}\nMagacaygu waa: ${formData.name}`;
-        window.open(`https://wa.me/${agentPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
-        onClose();
-      } else { setSuccess(true); }
+      const agentPhone = isAgentPro(agent) ? (property.contactPhone || agent?.phone || "+252653227084") : "+252653227084";
+      const msg = `Salaam, waxan rabaa inan dalbado booqasho guri: '${property.title}'.\nTaariikhda: ${formData.date}\nSaacada: ${formData.time}\nMagacaygu waa: ${formData.name}`;
+      window.open(`https://wa.me/${agentPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
+      onClose();
     } catch (error) { alert("Failed to submit booking."); } finally { setLoading(false); }
   };
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={onClose} />
-      <div className="relative bg-white rounded-[2.5rem] w-full max-w-md p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+      <div className="relative bg-white rounded-[2.5rem] w-full max-w-lg p-10 shadow-2xl animate-in zoom-in-95 duration-200 border border-slate-100">
         <button onClick={onClose} className="absolute top-6 right-6 p-2 bg-slate-50 rounded-full hover:bg-slate-100"><X size={20}/></button>
         {success ? (
           <div className="text-center py-8 animate-in fade-in">
@@ -119,11 +120,23 @@ const BookingModal = ({ isOpen, onClose, property, agent }: { isOpen: boolean; o
           <>
             <h3 className="text-xl font-black text-slate-900 mb-6">Schedule a Tour</h3>
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-              <input required type="text" placeholder="Your Name" className="w-full bg-slate-50 border-none rounded-xl p-4 font-bold text-sm" onChange={e => setFormData({...formData, name: e.target.value})} />
-              <input required type="tel" placeholder="Phone Number" className="w-full bg-slate-50 border-none rounded-xl p-4 font-bold text-sm" onChange={e => setFormData({...formData, phone: e.target.value})} />
-              <div className="grid grid-cols-2 gap-3">
-                <input required type="date" className="bg-slate-50 border-none rounded-xl p-4 font-bold text-sm" onChange={e => setFormData({...formData, date: e.target.value})} />
-                <input required type="time" className="bg-slate-50 border-none rounded-xl p-4 font-bold text-sm" onChange={e => setFormData({...formData, time: e.target.value})} />
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2 block">Full Name</label>
+                <input required type="text" placeholder="John Doe" className="w-full bg-slate-50 focus:bg-white border-2 border-slate-50 focus:border-[#0065eb] rounded-xl p-4 font-bold text-sm outline-none transition-all" onChange={e => setFormData({...formData, name: e.target.value})} />
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2 block">Phone Number</label>
+                <input required type="tel" placeholder="+252..." className="w-full bg-slate-50 focus:bg-white border-2 border-slate-50 focus:border-[#0065eb] rounded-xl p-4 font-bold text-sm outline-none transition-all" onChange={e => setFormData({...formData, phone: e.target.value})} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2 block">Date</label>
+                  <input required type="date" className="w-full bg-slate-50 focus:bg-white border-2 border-slate-50 focus:border-[#0065eb] rounded-xl p-4 font-bold text-sm outline-none transition-all" onChange={e => setFormData({...formData, date: e.target.value})} />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2 block">Time</label>
+                  <input required type="time" className="w-full bg-slate-50 focus:bg-white border-2 border-slate-50 focus:border-[#0065eb] rounded-xl p-4 font-bold text-sm outline-none transition-all" onChange={e => setFormData({...formData, time: e.target.value})} />
+                </div>
               </div>
               <button disabled={loading} type="submit" className="mt-2 w-full bg-[#0065eb] hover:bg-blue-600 text-white py-4 rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl shadow-blue-500/20">
                 {loading ? <Loader2 className="animate-spin" /> : (isAgentPro(agent) ? 'Confirm & Open WhatsApp' : 'Submit Request')}
@@ -146,9 +159,15 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
   const [showGalleryModal, setShowGalleryModal] = useState(false);
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [restrictedFeature, setRestrictedFeature] = useState<string | null>(null);
-  const [property] = useState<Property>(initialProperty);
-  const [agent] = useState<Agent | null>(initialAgent);
-  const [related, setRelated] = useState<Property[]>([]);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  
+  const [property] = useState<Property>(initialProperty);
+  const [agent] = useState<Agent | null>(initialAgent);
+  const [related, setRelated] = useState<Property[]>([]);
+
+  useEffect(() => {
+    if (property) document.title = `${property.title} | GuriUp`;
+  }, [property]);
 
   const autoSlideRef = useRef<NodeJS.Timeout | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -276,7 +295,7 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
                 <span className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4">Agent Information</span>
                 
                 {/* FIX 2: CLICKABLE AGENT LINK */}
-                <Link href={`/agents/${agent?.uid || property.agentId}`} className="flex items-center gap-4 mb-6 group cursor-pointer hover:bg-slate-50 p-3 -ml-3 rounded-2xl transition-all">
+                <Link href={`/agents/${agent?.slug || agent?.uid || property.agentId}`} className="flex items-center gap-4 mb-6 group cursor-pointer hover:bg-slate-50 p-3 -ml-3 rounded-2xl transition-all">
                    <div className="w-16 h-16 rounded-2xl bg-slate-50 relative overflow-hidden border border-slate-200 shrink-0 shadow-sm group-hover:scale-105 transition-transform">
                       {agent?.photoUrl ? <Image src={agent.photoUrl} alt={agent.name} fill className="object-cover" /> : <div className="w-full h-full flex items-center justify-center text-slate-300 font-bold text-xl">{agent?.name?.[0]}</div>}
                       {isVerified && <div className="absolute bottom-0 right-0 w-6 h-6 bg-[#0065eb] text-white flex items-center justify-center rounded-tl-xl"><CheckCircle size={14} fill="white" className="text-[#0065eb]"/></div>}
@@ -288,12 +307,13 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
                    </div>
                 </Link>
 
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                    <button onClick={() => handleRestrictedAction("WhatsApp", () => window.open(`https://wa.me/${(property.contactPhone || agent?.phone)?.replace(/[^0-9]/g, '')}`, '_blank'))} className={`flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-xs uppercase tracking-widest transition-all hover:-translate-y-1 shadow-lg ${isVerified ? 'bg-[#25D366] hover:bg-[#20bd5a] text-white shadow-green-500/20' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>{!isVerified && <Lock size={12}/>} <MessageSquare size={16} /> WhatsApp</button>
-                    <button onClick={() => handleRestrictedAction("Calling", () => window.open(`tel:${property.contactPhone || agent?.phone}`))} className={`flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-xs uppercase tracking-widest transition-all hover:-translate-y-1 shadow-lg ${isVerified ? 'bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/20' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>{!isVerified && <Lock size={12}/>} <Phone size={16} /> Call</button>
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                    <button onClick={() => window.open(`https://wa.me/${(isVerified ? (property.contactPhone || agent?.phone) : '+252653227084')?.replace(/[^0-9]/g, '')}`, '_blank')} className="flex items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-[10px] md:text-xs uppercase tracking-widest transition-all hover:-translate-y-1 shadow-lg bg-[#25D366] hover:bg-[#20bd5a] text-white shadow-green-500/20"><MessageSquare size={16} /> WA</button>
+                    <button onClick={() => window.open(`tel:${isVerified ? (property.contactPhone || agent?.phone) : '+252653227084'}`)} className="flex items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-[10px] md:text-xs uppercase tracking-widest transition-all hover:-translate-y-1 shadow-lg bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/20"><Phone size={16} /> Call</button>
+                    <button onClick={() => setIsChatOpen(true)} className="flex items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-[10px] md:text-xs uppercase tracking-widest transition-all hover:-translate-y-1 shadow-lg bg-blue-50 text-[#0065eb] hover:bg-blue-100"><MessageSquare size={16} /> Chat</button>
                 </div>
                 {/* REQUEST TOUR WITH SHADOW */}
-                <button onClick={() => setIsBookingOpen(true)} className="w-full py-4 bg-white hover:bg-slate-50 text-[#0065eb] border-2 border-slate-100 rounded-2xl font-bold text-xs uppercase tracking-widest transition-all hover:border-slate-300 flex items-center justify-center gap-2 shadow-xl shadow-blue-500/40"><Calendar size={16} /> Request a Tour</button>
+                <button onClick={() => setIsBookingOpen(true)} className="w-full py-5 bg-[#0065eb] hover:bg-[#0052c1] text-white rounded-2xl font-black text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-xl shadow-blue-500/40"><Calendar size={18} /> Request a Tour</button>
              </div>
              
              <div className="mt-8 pt-4 border-t border-slate-100 text-center animate-in slide-in-from-bottom duration-700 delay-200"><p className="text-[10px] text-slate-400 font-bold flex items-center justify-center gap-1.5"><ShieldCheck size={12} className="text-green-500" /> No fees charged until you confirm.</p></div>
@@ -315,8 +335,12 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
            </div>
            {/* RIGHT: MAP */}
            <div className="relative bg-slate-100 rounded-[2.5rem] border border-slate-200 overflow-hidden min-h-[400px] lg:min-h-full group">
-             <Image src="https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=1200" alt="Map" fill className={`object-cover transition-transform duration-1000 group-hover:scale-105 ${!isVerified ? 'blur-sm opacity-60' : ''}`} />
-             <div className={`absolute inset-0 flex flex-col items-center justify-center p-8 text-center backdrop-blur-[2px] ${!isVerified ? 'bg-black/30' : 'bg-slate-900/30 hover:bg-slate-900/40'}`}>
+             {(isVerified && property.location.lat && property.location.lng) ? (
+               <iframe width="100%" height="100%" style={{ border: 0, minHeight: '400px' }} loading="lazy" allowFullScreen referrerPolicy="no-referrer-when-downgrade" src={`https://maps.google.com/maps?q=$${property.location.lat},${property.location.lng}&hl=en&z=15&output=embed`}></iframe>
+             ) : (
+               <Image src="https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=1200" alt="Map" fill className={`object-cover transition-transform duration-1000 group-hover:scale-105 ${!isVerified ? 'blur-sm opacity-60' : ''}`} />
+             )}
+             <div className={`absolute inset-0 flex flex-col items-center justify-center p-8 text-center pointer-events-none backdrop-blur-[2px] ${!isVerified ? 'bg-black/30' : 'bg-transparent'}`}>
                 <div className="bg-white p-5 rounded-full shadow-2xl animate-bounce mb-6">{isVerified ? <MapPin size={32} className="text-[#0065eb] fill-[#0065eb]" /> : <Lock size={32} className="text-amber-500" />}</div>
                 <h4 className="text-white text-3xl font-black drop-shadow-lg mb-2">{isVerified ? property.location.city : 'Location Hidden'}</h4>
                 <p className="text-white/90 font-bold text-sm drop-shadow-md mb-8 bg-white/10 px-4 py-1 rounded-full backdrop-blur-md border border-white/10">{isVerified ? property.location.area : 'Unverified Agent'}</p>
@@ -356,7 +380,7 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
              </div>
              <div ref={scrollRef} className="flex-1 overflow-y-auto no-scrollbar scroll-smooth space-y-4 relative pb-4">
                 {related.map((p, i) => (
-                   <Link href={`/properties/${p.id}`} key={p.id} className="group flex gap-4 p-4 rounded-[1.5rem] border border-transparent hover:border-slate-100 hover:bg-slate-50 transition-all cursor-pointer">
+                   <Link href={`/properties/${p.slug || p.id}`} key={p.id} className="group flex gap-4 p-4 rounded-[1.5rem] border border-transparent hover:border-slate-100 hover:bg-slate-50 transition-all cursor-pointer">
                       <div className="w-24 h-24 bg-slate-200 rounded-2xl relative overflow-hidden shrink-0 shadow-inner">
                          {p.images[0] && <Image src={p.images[0]} alt="" fill className="object-cover group-hover:scale-110 transition-transform duration-700"/>}
                       </div>
@@ -384,6 +408,16 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
               ))}
            </div>
         </div>
+      )}
+      {isChatOpen && (
+        <SharedChatComponent 
+          isOpen={isChatOpen} 
+          onClose={() => setIsChatOpen(false)} 
+          recipientId={agent?.uid || property.agentId} 
+          recipientName={agent?.name || 'Agent'} 
+          propertyId={property.id} 
+          propertyTitle={property.title} 
+        />
       )}
     </div>
   );
