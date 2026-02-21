@@ -18,6 +18,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './../../lib/firebase'; 
 import { useAuth } from '@/hooks/useAuth'; // Ensure you have this hook
+import { button } from 'framer-motion/client';
 
 // --- ICONS ---
 const Icons = {
@@ -257,11 +258,12 @@ const AgentsPage = () => {
     if (!isPro) {
        return (
          <button 
-            onClick={() => router.push('/dashboard/upgrade')}
+            // Changed this to point to your new pricing/subscription page!
+            onClick={() => router.push('/pricing')} 
             className="bg-gradient-to-r from-amber-400 to-amber-500 text-white px-8 py-4 rounded-xl font-black text-sm hover:shadow-2xl hover:-translate-y-0.5 transition-all flex items-center gap-2 shadow-lg shadow-amber-500/30"
          >
            <Icons.Upgrade />
-           Upgrade to Pro
+           Upgrade to Premium
          </button>
        );
     }
