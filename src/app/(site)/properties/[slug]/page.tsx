@@ -1,5 +1,6 @@
 import { Metadata } from 'next';
-import { doc, getDoc } from 'firebase/firestore';
+import { cache } from 'react';
+import { doc, getDoc, collection, query, where, limit, getDocs } from 'firebase/firestore';
 import { db } from '@/app/lib/firebase';
 import PropertyDetailView, { Property, Agent } from '@/components/templates/PropertyClientView';
 
@@ -7,7 +8,7 @@ type Props = {
   params: Promise<{ slug: string }>
 };
 
-// --- Helper: Convert Firebase Timestamps to Strings ---
+// --- Helper: Convert Firebase Timestamps to Strings (UNTOUCHED) ---
 const sanitizeData = (data: any) => {
   if (!data) return null;
   
@@ -20,11 +21,8 @@ const sanitizeData = (data: any) => {
   return sanitized;
 };
 
-// 1. FETCH DATA HELPER (Runs on Server)
-// 1. FETCH DATA HELPER (Runs on Server)
-import { collection, query, where, limit, getDocs } from 'firebase/firestore'; // Make sure these are imported at the top!
-
-async function getPropertyData(slug: string) {
+// 1. FETCH DATA HELPER (Runs on Server) - CACHED TO PREVENT DOUBLE BILLING
+const getPropertyData = cache(async (slug: string) => {
   let propertySnap: any = null;
 
   // PRIORITY 1: Search by slug field
@@ -77,7 +75,7 @@ async function getPropertyData(slug: string) {
         name: finalName,            // Overwrites personal name with Agency name
         planTier: planTier,         // Ensures 'pro' is passed
         isVerified: isVerified,     // Explicitly sets verification
-        photoURL: finalPhoto,       // Ensures logo is used if available
+        photoUrl: finalPhoto,       // TS FIX: photoUrl instead of photoURL
         // Preserve other fields
         email: rawAgent.email,
         phone: rawAgent.phone || rawAgent.whatsappNumber
@@ -86,7 +84,7 @@ async function getPropertyData(slug: string) {
   }
 
   return { property, agent };
-}
+});
 
 // 2. SEO METADATA GENERATOR
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -98,18 +96,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   const { property } = data;
-  const price = property.price.toLocaleString();
-  const title = `${property.title} | ${price}`;
-  const description = `${property.type} for ${property.isForSale ? 'Sale' : 'Rent'} in ${property.location.city}. ${property.features?.bedrooms || '?'} Bed, ${property.features?.bathrooms || '?'} Bath. ${property.description.substring(0, 100)}...`;
-  const image = property.images[0] || '';
+  const price = property.price?.toLocaleString() || 'Contact for Price';
+  const title = `${property.title} | $${price} | GuriUp`;
+  const description = `${property.type} for ${property.isForSale ? 'Sale' : 'Rent'} in ${property.location?.city || 'Somaliland'}. ${property.features?.bedrooms || '?'} Bed, ${property.features?.bathrooms || '?'} Bath. ${property.description ? property.description.substring(0, 100) : ''}...`;
+  const image = property.images?.[0] || '';
 
   return {
     title: title,
     description: description,
+    keywords: `${property.type} for ${property.isForSale ? 'sale' : 'rent'} in ${property.location?.city || 'Somaliland'}, real estate, GuriUp`,
     openGraph: {
       title: title,
       description: description,
-      images: [image],
+      images: image ? [{ url: image }] : [],
       type: 'website',
       siteName: 'GuriUp',
       locale: 'en_US',
@@ -118,7 +117,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       card: 'summary_large_image',
       title: title,
       description: description,
-      images: [image],
+      images: image ? [image] : [],
+    },
+    alternates: {
+      canonical: `https://guriup.com/properties/${slug}`, // SEO: Prevents duplicate content issues
     }
   };
 }
@@ -137,6 +139,37 @@ export default async function PropertyPage({ params }: Props) {
     );
   }
 
+  const { property, agent } = data;
+
+  // SEO: Real Estate JSON-LD Schema for Google Search Rich Snippets
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'RealEstateListing',
+    name: property.title,
+    description: property.description,
+    image: property.images || [],
+    url: `https://guriup.com/properties/${slug}`,
+    offers: {
+      '@type': 'Offer',
+      price: property.price,
+      priceCurrency: 'USD',
+      url: `https://guriup.com/properties/${slug}`,
+      seller: {
+        '@type': 'RealEstateAgent',
+        name: agent?.name || 'GuriUp Agent',
+        image: agent?.photoUrl || '',
+      }
+    }
+  };
+
   // Pass CLEAN, NORMALIZED data to Client Component
-  return <PropertyDetailView initialProperty={data.property} initialAgent={data.agent} />;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <PropertyDetailView initialProperty={property} initialAgent={agent} />
+    </>
+  );
 }

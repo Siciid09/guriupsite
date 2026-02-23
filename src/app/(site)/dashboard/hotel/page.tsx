@@ -1,55 +1,30 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
-import { auth, db } from '@/app/lib/firebase'; // Adjust this path if needed
+import { useRouter, useSearchParams } from 'next/navigation';
+import { auth, db } from '../../../lib/firebase'; // Adjust your path
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { 
-  doc, 
-  collection, 
-  query, 
-  where, 
-  orderBy, 
-  onSnapshot,
-  updateDoc,
-  Timestamp,
-  limit,
-  getDoc
+  doc, collection, query, where, orderBy, onSnapshot, updateDoc, Timestamp, limit, getDoc,
+  getDocs
 } from 'firebase/firestore';
-import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  LayoutDashboard, Calendar, MessageSquare, BedDouble, Settings, 
-  Users, TrendingUp, DollarSign, Eye, CheckCircle, XCircle, 
-  Plus, Edit3, Lock, MapPin, Building2, Phone, Globe, Wifi, Shield
+  LayoutDashboard, Calendar as CalendarIcon, CalendarDays, MessageSquare, BedDouble, 
+  Settings, Users, TrendingUp, DollarSign, CheckCircle, XCircle, 
+  Plus, Edit3, Lock, MapPin, Building2, Phone, Globe, Wifi, Shield,
+  FileText, UserPlus, BellRing, LogOut, ArrowRightCircle, ArrowLeftCircle, AlertCircle, Loader2
 } from 'lucide-react';
 
+// --- IMPORT YOUR COMPLETED FORMS ---
+import HotelForm from '../../../../components/hotelform'; 
+import AddEditRoom from '../../../../components/room'; // Your AddEditRoom component
+
 // ============================================================================
-//  STRICT TYPES & INTERFACES
+// STRICT TYPES
 // ============================================================================
-
-interface HotelLocation {
-  city: string;
-  area: string;
-  latDisplay: string;
-  lngDisplay: string;
-}
-
-interface HotelContact {
-  phoneCall: string;
-  phoneWhatsapp: string;
-  phoneManager: string;
-  website: string;
-}
-
-interface HotelPolicies {
-  checkInTime: string;
-  checkOutTime: string;
-  cancellation: string;
-  paymentMethods: string;
-}
-
 interface HotelData {
   id: string;
   name: string;
@@ -58,11 +33,10 @@ interface HotelData {
   pricePerNight: number;
   roomsCount: number;
   rating: number;
-  views: number;
   images: string[];
-  location: HotelLocation;
-  contact: HotelContact;
-  policies: HotelPolicies;
+  location: { city: string; area: string; latDisplay: string; lngDisplay: string; };
+  contact: { phoneCall: string; phoneWhatsapp: string; phoneManager: string; website: string; };
+  policies: { checkInTime: string; checkOutTime: string; cancellation: string; paymentMethods: string; };
   amenities: Record<string, boolean>;
   hotelAdminId: string;
   planTier: 'free' | 'pro' | 'premium';
@@ -72,65 +46,87 @@ interface Booking {
   id: string;
   guestName: string;
   guestPhone: string;
-  guestId: string;
   roomName: string;
-  checkIn: Timestamp | null;
-  checkOut: Timestamp | null;
+  checkIn: Timestamp;
+  checkOut: Timestamp;
   totalPrice: number;
-  status: 'pending' | 'confirmed' | 'cancelled' | 'paid';
-  createdAt: Timestamp | null;
+  status: 'pending' | 'confirmed' | 'checked-in' | 'checked-out' | 'cancelled' | 'no-show';
+  paymentStatus: string;
+  createdAt: Timestamp;
 }
 
 interface Room {
   id: string;
-  name: string;
-  price: number;
-  capacity: number;
+  roomTypeName: string;
+  pricePerNight: number;
+  maxOccupancy: string;
   status: string;
   images: string[];
 }
 
 interface Chat {
   id: string;
-  participantName: string;
   lastMessage: string;
-  updatedAt: Timestamp | null;
+  participantName: string;
+  unreadCount: number;
+  updatedAt: Timestamp;
 }
 
-type TabType = 'overview' | 'analytics' | 'bookings' | 'rooms' | 'inbox' | 'settings';
+// Expanded TabTypes to include inner navigation for forms
+type TabType = 'overview' | 'reservations' | 'calendar' | 'rooms' | 'messages' | 'analytics' | 'reports' | 'guests' | 'staff' | 'settings' | 'edit-hotel' | 'add-room' | 'edit-room' | 'setup-hotel' | 'setup-agent';
 
 // ============================================================================
-//  MAIN DASHBOARD COMPONENT
+// MAIN COMPONENT WRAPPER
 // ============================================================================
+export default function HotelDashboard() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]"><Loader2 className="animate-spin text-[#0065eb]" size={40}/></div>}>
+      <DashboardContent />
+    </Suspense>
+  );
+}
 
-export default function AdvancedHotelDashboard() {
+// ============================================================================
+// DASHBOARD CONTENT
+// ============================================================================
+function DashboardContent() {
   const router = useRouter();
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const searchParams = useSearchParams();
   
-  // --- DATA STATE ---
+  const tabParam = searchParams.get('tab') as TabType;
+
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [needsSetup, setNeedsSetup] = useState(false);
+  
+  // Real Data State
   const [hotel, setHotel] = useState<HotelData | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   
-  // --- UI STATE ---
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
-  const [bookingFilter, setBookingFilter] = useState<string>('all');
+  // UI Navigation State
+  const [activeTab, setActiveTab] = useState<TabType>(tabParam || 'overview');
+  const [resFilter, setResFilter] = useState<string>('all');
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
 
-  // --- INIT FIREBASE LISTENERS ---
+  // --- INITIALIZE & FETCH DATA ---
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        router.push('/login');
-        return;
-      }
+      if (!user) return router.push('/login');
       setCurrentUser(user);
       
-      // Fetch User Role to find assigned hotel
       const userDocRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userDocRef);
-      const managedHotelId = userSnap.data()?.managedHotelId;
+      const userData = userSnap.data();
+      const managedHotelId = userData?.managedHotelId;
+
+      // Gatekeeper Check: If assigned role but no hotel found
+      if (userData?.role === 'hoadmin') {
+         const hotelQ = query(collection(db, 'hotels'), where('hotelAdminId', '==', user.uid));
+         const hotelSnap = await getDocs(hotelQ);
+         if (hotelSnap.empty) setNeedsSetup(true);
+      }
 
       const hotelQuery = managedHotelId 
         ? query(collection(db, 'hotels'), where('__name__', '==', managedHotelId))
@@ -141,611 +137,565 @@ export default function AdvancedHotelDashboard() {
           const docData = snap.docs[0].data();
           const hotelId = snap.docs[0].id;
           
-          setHotel({
-            id: hotelId,
-            name: docData.name || '',
-            type: docData.type || 'Hotel',
-            description: docData.description || '',
-            pricePerNight: docData.pricePerNight || 0,
-            roomsCount: docData.roomsCount || 0,
-            rating: docData.rating || 0,
-            views: docData.views || 0,
-            images: docData.images || [],
-            location: docData.location || { city: '', area: '', latDisplay: '', lngDisplay: '' },
-            contact: docData.contact || { phoneCall: '', phoneWhatsapp: '', phoneManager: '', website: '' },
-            policies: docData.policies || { checkInTime: '', checkOutTime: '', cancellation: '', paymentMethods: '' },
-            amenities: docData.amenities || {},
-            hotelAdminId: docData.hotelAdminId,
-            planTier: docData.planTier || 'free',
-          });
+          setHotel({ id: hotelId, ...docData } as HotelData);
+          setNeedsSetup(false);
+          
+          // Bookings Listener
+          const qBookings = query(collection(db, 'bookings'), where('hotelId', '==', hotelId), orderBy('createdAt', 'desc'));
+          onSnapshot(qBookings, (bSnap) => setBookings(bSnap.docs.map(d => ({ id: d.id, ...d.data() } as Booking))));
+          
+          // Rooms Listener
+          const qRooms = collection(db, 'hotels', hotelId, 'rooms');
+          onSnapshot(qRooms, (rSnap) => setRooms(rSnap.docs.map(d => ({ id: d.id, ...d.data() } as Room))));
 
-          // Attach Sub-listeners
-          subscribeToBookings(hotelId);
-          subscribeToRooms(hotelId);
-          subscribeToChats(user.uid);
+          // Chats Listener
+          const qChats = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid), orderBy('updatedAt', 'desc'));
+          onSnapshot(qChats, (cSnap) => setChats(cSnap.docs.map(d => ({ id: d.id, ...d.data() } as Chat))));
+
           setLoading(false);
         } else {
           setLoading(false);
         }
       });
-
       return () => unsubHotel();
     });
     return () => unsubAuth();
   }, [router]);
 
-  const subscribeToBookings = (hotelId: string) => {
-    const q = query(collection(db, 'bookings'), where('hotelId', '==', hotelId), orderBy('createdAt', 'desc'));
-    onSnapshot(q, (snap) => {
-      setBookings(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Booking)));
-    });
-  };
-
-  const subscribeToRooms = (hotelId: string) => {
-    const q = collection(db, 'hotels', hotelId, 'rooms');
-    onSnapshot(q, (snap) => {
-      setRooms(snap.docs.map(doc => ({ 
-        id: doc.id, 
-        name: doc.data().roomTypeName || 'Room',
-        price: doc.data().pricePerNight || 0,
-        capacity: doc.data().capacity || 2,
-        status: doc.data().status || 'published',
-        images: doc.data().images || [],
-      } as Room)));
-    });
-  };
-
-  const subscribeToChats = (uid: string) => {
-    const q = query(collection(db, 'chats'), where('participants', 'array-contains', uid));
-    onSnapshot(q, (snap) => {
-      setChats(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Chat)));
-    });
+  const updateTab = (tab: TabType) => {
+    setActiveTab(tab);
+    router.push(`?tab=${tab}`, { scroll: false });
   };
 
   const updateBookingStatus = async (id: string, newStatus: string) => {
-    await updateDoc(doc(db, 'bookings', id), { 
-      status: newStatus, 
-      paymentStatus: newStatus === 'confirmed' ? 'paid' : newStatus 
-    });
+    try {
+      await updateDoc(doc(db, 'bookings', id), { status: newStatus });
+    } catch (e) {
+      alert("Failed to update status");
+    }
   };
 
-  // --- COMPUTED STATS ---
+  // --- REAL DYNAMIC CALCULATIONS ---
   const isPro = hotel?.planTier === 'pro' || hotel?.planTier === 'premium';
-  const totalRevenue = bookings.reduce((sum, b) => (b.status === 'paid' || b.status === 'confirmed') ? sum + (b.totalPrice||0) : sum, 0);
-  const pendingBookingsCount = bookings.filter(b => b.status === 'pending').length;
-  const filteredBookingsList = bookingFilter === 'all' ? bookings : bookings.filter(b => (b.status||'pending').toLowerCase() === bookingFilter);
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
-  if (!hotel) return <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8FAFC]"><Building2 size={64} className="text-slate-300 mb-4"/><h2 className="text-2xl font-black text-slate-800">No Hotel Found</h2><p className="text-slate-500">Your account is not linked to any property.</p></div>;
+  let todayArrivals = 0;
+  let todayDepartures = 0;
+  let monthlyRevenue = 0;
+  let occupiedRooms = 0;
+
+  bookings.forEach(b => {
+    if (!b.checkIn || !b.checkOut) return;
+    const checkInDate = b.checkIn.toDate();
+    const checkOutDate = b.checkOut.toDate();
+    
+    // Revenue (only confirmed/checked-in/paid)
+    if (['confirmed', 'checked-in', 'checked-out'].includes(b.status)) {
+       if (b.createdAt.toDate().getMonth() === today.getMonth()) monthlyRevenue += (b.totalPrice || 0);
+    }
+    // Arrivals
+    if (checkInDate.toDateString() === today.toDateString() && ['pending', 'confirmed'].includes(b.status)) todayArrivals++;
+    // Departures
+    if (checkOutDate.toDateString() === today.toDateString() && b.status === 'checked-in') todayDepartures++;
+    // Occupancy (Currently checked in)
+    if (b.status === 'checked-in') occupiedRooms++;
+  });
+
+  const occupancyRate = hotel?.roomsCount ? Math.round((occupiedRooms / hotel.roomsCount) * 100) : 0;
+  const filteredBookings = resFilter === 'all' ? bookings : bookings.filter(b => b.status === resFilter);
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]"><Loader2 className="animate-spin text-[#0065eb] w-12 h-12"/></div>;
+  if (!hotel && !needsSetup) return <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8FAFC]"><Building2 size={64} className="text-slate-300 mb-4"/><h2 className="text-2xl font-black text-slate-900">No Hotel Found</h2></div>;
 
   return (
-    // pt-24 pushes the content down so it doesn't hide behind the main top nav.
-    // pb-28 gives padding at the bottom so content doesn't hide behind the bottom nav.
-    <div className="min-h-screen bg-[#F8FAFC] pt-24 pb-28 font-sans text-slate-900 relative">
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col lg:flex-row text-slate-900 font-sans relative pt-20">
       
-      {/* ================= HEADER ================= */}
-      <header className="px-6 md:px-12 mb-8">
-         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-            <div>
-               <h1 className="text-2xl font-black text-slate-900">{hotel.name}</h1>
-               <div className="flex items-center gap-2 mt-1">
-                  <MapPin size={14} className="text-slate-400"/>
-                  <span className="text-sm font-bold text-slate-500">{hotel.location.city || 'Location not set'}</span>
-               </div>
-            </div>
-            <div className={`px-4 py-2 rounded-xl flex items-center gap-2 ${isPro ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-50 text-slate-600'}`}>
-               {isPro ? <Shield size={18}/> : <Lock size={18}/>}
-               <span className="text-xs font-black uppercase tracking-wider">{isPro ? 'Premium Partner' : 'Free Plan'}</span>
-            </div>
-         </div>
-      </header>
+      {/* ================= DESKTOP SIDEBAR ================= */}
+      <aside className="hidden lg:flex w-72 bg-white border-r border-slate-200 flex-col sticky top-20 h-[calc(100vh-5rem)] z-30 shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+        <div className="p-8 flex items-center gap-3 border-b border-slate-100">
+          <div className="bg-[#0065eb] p-2.5 rounded-2xl shadow-lg shadow-blue-500/20 text-white"><Building2 size={24} /></div>
+          <div>
+            <h2 className="text-lg font-black tracking-tight leading-tight truncate w-40">{hotel?.name || 'My Hotel'}</h2>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{isPro ? 'Pro Plan' : 'Free Plan'}</p>
+          </div>
+        </div>
 
-      {/* ================= MAIN CONTENT ================= */}
-      <main className="px-6 md:px-12">
+        <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto custom-scrollbar">
+          <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 mt-2">Core Management</p>
+          <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'overview'} onClick={() => updateTab('overview')} />
+          <SidebarItem icon={CalendarIcon} label="Reservations" active={activeTab === 'reservations'} onClick={() => updateTab('reservations')} count={bookings.filter(b=>b.status==='pending').length} />
+          <SidebarItem icon={CalendarDays} label="Calendar" active={activeTab === 'calendar'} onClick={() => updateTab('calendar')} />
+          <SidebarItem icon={BedDouble} label="Rooms" active={['rooms', 'add-room', 'edit-room'].includes(activeTab)} onClick={() => updateTab('rooms')} />
+          <SidebarItem icon={MessageSquare} label="Messages" active={activeTab === 'messages'} onClick={() => updateTab('messages')} count={chats.filter(c => c.unreadCount > 0).length} />
+          
+          <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 mt-6">Pro Features</p>
+          <SidebarItem icon={TrendingUp} label="Analytics" active={activeTab === 'analytics'} onClick={() => updateTab('analytics')} isProLocked={!isPro} />
+          <SidebarItem icon={FileText} label="Reports" active={activeTab === 'reports'} onClick={() => updateTab('reports')} isProLocked={!isPro} />
+          <SidebarItem icon={Users} label="Guests" active={activeTab === 'guests'} onClick={() => updateTab('guests')} isProLocked={!isPro} />
+          <SidebarItem icon={UserPlus} label="Staff" active={activeTab === 'staff'} onClick={() => updateTab('staff')} isProLocked={!isPro} />
+
+          <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 mt-6">Configuration</p>
+          <SidebarItem icon={Settings} label="Settings" active={['settings', 'edit-hotel'].includes(activeTab)} onClick={() => updateTab('settings')} />
+        </nav>
+      </aside>
+
+      {/* ================= MOBILE HEADER ================= */}
+      <div className="lg:hidden sticky top-0 w-full bg-white/90 backdrop-blur-md border-b border-slate-200 z-40 px-6 py-4 flex justify-between items-center">
+         <div className="flex items-center gap-3">
+            <div className="bg-[#0065eb] p-2 rounded-xl text-white"><Building2 size={18} /></div>
+            <span className="font-black text-lg truncate max-w-[200px]">{hotel?.name || 'GuriUp'}</span>
+         </div>
+      </div>
+
+      {/* ================= MAIN CONTENT AREA ================= */}
+      <main className="flex-1 flex flex-col min-w-0 p-4 pb-48 md:p-8 lg:p-12 lg:pb-48 transition-all duration-300">
+        
+        {/* ================= GLOBAL WARNING BANNER ================= */}
+        {needsSetup && activeTab !== 'setup-hotel' && (
+           <div className="bg-red-500 text-white p-3 w-full flex flex-col sm:flex-row items-center justify-center gap-3 shadow-md rounded-2xl mb-8 shrink-0">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                 <AlertCircle size={18} />
+                 <span>Action Required: You must set up your Hotel profile to unlock management features.</span>
+              </div>
+              <button 
+                onClick={() => updateTab('setup-hotel')} 
+                className="bg-white text-red-600 px-4 py-1.5 rounded-full text-xs font-black shadow-sm hover:scale-105 transition-transform"
+              >
+                Set Up Now
+              </button>
+           </div>
+        )}
+
         <AnimatePresence mode="wait">
           
-          {/* -------------------- OVERVIEW TAB -------------------- */}
-          {activeTab === 'overview' && (
-            <motion.div key="overview" initial={{opacity:0, y:10}} animate={{opacity:1, y:0}} exit={{opacity:0, y:-10}} className="space-y-8">
-               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <StatCard title="Total Revenue" value={`$${totalRevenue.toLocaleString()}`} icon={DollarSign} color="text-emerald-600" bg="bg-emerald-50" />
-                  <StatCard title="Total Bookings" value={bookings.length.toString()} icon={Calendar} color="text-indigo-600" bg="bg-indigo-50" />
-                  <StatCard title="Profile Views" value={hotel.views.toString()} icon={Eye} color="text-purple-600" bg="bg-purple-50" isPro={isPro} />
-                  <StatCard title="Pending Leads" value={pendingBookingsCount.toString()} icon={Users} color="text-amber-600" bg="bg-amber-50" />
-               </div>
+          {/* --- TAB: DASHBOARD (OVERVIEW) --- */}
+          {activeTab === 'overview' && hotel && !needsSetup && (
+            <motion.div key="overview" initial={{opacity:0, y:10}} animate={{opacity:1, y:0}} exit={{opacity:0}} className="space-y-8">
+               <h1 className="text-3xl font-black tracking-tight">Today's Overview</h1>
                
-               <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                  <StatCard title="Arrivals Today" value={todayArrivals} icon={ArrowRightCircle} color="text-blue-600" bg="bg-blue-50" />
+                  <StatCard title="Departures" value={todayDepartures} icon={ArrowLeftCircle} color="text-orange-600" bg="bg-orange-50" />
+                  <StatCard title="Occupancy" value={`${occupancyRate}%`} icon={BedDouble} color="text-emerald-600" bg="bg-emerald-50" />
+                  <StatCard title="Mtd Revenue" value={`$${monthlyRevenue}`} icon={DollarSign} color="text-purple-600" bg="bg-purple-50" />
+               </div>
+
+               <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 md:p-8">
                   <div className="flex justify-between items-center mb-6">
-                     <h3 className="font-bold text-lg">Recent Reservations</h3>
-                     <button onClick={() => setActiveTab('bookings')} className="text-indigo-600 text-sm font-bold hover:underline">View All</button>
+                     <h3 className="font-bold text-xl">Needs Action (Pending)</h3>
+                     <button onClick={() => updateTab('reservations')} className="text-sm font-bold text-[#0065eb] hover:underline">View All</button>
                   </div>
                   <div className="space-y-3">
-                     {bookings.slice(0, 5).map(b => (
-                        <div key={b.id} className="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 transition-colors rounded-2xl">
-                           <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-slate-700 font-bold shadow-sm">
-                                 {b.guestName ? b.guestName[0] : 'G'}
-                              </div>
-                              <div>
-                                 <h4 className="font-bold">{b.guestName || 'Guest'}</h4>
-                                 <p className="text-xs text-slate-500">{b.roomName} • {b.checkIn ? format(b.checkIn.toDate(), 'MMM d, yyyy') : 'N/A'}</p>
-                              </div>
+                     {bookings.filter(b => b.status === 'pending').slice(0, 5).map(b => (
+                        <div key={b.id} className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 gap-4">
+                           <div className="flex flex-col">
+                              <span className="font-bold text-slate-900">{b.guestName || 'Guest'}</span>
+                              <span className="text-xs text-slate-500 font-medium">{b.roomName} • {format(b.checkIn.toDate(), 'MMM d')} - {format(b.checkOut.toDate(), 'MMM d')}</span>
                            </div>
-                           <div className="text-right">
-                              <p className="font-black text-indigo-600">${b.totalPrice}</p>
-                              <span className={`text-[10px] font-bold uppercase ${b.status === 'confirmed' ? 'text-emerald-500' : 'text-amber-500'}`}>{b.status}</span>
+                           <div className="flex items-center gap-4 justify-between w-full md:w-auto border-t md:border-none border-slate-200 pt-3 md:pt-0">
+                              <span className="font-black text-[#0065eb]">${b.totalPrice}</span>
+                              <div className="flex gap-2">
+                                 <button onClick={() => updateBookingStatus(b.id, 'confirmed')} className="p-2 bg-emerald-500 text-white rounded-xl shadow-sm hover:scale-105 transition-transform"><CheckCircle size={18}/></button>
+                                 <button onClick={() => updateBookingStatus(b.id, 'cancelled')} className="p-2 bg-red-100 text-red-600 rounded-xl hover:bg-red-200 transition-colors"><XCircle size={18}/></button>
+                              </div>
                            </div>
                         </div>
                      ))}
-                     {bookings.length === 0 && <p className="text-slate-400 text-sm py-4 text-center font-medium">No recent bookings to display.</p>}
+                     {bookings.filter(b => b.status === 'pending').length === 0 && <p className="text-slate-400 text-sm font-medium py-4 text-center">No pending reservations right now.</p>}
                   </div>
                </div>
             </motion.div>
           )}
 
-          {/* -------------------- ANALYTICS TAB -------------------- */}
-          {activeTab === 'analytics' && (
-            <motion.div key="analytics" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="space-y-8 relative">
-               {!isPro && (
-                  <div className="absolute inset-0 z-10 backdrop-blur-md bg-white/50 flex flex-col items-center justify-center rounded-3xl border border-slate-100">
-                     <div className="bg-white p-8 rounded-3xl shadow-xl text-center max-w-md border border-slate-100">
-                        <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                           <Lock size={32} />
-                        </div>
-                        <h2 className="text-2xl font-black mb-2">Analytics Locked</h2>
-                        <p className="text-slate-500 mb-6 text-sm">Upgrade to Premium to see your business funnel, projected revenue, and lead sources in real-time.</p>
-                        <button className="w-full bg-indigo-600 text-white px-8 py-4 rounded-xl font-bold shadow-lg shadow-indigo-200">Upgrade to Premium</button>
-                     </div>
-                  </div>
-               )}
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-lg relative overflow-hidden">
-                     <div className="absolute top-0 right-0 p-8 opacity-10"><TrendingUp size={120}/></div>
-                     <h3 className="text-slate-400 font-bold mb-2 relative z-10">Projected Monthly Revenue</h3>
-                     <p className="text-4xl font-black mb-8 relative z-10">$12,450.00</p>
-                     <div className="flex justify-between border-t border-slate-700 pt-6 relative z-10">
-                        <div><p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Confirmed</p><p className="text-xl font-bold text-emerald-400">$8,200</p></div>
-                        <div><p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Pending</p><p className="text-xl font-bold text-amber-400">$4,250</p></div>
-                     </div>
-                  </div>
-                  <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-                     <h3 className="font-bold text-lg mb-6">Lead Channels</h3>
-                     <div className="space-y-4">
-                        <ChannelRow label="WhatsApp Leads" count={45} color="bg-emerald-500" />
-                        <ChannelRow label="Direct Calls" count={22} color="bg-blue-500" />
-                        <ChannelRow label="In-App Chats" count={89} color="bg-purple-500" />
-                     </div>
-                  </div>
+          {/* --- TAB: RESERVATIONS --- */}
+          {activeTab === 'reservations' && hotel && !needsSetup && (
+            <motion.div key="reservations" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="flex flex-col h-full">
+               <h1 className="text-3xl font-black tracking-tight mb-6">Reservations</h1>
+               
+               {/* Filters */}
+               <div className="flex overflow-x-auto pb-4 mb-4 gap-2 hide-scrollbar">
+                  {['all', 'pending', 'confirmed', 'checked-in', 'checked-out', 'cancelled'].map(f => (
+                     <button 
+                       key={f} 
+                       onClick={() => setResFilter(f)}
+                       className={`px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-wider whitespace-nowrap transition-all ${resFilter === f ? 'bg-slate-900 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}
+                     >
+                        {f.replace('-', ' ')}
+                     </button>
+                  ))}
                </div>
-            </motion.div>
-          )}
 
-          {/* -------------------- BOOKINGS TAB -------------------- */}
-          {activeTab === 'bookings' && (
-            <motion.div key="bookings" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden flex flex-col min-h-[600px]">
-               <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <h3 className="text-xl font-black">All Reservations</h3>
-                  <div className="flex gap-2 bg-slate-50 p-1 rounded-xl">
-                     {['all', 'pending', 'confirmed'].map(filter => (
-                        <button key={filter} onClick={() => setBookingFilter(filter)} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase transition-all ${bookingFilter === filter ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
-                           {filter}
-                        </button>
-                     ))}
-                  </div>
-               </div>
-               <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                  {filteredBookingsList.map(b => (
-                     <div key={b.id} className="border border-slate-100 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:shadow-md transition-shadow bg-white">
+               {/* List */}
+               <div className="space-y-4">
+                  {filteredBookings.map(b => (
+                     <div key={b.id} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
                         <div className="flex items-center gap-4">
-                           <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 font-bold text-xl">
-                              {b.guestName ? b.guestName[0] : 'G'}
-                           </div>
+                           <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-[#0065eb] font-bold text-lg">{b.guestName?.[0] || 'G'}</div>
                            <div>
                               <h4 className="font-bold text-lg">{b.guestName || 'Guest'}</h4>
-                              <p className="text-sm text-slate-500 font-medium mt-1 flex items-center gap-2">
-                                 <Phone size={14}/> 
-                                 {isPro ? b.guestPhone : '••••••••••'} {!isPro && <Lock size={12} className="text-amber-500"/>}
-                              </p>
+                              <p className="text-xs text-slate-500 font-medium flex items-center gap-2"><Phone size={12}/> {b.guestPhone}</p>
                            </div>
                         </div>
-                        <div className="flex flex-wrap items-center gap-6">
-                           <div className="bg-slate-50 px-4 py-2 rounded-xl">
+                        
+                        <div className="grid grid-cols-2 md:flex items-center gap-4 md:gap-8 bg-slate-50 p-4 rounded-2xl">
+                           <div>
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Room</p>
-                              <p className="font-bold text-sm text-slate-800">{b.roomName}</p>
+                              <p className="font-bold text-sm">{b.roomName}</p>
                            </div>
-                           <div className="bg-slate-50 px-4 py-2 rounded-xl">
+                           <div>
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Dates</p>
-                              <p className="font-bold text-sm text-slate-800">{b.checkIn ? format(b.checkIn.toDate(), 'MMM d') : '-'} to {b.checkOut ? format(b.checkOut.toDate(), 'MMM d') : '-'}</p>
+                              <p className="font-bold text-sm">{format(b.checkIn.toDate(), 'MMM d')} - {format(b.checkOut.toDate(), 'MMM d')}</p>
                            </div>
-                           <div className="text-right min-w-[80px]">
-                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Amount</p>
-                              <p className="font-black text-lg text-indigo-600">${b.totalPrice}</p>
+                           <div className="col-span-2 md:col-span-1 text-right md:text-left">
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total</p>
+                              <p className="font-black text-lg text-[#0065eb]">${b.totalPrice}</p>
                            </div>
-                           <div className="flex gap-2">
+                        </div>
+
+                        {/* Status Actions */}
+                        <div className="flex flex-col items-end gap-2 min-w-[140px]">
+                           <StatusBadge status={b.status} />
+                           <div className="flex gap-2 mt-2">
                               {b.status === 'pending' && (
-                                 <>
-                                    <button onClick={() => updateBookingStatus(b.id, 'confirmed')} className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors"><CheckCircle size={20}/></button>
-                                    <button onClick={() => updateBookingStatus(b.id, 'cancelled')} className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors"><XCircle size={20}/></button>
-                                 </>
+                                 <><ActionButton icon={CheckCircle} color="bg-emerald-500 text-white" onClick={() => updateBookingStatus(b.id, 'confirmed')}/><ActionButton icon={XCircle} color="bg-red-100 text-red-600" onClick={() => updateBookingStatus(b.id, 'cancelled')}/></>
                               )}
-                              {b.status !== 'pending' && (
-                                 <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${b.status === 'confirmed' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{b.status}</span>
+                              {b.status === 'confirmed' && (
+                                 <><button onClick={() => updateBookingStatus(b.id, 'checked-in')} className="text-xs font-bold bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-200 transition-colors">Mark Check-In</button><ActionButton icon={XCircle} color="bg-slate-100 text-slate-600" onClick={() => updateBookingStatus(b.id, 'cancelled')}/></>
+                              )}
+                              {b.status === 'checked-in' && (
+                                 <button onClick={() => updateBookingStatus(b.id, 'checked-out')} className="text-xs font-bold bg-orange-100 text-orange-700 px-3 py-1.5 rounded-lg hover:bg-orange-200 transition-colors">Mark Check-Out</button>
                               )}
                            </div>
                         </div>
                      </div>
                   ))}
-                  {filteredBookingsList.length === 0 && (
-                     <div className="text-center py-20">
-                        <Calendar size={48} className="text-slate-200 mx-auto mb-4"/>
-                        <p className="text-slate-400 font-bold">No bookings found for this filter.</p>
-                     </div>
-                  )}
+                  {filteredBookings.length === 0 && <EmptyState icon={CalendarIcon} title="No Reservations" desc={`No bookings found for status: ${resFilter}`} />}
                </div>
             </motion.div>
           )}
 
-          {/* -------------------- ROOMS TAB -------------------- */}
-          {activeTab === 'rooms' && (
-             <motion.div key="rooms" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
-                <div className="flex justify-between items-center mb-8">
-                   <h3 className="text-2xl font-black">Room Inventory</h3>
-                   <button className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all">
-                      <Plus size={18}/> Add Room
-                   </button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                   {rooms.map(room => (
-                      <div key={room.id} className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
-                         <div className="h-48 bg-slate-100 relative overflow-hidden">
-                            {room.images && room.images[0] ? (
-                              <Image src={room.images[0]} alt={room.name} fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-slate-300"><BedDouble size={48}/></div>
-                            )}
-                            <div className={`absolute top-4 right-4 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest backdrop-blur-md ${room.status === 'draft' ? 'bg-slate-900/80 text-white' : 'bg-emerald-500/90 text-white shadow-lg'}`}>
-                               {room.status === 'draft' ? 'Hidden' : 'Live'}
-                            </div>
-                         </div>
-                         <div className="p-6">
-                            <h4 className="font-bold text-lg mb-2 truncate">{room.name}</h4>
-                            <p className="text-xs font-bold text-slate-400 mb-6 flex items-center gap-2"><Users size={14}/> Capacity: {room.capacity} Guests</p>
-                            <div className="flex items-center justify-between pt-4 border-t border-slate-50">
+          {/* --- TAB: CALENDAR --- */}
+          {activeTab === 'calendar' && hotel && !needsSetup && (
+             <motion.div key="calendar" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+                <h1 className="text-3xl font-black tracking-tight mb-6">Visual Calendar</h1>
+                <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm text-center">
+                   <CalendarDays size={64} className="text-blue-100 mx-auto mb-4" />
+                   <h3 className="text-xl font-bold mb-2">Upcoming Stays Timeline</h3>
+                   <p className="text-slate-500 mb-8 max-w-md mx-auto">A simple visual overview of who is arriving and departing in the next 7 days.</p>
+                   
+                   <div className="space-y-4 max-w-2xl mx-auto text-left">
+                      {bookings.filter(b => ['confirmed', 'checked-in'].includes(b.status) && b.checkIn.toDate() >= new Date()).slice(0, 10).map(b => (
+                         <div key={b.id} className="flex items-center gap-4 relative pl-6 border-l-2 border-[#0065eb] pb-4">
+                            <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-white border-4 border-[#0065eb]"></div>
+                            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex-1 flex justify-between items-center">
                                <div>
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Price / Night</p>
-                                  <span className="font-black text-xl text-indigo-600">${room.price}</span>
+                                  <p className="font-bold text-[#0065eb]">{format(b.checkIn.toDate(), 'MMM do, yyyy')}</p>
+                                  <p className="font-black text-slate-900 text-lg">{b.guestName}</p>
                                </div>
-                               <button className="p-3 bg-slate-50 text-slate-600 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 transition-colors"><Edit3 size={18}/></button>
+                               <div className="text-right">
+                                  <p className="text-xs font-bold text-slate-500">{b.roomName}</p>
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase">Check-out: {format(b.checkOut.toDate(), 'MMM do')}</p>
+                               </div>
                             </div>
                          </div>
-                      </div>
-                   ))}
+                      ))}
+                      {bookings.filter(b => ['confirmed', 'checked-in'].includes(b.status)).length === 0 && <p className="text-slate-400 text-center font-bold">No upcoming stays scheduled.</p>}
+                   </div>
                 </div>
              </motion.div>
           )}
 
-          {/* -------------------- INBOX TAB -------------------- */}
-          {activeTab === 'inbox' && (
-             <div className="h-[70vh] min-h-[600px] bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden flex">
-                <div className="w-1/3 border-r border-slate-100 bg-slate-50 flex flex-col">
-                   <div className="p-6 border-b border-slate-200 bg-white"><h3 className="font-black text-lg">Messages</h3></div>
-                   <div className="flex-1 overflow-y-auto">
-                      {chats.map(chat => (
-                         <div key={chat.id} className="p-5 hover:bg-white cursor-pointer border-b border-slate-200 flex gap-4 transition-colors">
-                            <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold text-lg">{chat.participantName?.[0] || 'U'}</div>
-                            <div className="flex-1 min-w-0 flex flex-col justify-center">
-                               <div className="flex justify-between items-center mb-1">
-                                  <h4 className="font-bold text-sm truncate">{chat.participantName || 'Guest'}</h4>
-                               </div>
-                               <p className="text-xs text-slate-500 truncate font-medium">{chat.lastMessage}</p>
-                            </div>
-                         </div>
-                      ))}
-                      {chats.length === 0 && <p className="text-center p-8 text-slate-400 font-bold text-sm">No conversations yet.</p>}
-                   </div>
+          {/* --- TAB: ROOMS --- */}
+          {activeTab === 'rooms' && hotel && !needsSetup && (
+             <motion.div key="rooms" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+                <div className="flex justify-between items-center mb-8">
+                   <h1 className="text-3xl font-black tracking-tight">Room Inventory</h1>
+                   <button onClick={() => updateTab('add-room')} className="bg-[#0065eb] text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-blue-500/30 hover:scale-105 transition-transform">
+                      <Plus size={18}/> Add Room
+                   </button>
                 </div>
-                <div className="w-2/3 bg-white flex flex-col items-center justify-center text-center p-8">
-                   <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-6 text-slate-300"><MessageSquare size={40}/></div>
-                   <h3 className="text-xl font-black mb-2 text-slate-800">Your Inbox</h3>
-                   <p className="text-sm text-slate-500 max-w-xs leading-relaxed">Select a conversation from the list to view message history and reply to your guests.</p>
-                </div>
-             </div>
+                
+                {rooms.length === 0 ? (
+                    <EmptyState icon={BedDouble} title="No Rooms Listed" desc="You haven't added any rooms yet. Click 'Add Room' to start building your inventory." />
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                     {rooms.map(room => (
+                        <div key={room.id} className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl transition-shadow group flex flex-col">
+                           <div className="h-48 bg-slate-100 relative">
+                              {room.images && room.images[0] ? (
+                                <Image src={room.images[0]} alt={room.roomTypeName} fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-slate-300"><BedDouble size={48}/></div>
+                              )}
+                              <div className={`absolute top-4 right-4 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest backdrop-blur-md ${room.status === 'draft' ? 'bg-slate-900/80 text-white' : 'bg-emerald-500/90 text-white shadow-lg'}`}>
+                                 {room.status === 'draft' ? 'Hidden' : 'Live'}
+                              </div>
+                           </div>
+                           <div className="p-6 flex-1 flex flex-col">
+                              <h4 className="font-bold text-xl mb-1">{room.roomTypeName}</h4>
+                              <p className="text-xs font-bold text-slate-400 mb-4 flex items-center gap-1"><Users size={14}/> Max {room.maxOccupancy} Guests</p>
+                              
+                              <div className="mt-auto pt-4 border-t border-slate-100 flex items-center justify-between">
+                                 <div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Price / Night</p>
+                                    <span className="font-black text-2xl text-[#0065eb]">${room.pricePerNight}</span>
+                                 </div>
+                                 <button onClick={() => { setSelectedRoomId(room.id); updateTab('edit-room'); }} className="p-3 bg-slate-50 text-slate-600 rounded-xl hover:bg-[#0065eb] hover:text-white transition-colors">
+                                    <Edit3 size={18}/>
+                                 </button>
+                              </div>
+                           </div>
+                        </div>
+                     ))}
+                  </div>
+                )}
+             </motion.div>
           )}
 
-          {/* -------------------- SETTINGS (ADVANCED EDITOR) -------------------- */}
-          {activeTab === 'settings' && (
-             <AdvancedHotelEditor hotel={hotel} setHotel={setHotel} isPro={isPro} />
+          {/* --- TAB: ADD ROOM --- */}
+          {activeTab === 'add-room' && hotel && (
+             <motion.div key="add-room" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+                <button onClick={() => updateTab('rooms')} className="mb-6 flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold transition-colors">
+                   <ArrowLeftCircle size={20} /> Back to Rooms
+                </button>
+                <AddEditRoom hotelId={hotel.id} />
+             </motion.div>
+          )}
+
+          {/* --- TAB: EDIT ROOM --- */}
+          {activeTab === 'edit-room' && hotel && selectedRoomId && (
+             <motion.div key="edit-room" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+                <button onClick={() => updateTab('rooms')} className="mb-6 flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold transition-colors">
+                   <ArrowLeftCircle size={20} /> Back to Rooms
+                </button>
+                <AddEditRoom hotelId={hotel.id} roomId={selectedRoomId} />
+             </motion.div>
+          )}
+
+          {/* --- TAB: MESSAGES --- */}
+          {activeTab === 'messages' && hotel && !needsSetup && (
+             <motion.div key="messages" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden min-h-[500px] shadow-sm">
+                <div className="p-8 border-b border-slate-100">
+                   <h2 className="text-2xl font-black">Guest Inbox</h2>
+                   <p className="text-slate-500 font-medium">Manage all guest inquiries and booking messages.</p>
+                </div>
+                {chats.length === 0 ? (
+                    <EmptyState icon={MessageSquare} title="No Messages" desc="When guests contact you, their messages will appear here." />
+                ) : (
+                    <div className="divide-y divide-slate-100">
+                        {chats.map(chat => (
+                            <div key={chat.id} onClick={() => router.push(`/dashboard/chat/${chat.id}`)} className="p-6 hover:bg-slate-50 transition-colors cursor-pointer flex flex-col sm:flex-row justify-between sm:items-center group gap-4">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-[#0065eb] font-bold text-lg shadow-inner shrink-0">
+                                        {chat.participantName?.[0] || 'G'}
+                                    </div>
+                                    <div className="min-w-0">
+                                        <h4 className="font-bold text-slate-900 group-hover:text-[#0065eb] transition-colors truncate">{chat.participantName || 'Guest User'}</h4>
+                                        <p className="text-sm text-slate-500 truncate max-w-[200px] md:max-w-md">{chat.lastMessage || 'Sent a message'}</p>
+                                    </div>
+                                </div>
+                                <div className="sm:text-right flex sm:flex-col items-center sm:items-end justify-between sm:justify-center w-full sm:w-auto border-t sm:border-none border-slate-100 pt-3 sm:pt-0">
+                                    <p className="text-xs font-bold text-slate-400 sm:mb-1">
+                                      {chat.updatedAt ? format(chat.updatedAt.toDate(), 'MMM d, h:mm a') : 'Just now'}
+                                    </p>
+                                    {chat.unreadCount > 0 && <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">{chat.unreadCount} new</span>}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+             </motion.div>
+          )}
+
+          {/* --- TAB: SETTINGS (READ-ONLY OVERVIEW) --- */}
+          {activeTab === 'settings' && hotel && !needsSetup && (
+             <motion.div key="settings" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+                <h1 className="text-3xl font-black tracking-tight mb-6">Hotel Settings</h1>
+                <div className="bg-white p-6 md:p-10 rounded-[2rem] border border-slate-100 shadow-sm max-w-4xl">
+                   
+                   <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 pb-6 border-b border-slate-100 gap-6">
+                      <div className="flex items-center gap-4">
+                         <div className="p-3 bg-blue-50 rounded-xl text-[#0065eb]"><Building2 size={28}/></div>
+                         <div>
+                            <h3 className="text-xl font-bold">Property Profile</h3>
+                            <p className="text-sm text-slate-500">Manage your public listing details and configuration.</p>
+                         </div>
+                      </div>
+                      <button onClick={() => updateTab('edit-hotel')} className="bg-slate-900 text-white px-6 py-3.5 rounded-xl font-bold shadow-lg hover:bg-slate-800 transition-colors flex items-center justify-center gap-2 shrink-0">
+                         <Edit3 size={18}/> Edit Complete Hotel
+                      </button>
+                   </div>
+                   
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <InfoField label="Hotel Name" value={hotel.name} icon={Building2} />
+                      <InfoField label="Base Price / Night" value={`$${hotel.pricePerNight}`} icon={DollarSign} />
+                      <InfoField label="Location (City)" value={hotel.location?.city || 'Not specified'} icon={MapPin} />
+                      <InfoField label="Location (Area)" value={hotel.location?.area || 'Not specified'} icon={MapPin} />
+                      <InfoField label="Total Rooms Configured" value={`${hotel.roomsCount}`} icon={BedDouble} />
+                      <InfoField label="Reception Phone" value={hotel.contact?.phoneCall || 'Not specified'} icon={Phone} />
+                      <div className="md:col-span-2">
+                         <InfoField label="Cancellation Policy" value={hotel.policies?.cancellation || 'Not specified'} icon={Shield} />
+                      </div>
+                   </div>
+
+                </div>
+             </motion.div>
+          )}
+
+          {/* --- TAB: EDIT HOTEL (CALLS THE HOTELFORM) --- */}
+          {activeTab === 'edit-hotel' && hotel && (
+             <motion.div key="edit-hotel" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+                <button onClick={() => updateTab('settings')} className="mb-6 flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold transition-colors">
+                   <ArrowLeftCircle size={20} /> Back to Settings
+                </button>
+                <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
+                   <HotelForm hotelId={hotel.id} />
+                </div>
+             </motion.div>
+          )}
+
+          {/* --- TAB: SETUP HOTEL (INITIAL CREATION) --- */}
+          {activeTab === 'setup-hotel' && (
+             <motion.div key="setup-hotel" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+                <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden mt-6">
+                   <HotelForm />
+                </div>
+             </motion.div>
+          )}
+
+          {/* --- LOCKED PRO TABS --- */}
+          {['analytics', 'reports', 'guests', 'staff'].includes(activeTab) && hotel && !needsSetup && (
+             <motion.div key="locked" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+                <ProLockOverlay featureName={activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} />
+             </motion.div>
           )}
 
         </AnimatePresence>
       </main>
 
-      {/* ================= BOTTOM NAVIGATION BAR ================= */}
-      <div className="fixed bottom-0 left-0 w-full z-50 p-4 md:p-6 pointer-events-none">
-        <div className="max-w-3xl mx-auto bg-slate-900 text-white rounded-full p-2 flex items-center justify-between shadow-2xl shadow-slate-900/20 pointer-events-auto backdrop-blur-lg border border-slate-700/50">
-           <BottomNavItem icon={LayoutDashboard} label="Overview" active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
-           <BottomNavItem icon={TrendingUp} label="Stats" active={activeTab === 'analytics'} onClick={() => setActiveTab('analytics')} />
-           <BottomNavItem icon={Calendar} label="Bookings" active={activeTab === 'bookings'} onClick={() => setActiveTab('bookings')} count={pendingBookingsCount} />
-           <BottomNavItem icon={BedDouble} label="Rooms" active={activeTab === 'rooms'} onClick={() => setActiveTab('rooms')} />
-           <BottomNavItem icon={MessageSquare} label="Chat" active={activeTab === 'inbox'} onClick={() => setActiveTab('inbox')} />
-           <BottomNavItem icon={Settings} label="Edit" active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} />
-        </div>
-      </div>
+      {/* ================= MOBILE BOTTOM NAVIGATION ================= */}
+      <nav className="lg:hidden fixed bottom-0 left-0 w-full bg-white/95 backdrop-blur-md border-t border-slate-200 z-50 flex items-center justify-around px-2 pb-safe pt-2 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
+         <BottomNavItem icon={LayoutDashboard} label="Home" active={activeTab === 'overview'} onClick={() => updateTab('overview')} />
+         <BottomNavItem icon={CalendarIcon} label="Bookings" active={activeTab === 'reservations'} onClick={() => updateTab('reservations')} badge={bookings.filter(b=>b.status==='pending').length} />
+         <BottomNavItem icon={BedDouble} label="Rooms" active={['rooms', 'add-room', 'edit-room'].includes(activeTab)} onClick={() => updateTab('rooms')} />
+         <BottomNavItem icon={MessageSquare} label="Inbox" active={activeTab === 'messages'} onClick={() => updateTab('messages')} badge={chats.filter(c => c.unreadCount > 0).length} />
+         <BottomNavItem icon={Settings} label="Menu" active={['settings', 'edit-hotel', 'analytics', 'reports', 'guests', 'staff'].includes(activeTab)} onClick={() => updateTab('settings')} />
+      </nav>
 
     </div>
   );
 }
 
 // ============================================================================
-//  ADVANCED EDITOR COMPONENT (The Mega Form)
+// UI COMPONENTS
 // ============================================================================
 
-interface AdvancedHotelEditorProps {
-  hotel: HotelData;
-  setHotel: React.Dispatch<React.SetStateAction<HotelData | null>>;
-  isPro: boolean;
-}
-
-function AdvancedHotelEditor({ hotel, setHotel, isPro }: AdvancedHotelEditorProps) {
-  const [formData, setFormData] = useState<HotelData>(hotel);
-  const [saving, setSaving] = useState<boolean>(false);
-
-  const handleChange = (field: string, value: string | number) => {
-    setFormData((prev: HotelData) => {
-      const keys = field.split('.');
-      if (keys.length === 1) return { ...prev, [field]: value };
-      return { ...prev, [keys[0]]: { ...(prev as any)[keys[0]], [keys[1]]: value } };
-    });
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await updateDoc(doc(db, 'hotels', hotel.id), {
-        name: formData.name,
-        type: formData.type,
-        description: formData.description,
-        pricePerNight: Number(formData.pricePerNight),
-        roomsCount: Number(formData.roomsCount),
-        location: formData.location,
-        contact: formData.contact,
-        policies: formData.policies,
-        amenities: formData.amenities,
-      });
-      setHotel(formData);
-      alert('Hotel profile updated successfully!');
-    } catch (e) {
-      console.error(e);
-      alert('Failed to save changes.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const toggleAmenity = (key: string) => {
-    setFormData((prev: HotelData) => ({
-      ...prev,
-      amenities: { ...prev.amenities, [key]: !prev.amenities[key] }
-    }));
-  };
-
-  const amenitiesList = ['Free Wi-Fi', 'Restaurant', 'Swimming Pool', 'Gym / Fitness', 'Room Service', 'Airport Shuttle', 'Free Parking', 'Spa', 'Air Conditioning', 'Bar / Lounge', '24/7 Front Desk'];
-
+function SidebarItem({ icon: Icon, label, active, onClick, count, isProLocked }: any) {
   return (
-    <motion.div initial={{opacity:0}} animate={{opacity:1}} className="max-w-5xl mx-auto space-y-8">
-      
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900 text-white p-8 rounded-3xl shadow-xl sticky top-24 z-20">
-        <div>
-          <h3 className="text-2xl font-black mb-1">Hotel Profile Editor</h3>
-          <p className="text-slate-400 text-sm font-medium">Update your public listing details, policies, and amenities.</p>
-        </div>
-        <button onClick={handleSave} disabled={saving} className="bg-indigo-500 text-white px-8 py-4 rounded-xl font-bold hover:bg-indigo-600 disabled:opacity-50 transition-colors shadow-lg shadow-indigo-500/30 flex items-center justify-center gap-2 min-w-[160px]">
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
+    <button 
+      onClick={onClick}
+      className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl transition-all group ${active ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/20' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
+    >
+      <div className="flex items-center gap-3">
+          <Icon size={20} className={active ? 'text-white' : 'text-slate-400 group-hover:text-slate-900'} />
+          <span className="font-bold text-sm">{label}</span>
       </div>
-
-      <EditorSection title="Basic Information" icon={Building2}>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Input label="Hotel Name" value={formData.name} onChange={(v: string) => handleChange('name', v)} />
-          <Input label="Property Type" value={formData.type} onChange={(v: string) => handleChange('type', v)} placeholder="e.g. Resort, Boutique Hotel" />
-          <Input label="Base Price / Night ($)" type="number" value={formData.pricePerNight} onChange={(v: string) => handleChange('pricePerNight', v)} />
-          <Input label="Total Rooms Available" type="number" value={formData.roomsCount} onChange={(v: string) => handleChange('roomsCount', v)} />
-          <div className="md:col-span-2">
-            <label className="text-xs font-bold uppercase text-slate-500 tracking-widest mb-2 block">Description</label>
-            <textarea 
-               rows={5} 
-               value={formData.description} 
-               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleChange('description', e.target.value)} 
-               className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-slate-800 transition-all resize-none" 
-               placeholder="Describe your property to potential guests..."
-            />
-          </div>
-        </div>
-      </EditorSection>
-
-      <EditorSection title="Location" icon={MapPin}>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Input label="City" value={formData.location.city} onChange={(v: string) => handleChange('location.city', v)} />
-          <Input label="Area / Neighborhood" value={formData.location.area} onChange={(v: string) => handleChange('location.area', v)} />
-        </div>
-      </EditorSection>
-
-      <EditorSection title="Contact Information" icon={Phone}>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Input label="Reception Phone" value={formData.contact.phoneCall} onChange={(v: string) => handleChange('contact.phoneCall', v)} icon={Phone} />
-          <Input label="WhatsApp Number" value={formData.contact.phoneWhatsapp} onChange={(v: string) => handleChange('contact.phoneWhatsapp', v)} icon={MessageSquare} />
-          <Input label="Manager Phone" value={formData.contact.phoneManager} onChange={(v: string) => handleChange('contact.phoneManager', v)} icon={Users} />
-          <Input label="Website URL" value={formData.contact.website} onChange={(v: string) => handleChange('contact.website', v)} icon={Globe} />
-        </div>
-      </EditorSection>
-
-      <EditorSection title="Policies & Payments" icon={Shield}>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <Input label="Check-In Time" value={formData.policies.checkInTime} onChange={(v: string) => handleChange('policies.checkInTime', v)} placeholder="e.g. 2:00 PM" />
-          <Input label="Check-Out Time" value={formData.policies.checkOutTime} onChange={(v: string) => handleChange('policies.checkOutTime', v)} placeholder="e.g. 11:00 AM" />
-          <div className="md:col-span-2">
-            <Input label="Cancellation Policy" value={formData.policies.cancellation} onChange={(v: string) => handleChange('policies.cancellation', v)} placeholder="e.g. Free cancellation up to 24hrs before..." />
-          </div>
-        </div>
-        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
-          <label className="text-xs font-bold uppercase text-slate-500 tracking-widest mb-3 block">Payment Methods Accepted (Comma separated)</label>
-          <input 
-             type="text" 
-             value={formData.policies.paymentMethods} 
-             onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('policies.paymentMethods', e.target.value)} 
-             placeholder="e.g. Zaad, E-Dahab, Cash, Visa, Mastercard" 
-             className="w-full p-4 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium" 
-          />
-        </div>
-      </EditorSection>
-
-      <EditorSection title="Amenities & Facilities" icon={Wifi}>
-        {!isPro && (
-           <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-4">
-              <Lock className="text-amber-500 shrink-0"/>
-              <p className="text-sm font-bold text-amber-800">Amenities selection is limited on the Free Plan. Upgrade to showcase all your facilities.</p>
-           </div>
-        )}
-        <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 ${!isPro ? 'opacity-60 pointer-events-none' : ''}`}>
-          {amenitiesList.map(amenity => (
-            <label key={amenity} className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-2xl cursor-pointer hover:bg-slate-100 transition-colors select-none">
-              <div className="relative flex items-center justify-center">
-                 <input 
-                    type="checkbox" 
-                    checked={formData.amenities[amenity] || false} 
-                    onChange={() => toggleAmenity(amenity)} 
-                    className="w-6 h-6 rounded-md border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer appearance-none checked:bg-indigo-600 transition-colors" 
-                 />
-                 {(formData.amenities[amenity] || false) && <CheckCircle size={14} className="absolute text-white pointer-events-none"/>}
-              </div>
-              <span className="text-sm font-bold text-slate-700">{amenity}</span>
-            </label>
-          ))}
-        </div>
-      </EditorSection>
-
-    </motion.div>
-  );
-}
-
-// ============================================================================
-//  STRICTLY TYPED HELPER COMPONENTS
-// ============================================================================
-
-interface BottomNavItemProps {
-  icon: React.ElementType;
-  label: string;
-  active: boolean;
-  onClick: () => void;
-  count?: number;
-}
-
-function BottomNavItem({ icon: Icon, label, active, onClick, count }: BottomNavItemProps) {
-  return (
-    <button onClick={onClick} className={`relative flex flex-col items-center justify-center w-16 h-14 rounded-full transition-all ${active ? 'bg-indigo-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
-      <Icon size={active ? 22 : 20} className="mb-1 transition-all" />
-      <span className={`text-[9px] font-bold uppercase tracking-wider ${active ? 'opacity-100' : 'opacity-70'}`}>{label}</span>
-      {count !== undefined && count > 0 && (
-         <span className="absolute top-0 right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center border border-slate-900">
-            {count}
-         </span>
-      )}
+      <div className="flex items-center gap-2">
+         {isProLocked && <Lock size={14} className="text-amber-500" />}
+         {count > 0 && <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${active ? 'bg-white text-slate-900' : 'bg-red-500 text-white'}`}>{count}</span>}
+      </div>
     </button>
   );
 }
 
-interface StatCardProps {
-  title: string;
-  value: string | number;
-  icon: React.ElementType;
-  color: string;
-  bg: string;
-  isPro?: boolean;
+function BottomNavItem({ icon: Icon, label, active, onClick, badge }: any) {
+  return (
+    <button onClick={onClick} className="flex flex-col items-center justify-center p-2 relative w-16">
+       <div className={`p-2 rounded-xl transition-all ${active ? 'bg-[#0065eb] text-white shadow-md -translate-y-1' : 'text-slate-400'}`}>
+          <Icon size={22} strokeWidth={active ? 2.5 : 2} />
+          {badge > 0 && <span className="absolute top-1 right-2 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full"></span>}
+       </div>
+       <span className={`text-[10px] font-bold mt-1 transition-all ${active ? 'text-[#0065eb]' : 'text-slate-400'}`}>{label}</span>
+    </button>
+  );
 }
 
-function StatCard({ title, value, icon: Icon, color, bg, isPro = true }: StatCardProps) {
+function StatCard({ title, value, icon: Icon, color, bg }: any) {
   return (
-    <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
-       <div className="flex justify-between items-start mb-6">
-          <div className={`w-14 h-14 ${bg} rounded-2xl flex items-center justify-center ${color}`}>
-             <Icon size={26} strokeWidth={2.5} />
-          </div>
-          {!isPro && <Lock size={18} className="text-slate-300" />}
+    <div className="bg-white p-5 lg:p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+       <div className={`w-12 h-12 ${bg} rounded-2xl flex items-center justify-center ${color} mb-4`}>
+          <Icon size={24} strokeWidth={2.5} />
        </div>
-       <div className={!isPro ? 'blur-[6px] select-none' : ''}>
-          <h3 className="text-4xl font-black text-slate-900 mb-1 tracking-tight">{value}</h3>
-          <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{title}</p>
+       <div>
+          <h3 className="text-2xl lg:text-3xl font-black text-slate-900 tracking-tight truncate">{value}</h3>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 truncate">{title}</p>
        </div>
-       {!isPro && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/10">
-             <span className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-full shadow-xl">Pro Feature</span>
-          </div>
-       )}
     </div>
   );
 }
 
-interface ChannelRowProps {
-  label: string;
-  count: number;
-  color: string;
-}
-
-function ChannelRow({ label, count, color }: ChannelRowProps) {
-  return (
-    <div className="flex items-center justify-between p-5 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-slate-100 transition-colors">
-      <div className="flex items-center gap-4">
-        <div className={`w-4 h-4 rounded-md ${color} shadow-sm`}></div>
-        <span className="font-bold text-slate-700 text-sm">{label}</span>
-      </div>
-      <span className="font-black text-xl text-slate-900">{count}</span>
-    </div>
-  );
-}
-
-interface EditorSectionProps {
-  title: string;
-  icon: React.ElementType;
-  children: React.ReactNode;
-}
-
-function EditorSection({ title, icon: Icon, children }: EditorSectionProps) {
-  return (
-    <div className="bg-white p-6 md:p-10 rounded-3xl border border-slate-100 shadow-sm">
-      <div className="flex items-center gap-4 mb-8 pb-6 border-b border-slate-50">
-        <div className="p-3 bg-indigo-50 rounded-xl text-indigo-600 shadow-sm">
-           <Icon size={24} strokeWidth={2.5}/>
+function InfoField({ label, value, icon: Icon }: any) {
+   return (
+     <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 flex items-center gap-4">
+        <div className="p-3 bg-white rounded-xl shadow-sm text-slate-400 shrink-0"><Icon size={24}/></div>
+        <div className="min-w-0">
+           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{label}</p>
+           <p className="font-bold text-slate-900 truncate">{value}</p>
         </div>
-        <h4 className="text-2xl font-black text-slate-800">{title}</h4>
-      </div>
-      {children}
-    </div>
-  );
+     </div>
+   )
 }
 
-interface InputProps {
-  label: string;
-  value: string | number;
-  onChange: (value: string) => void;
-  type?: string;
-  placeholder?: string;
-  icon?: React.ElementType;
+function StatusBadge({ status }: { status: string }) {
+   const styles: any = {
+     'pending': 'bg-amber-100 text-amber-700',
+     'confirmed': 'bg-emerald-100 text-emerald-700',
+     'checked-in': 'bg-blue-100 text-blue-700',
+     'checked-out': 'bg-slate-100 text-slate-600',
+     'cancelled': 'bg-red-100 text-red-700',
+   };
+   return (
+     <span className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest ${styles[status] || 'bg-slate-100 text-slate-900'}`}>
+       {status.replace('-', ' ')}
+     </span>
+   );
 }
 
-function Input({ label, value, onChange, type = 'text', placeholder, icon: Icon }: InputProps) {
+function ActionButton({ icon: Icon, color, onClick }: any) {
+   return (
+      <button onClick={onClick} className={`p-2 rounded-xl shadow-sm hover:scale-105 transition-all ${color}`}>
+         <Icon size={18} />
+      </button>
+   );
+}
+
+function EmptyState({ icon: Icon, title, desc }: any) {
   return (
-    <div>
-      <label className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2 block ml-1">{label}</label>
-      <div className="relative">
-        {Icon && <Icon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20}/>}
-        <input 
-          type={type} 
-          value={value} 
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.value)} 
-          placeholder={placeholder}
-          className={`w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 transition-all ${Icon ? 'pl-12' : ''}`}
-        />
-      </div>
+    <div className="flex flex-col items-center justify-center py-20 px-4 text-center bg-white rounded-3xl border border-slate-100 border-dashed">
+       <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 mb-6"><Icon size={40} /></div>
+       <h3 className="text-xl font-black text-slate-900 mb-2">{title}</h3>
+       <p className="text-slate-500 font-medium text-sm max-w-sm">{desc}</p>
     </div>
   );
+}
+
+function ProLockOverlay({ featureName }: { featureName: string }) {
+   const router = useRouter();
+   return (
+      <div className="h-[70vh] min-h-[500px] flex flex-col items-center justify-center bg-white rounded-3xl border border-amber-200 relative overflow-hidden text-center p-6">
+         <div className="absolute top-0 right-0 w-96 h-96 bg-amber-50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
+         <div className="w-24 h-24 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mb-6 shadow-inner relative z-10">
+            <Lock size={40} />
+         </div>
+         <h2 className="text-3xl font-black text-slate-900 mb-3 relative z-10">{featureName} is a Pro Feature</h2>
+         <p className="text-slate-500 font-medium max-w-md mx-auto mb-8 relative z-10">
+            Upgrade to the Premium Plan to unlock advanced analytics, guest history, staff management, and financial reporting.
+         </p>
+         <button onClick={() => router.push('/subscription')} className="bg-amber-400 text-amber-950 px-10 py-4 rounded-2xl font-black text-lg shadow-xl shadow-amber-400/20 hover:bg-amber-500 hover:scale-105 transition-all relative z-10 flex items-center gap-2">
+            <Shield size={20} /> Upgrade to Pro
+         </button>
+      </div>
+   );
 }

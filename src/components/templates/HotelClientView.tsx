@@ -30,6 +30,10 @@ interface Hotel {
   rating: number;
   amenities: string[];
   phone: string;
+isPro?: boolean;
+isVerified?: boolean; // Added this
+contact?: { phoneWhatsapp?: string; phoneCall?: string }; // Added this
+contactPhone?: string;
   planTier?: string;
 }
 
@@ -175,9 +179,13 @@ export default function HotelDetailPage() {
       `💰 *Est. Price:* $${totalPrice}/night\n\n` +
       `Please confirm availability.`;
 
-   const isPro = hotel.planTier === 'pro' || hotel.planTier === 'premium';
-    const finalPhone = isPro && hotel.phone ? hotel.phone : '+252653227084';
-    const finalCleanPhone = finalPhone.replace(/[^0-9]/g, '');
+   const isPro = hotel.planTier?.toLowerCase().includes('pro') || hotel.isVerified === true;
+    const rawP = hotel.contact?.phoneWhatsapp || hotel.contact?.phoneCall || hotel.contactPhone || hotel.phone;
+    const finalPhone = isPro && rawP ? rawP : '+252653227084';
+    let finalCleanPhone = finalPhone.replace(/[^0-9]/g, '');
+    if (finalCleanPhone.startsWith('63') && finalCleanPhone.length === 9) {
+      finalCleanPhone = '252' + finalCleanPhone;
+    }
     window.open(`https://wa.me/${finalCleanPhone}?text=${encodeURIComponent(message)}`, '_blank');
     setShowBookingModal(false);
   };
@@ -186,9 +194,14 @@ export default function HotelDetailPage() {
   if (!hotel) return <div className="h-screen flex items-center justify-center font-bold">Hotel Not Found</div>;
 
   // SILENT INTERCEPT: Pro/Premium uses real number, Free/Unverified uses your number
-  const isVerified = hotel.planTier === 'pro' || hotel.planTier === 'premium';
-  const targetPhone = isVerified && hotel.phone ? hotel.phone : '+252653227084';
-  const cleanTargetPhone = targetPhone.replace(/[^0-9]/g, '');
+  const isVerified = hotel.planTier?.toLowerCase().includes('pro') || hotel.isVerified === true;
+  const rawTarget = hotel.contact?.phoneWhatsapp || hotel.contact?.phoneCall || hotel.contactPhone || hotel.phone;
+  const targetPhone = isVerified && rawTarget ? rawTarget : '+252653227084';
+  // 3. Add 252 country code to Hargeisa 63 numbers
+  let cleanTargetPhone = targetPhone.replace(/[^0-9]/g, '');
+  if (cleanTargetPhone.startsWith('63') && cleanTargetPhone.length === 9) {
+    cleanTargetPhone = '252' + cleanTargetPhone;
+  }
 
   return (
     // FIX 1: pt-28 pushes the content down to clear the global nav, no overlapping.

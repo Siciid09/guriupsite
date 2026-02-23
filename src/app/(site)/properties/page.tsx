@@ -1,8 +1,32 @@
+import { Metadata } from "next";
 import PropertiesUI from "@/components/templates/PropertiesUI";
 
 export const dynamic = "force-dynamic";
 
-// 1. Define the full Property interface to match PropertiesUI requirements exactly
+// --- 1. SEO METADATA (Targeting Africa & Global Real Estate) ---
+export const metadata: Metadata = {
+  title: 'Prime Real Estate & Properties in Africa & The World | GuriUp',
+  description: 'Discover top houses, apartments, and commercial properties for sale and rent across Africa and worldwide. Explore verified real estate listings on GuriUp.',
+  keywords: 'real estate Africa, properties for sale worldwide, buy house Africa, rent apartment globally, commercial property, GuriUp real estate, international property listings',
+  openGraph: {
+    title: 'Prime Real Estate & Properties in Africa & The World | GuriUp',
+    description: 'Discover top houses, apartments, and commercial properties for sale and rent across Africa and worldwide.',
+    type: 'website',
+    siteName: 'GuriUp',
+    locale: 'en_US',
+    url: 'https://guriup.com/properties', // Update with your actual domain if different
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Prime Real Estate & Properties in Africa & The World | GuriUp',
+    description: 'Discover top houses, apartments, and commercial properties for sale and rent across Africa and worldwide.',
+  },
+  alternates: {
+    canonical: 'https://guriup.com/properties', // SEO: Prevents duplicate content penalties
+  }
+};
+
+// 2. Define the full Property interface to match PropertiesUI requirements exactly (UNTOUCHED)
 interface Property {
   id: string;
   slug?: string;
@@ -28,6 +52,7 @@ interface Property {
   createdAt: string; 
 }
 
+// 3. FETCH DATA HELPER (UNTOUCHED)
 async function getPropertiesData() {
   const baseUrl = 
     process.env.NODE_ENV === 'development' 
@@ -44,7 +69,7 @@ async function getPropertiesData() {
     if (!featuredRes.ok) console.error(`Featured API Error: ${featuredRes.status}`);
     if (!allRes.ok) console.error(`All Properties API Error: ${allRes.status}`);
 
-    // 2. Parse JSON and cast to the Property array type
+    // Parse JSON and cast to the Property array type
     const featuredData: Property[] = featuredRes.ok ? await featuredRes.json() : [];
     const allData: Property[] = allRes.ok ? await allRes.json() : [];
 
@@ -63,13 +88,49 @@ async function getPropertiesData() {
   }
 }
 
+// 4. MAIN PAGE
 export default async function PropertiesPage() {
   const { featuredProperties, allProperties } = await getPropertiesData();
 
+  // --- SEO JSON-LD: Collection Schema for Google ---
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: 'Real Estate & Properties in Africa & The World',
+    description: 'Browse houses, apartments, and commercial spaces for sale and rent globally.',
+    url: 'https://guriup.com/properties',
+    provider: {
+      '@type': 'Organization',
+      name: 'GuriUp',
+    },
+    // Safely feeds up to 3 premium properties into the search snippet
+    mainEntity: {
+      '@type': 'ItemList',
+      itemListElement: featuredProperties.slice(0, 3).map((property, index) => ({
+        '@type': 'ListItem',
+        position: index + 1,
+        item: {
+          '@type': 'RealEstateListing',
+          name: property?.title || 'GuriUp Premium Property',
+          url: `https://guriup.com/properties/${property?.slug || property?.id || ''}`
+        }
+      }))
+    }
+  };
+
   return (
-    <PropertiesUI
-      featuredProperties={featuredProperties}
-      allProperties={allProperties}
-    />
+    <>
+      {/* Invisible SEO Script for Google Search */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      
+      {/* UI Render (UNTOUCHED) */}
+      <PropertiesUI
+        featuredProperties={featuredProperties}
+        allProperties={allProperties}
+      />
+    </>
   );
 }

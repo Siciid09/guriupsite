@@ -103,7 +103,7 @@ export default function LoginPage() {
 
   return (
     // Outer container: min-h-screen ensures full height. flex row for split layout.
-    <div className="min-h-screen flex bg-white">
+    <div className="min-h-screen flex bg-white pb-8">
       
       {/* --- LEFT SIDE: MODERN IMAGE (Hidden on mobile, visible lg and up) --- */}
       <div className="hidden lg:block relative w-0 lg:w-1/2 bg-slate-900 overflow-hidden">
@@ -112,13 +112,13 @@ export default function LoginPage() {
           src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=2070&auto=format&fit=crop" 
           alt="Modern architecture" 
           fill
-          className="object-cover opacity-90"
+          className="object-cover opacity-50"
           priority
         />
         {/* Subtle gradient overlay for text readability if needed later */}
         <div className="absolute inset-0 bg-gradient-to-t from-slate-900/50 to-transparent"></div>
         
-        <div className="absolute bottom-0 left-0 p-12 text-white z-10">
+        <div className="absolute bottom-[380px] left-0 p-12 text-white z-10">
           <h2 className="text-4xl font-black tracking-tight mb-4">Welcome back to GuriUp.</h2>
           <p className="text-slate-200 text-lg max-w-md leading-relaxed">
             Sign in to manage your properties, connect with clients, and unlock exclusive real estate opportunities across the region.
@@ -128,7 +128,7 @@ export default function LoginPage() {
 
       {/* --- RIGHT SIDE: LOGIN FORM --- */}
       {/* Added pt-24 (padding-top) specifically to clear navigation on mobile */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 md:p-12 pt-24 lg:pt-0 animate-in fade-in slide-in-from-right-8 duration-500">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 md:p-12 pt-24 lg:pt-12 animate-in fade-in slide-in-from-right-8 duration-500">
         <div className="w-full max-w-md space-y-8">
           
           {/* Header */}
