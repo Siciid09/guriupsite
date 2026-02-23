@@ -35,6 +35,7 @@ interface Property {
 
 interface Hotel {
   id: string;
+  slug?: string; // Added slug
   name: string;
   pricePerNight: number;
   images: string[];
@@ -586,7 +587,7 @@ const HomeUI = ({
           <h2 className="text-slate-900 text-2xl font-black mb-8">Recently Added</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {latestProperties.map((property) => (
-              <Link href={`/properties/${property.slug || property.id}`} key={property.id} className="bg-white p-3 rounded-2xl shadow-sm hover:shadow-md transition-all group block border border-slate-100">
+              <Link href={property.slug ? `/properties/${property.slug}` : `/properties/${property.id}`} key={property.id} className="bg-white p-3 rounded-2xl shadow-sm hover:shadow-md transition-all group block border border-slate-100">
                 <div className="relative h-32 rounded-xl overflow-hidden mb-3 bg-slate-100">
                    <img src={property.images?.[0] || 'https://placehold.co/600x400?text=No+Image'} className="object-cover w-full h-full group-hover:scale-110 transition-transform duration-500" alt={property.title} />
                    <div className="absolute top-2 right-2 bg-black/50 backdrop-blur px-2 py-0.5 rounded text-[9px] text-white font-bold uppercase">{property.status === 'rented_out' ? 'Rented' : (property.isForSale ? 'Buy' : 'Rent')}</div>
