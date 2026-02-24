@@ -23,11 +23,19 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      
-      // Fetch user role
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
+     const userCredential = await signInWithEmailAndPassword(auth, email, password);
+const user = userCredential.user;
+
+// 🚫 BLOCK if email not verified
+if (!user.emailVerified) {
+  await auth.signOut();
+  setError('Please verify your email before logging in.');
+  setLoading(false);
+  return;
+}
+
+// Fetch user role
+const userDoc = await getDoc(doc(db, 'users', user.uid));
       if (userDoc.exists()) {
         const userData = userDoc.data();
         // Redirect based on role
