@@ -10,7 +10,10 @@ import {
   sendEmailVerification,
   signOut,
   signInWithPopup,
-  GoogleAuthProvider
+  GoogleAuthProvider,
+  linkWithCredential,
+  EmailAuthProvider,
+  User as FirebaseUser
 } from 'firebase/auth';
 import { 
   doc, 
@@ -23,7 +26,7 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { auth, db, storage } from '../../lib/firebase'; // Fixed path for src/app/(auth)/signup
+import { auth, db, storage } from '../../lib/firebase'; // Adjust path as needed
 import { 
   User, Building2, Briefcase, Mail, Lock, Phone, ArrowRight, ArrowLeft, 
   Building, MapPin, MessageCircle, Loader2, AlertCircle, Eye, EyeOff, 
@@ -51,6 +54,9 @@ function SignupContent() {
   const [verificationSent, setVerificationSent] = useState(false);
   const [emailSentTo, setEmailSentTo] = useState('');
 
+  // --- NEW: GOOGLE INTERCEPT STATE ---
+  const [tempGoogleUser, setTempGoogleUser] = useState<FirebaseUser | null>(null);
+
   const [agentProfile, setAgentProfile] = useState<{file: File | null, preview: string | null}>({file: null, preview: null});
   const [agentCover, setAgentCover] = useState<{file: File | null, preview: string | null}>({file: null, preview: null});
   const [slug, setSlug] = useState('');
@@ -77,7 +83,14 @@ function SignupContent() {
     }
   }, [searchParams]);
 
-  const updateRole = (newRole: Role) => {
+  const updateRole = async (newRole: Role) => {
+    // If they change roles during a Google signup, clear the Google session so they start fresh
+    if (tempGoogleUser) {
+      await signOut(auth);
+      setTempGoogleUser(null);
+      setFormData({...formData, email: '', fullName: ''});
+    }
+    
     setRole(newRole);
     setStep(1);
     setError(null);
@@ -118,23 +131,22 @@ function SignupContent() {
       const userDocRef = doc(db, 'users', user.uid);
       const userDoc = await getDoc(userDocRef);
 
-      if (!userDoc.exists()) {
-        await setDoc(userDocRef, {
-          uid: user.uid,
-          name: user.displayName || 'Google User',
-          email: user.email,
-          phone: user.phoneNumber || "", 
-          role: 'user', 
-          authMethod: 'google',
-          photoUrl: user.photoURL || "",
-          emailVerified: true, 
-          createdAt: serverTimestamp(),
-          planTier: 'free',
-        });
+      if (userDoc.exists()) {
+        // User already has a complete account -> Log them in
+        router.push('/'); 
+      } else {
+        // NEW USER -> Intercept and populate form, DO NOT save to Firestore yet!
+        setTempGoogleUser(user);
+        setFormData(prev => ({
+          ...prev,
+          fullName: user.displayName || '',
+          email: user.email || ''
+        }));
       }
-      router.push('/'); 
     } catch (err: any) {
-      setError("Failed to sign in with Google.");
+      if (err.code !== 'auth/popup-closed-by-user') {
+         setError("Failed to sign in with Google.");
+      }
     } finally {
       setLoading(false);
     }
@@ -172,13 +184,26 @@ function SignupContent() {
         }
       }
 
-      const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-      const user = userCredential.user;
+      let user: FirebaseUser;
 
-      await updateProfile(user, { displayName: formData.fullName });
-      await sendEmailVerification(user);
+      if (tempGoogleUser) {
+        // --- GOOGLE USER: Link the password they just typed to their Google Account ---
+        user = tempGoogleUser;
+        try {
+           const credential = EmailAuthProvider.credential(user.email!, formData.password);
+           await linkWithCredential(user, credential);
+        } catch (linkErr) {
+           console.warn("Could not link password (may already be linked):", linkErr);
+        }
+      } else {
+        // --- NORMAL USER: Create Account ---
+        const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+        user = userCredential.user;
+        await updateProfile(user, { displayName: formData.fullName });
+        await sendEmailVerification(user);
+      }
 
-      let finalProfileUrl = "";
+      let finalProfileUrl = tempGoogleUser?.photoURL || "";
       let finalCoverUrl = "";
 
       if (role === 'reagent') {
@@ -202,10 +227,10 @@ function SignupContent() {
 
       const userData = {
         uid: user.uid,
-        authMethod: 'email_password',
+        authMethod: tempGoogleUser ? 'google' : 'email_password',
         createdAt: serverTimestamp(),
         email: formData.email.trim(),
-        emailVerified: false, 
+        emailVerified: tempGoogleUser ? true : false, // Google users are pre-verified
         name: formData.fullName.trim(),
         phone: formattedPhone,
         photoUrl: finalProfileUrl || "", 
@@ -256,8 +281,14 @@ function SignupContent() {
       
       await signOut(auth);
 
-      setEmailSentTo(formData.email);
-      setVerificationSent(true);
+      if (!tempGoogleUser) {
+        // Show verification screen for normal email/pass signups
+        setEmailSentTo(formData.email);
+        setVerificationSent(true);
+      } else {
+        // Google users are already verified, push directly to login
+        router.push('/login');
+      }
 
     } catch (err: any) {
       console.error("Registration Error:", err);
@@ -341,20 +372,40 @@ function SignupContent() {
                   <div className="animate-in fade-in slide-in-from-right-8 duration-500">
                       <h2 className="text-2xl font-bold text-slate-900 mb-6">Personal Details</h2>
                       
-                      {role === 'user' && (
+                      {/* --- GOOGLE SIGN UP BUTTON IS NOW AVAILABLE FOR ALL ROLES --- */}
+                      {!tempGoogleUser && (
                         <div className="mb-6">
                           <button type="button" onClick={handleGoogleSignIn} className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 p-3.5 rounded-xl text-slate-700 font-bold text-sm hover:bg-slate-50 transition-all">
-                            <Image src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width={20} height={20} alt="G" /> Sign up with Google
+                            <Image src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width={20} height={20} alt="G" /> Continue with Google
                           </button>
                           <div className="relative my-6"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div><div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-3 text-slate-400 font-bold">Or via Email</span></div></div>
                         </div>
+                      )}
+
+                      {/* --- GOOGLE SUCCESS BANNER --- */}
+                      {tempGoogleUser && (
+                         <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-center gap-3 animate-in fade-in">
+                           <div className="bg-white p-1.5 rounded-full shadow-sm">
+                             <Image src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width={18} height={18} alt="G" />
+                           </div>
+                           <p className="text-sm font-bold text-blue-800">Google linked! Add your phone and a password to finish.</p>
+                         </div>
                       )}
 
                       {error && <div className="mb-6 p-4 bg-red-50 text-red-600 text-sm font-bold rounded-xl flex items-start gap-2 border border-red-100"><AlertCircle size={18} className="shrink-0 mt-0.5"/><span>{error}</span></div>}
 
                       <div className="space-y-4">
                           <InputGroup label="Full Name" icon={User} name="fullName" type="text" placeholder="Mubarik Osman" value={formData.fullName} onChange={handleChange} />
-                          <InputGroup label="Email" icon={Mail} name="email" type="email" placeholder="name@example.com" value={formData.email} onChange={handleChange} />
+                          <InputGroup 
+                            label="Email" 
+                            icon={Mail} 
+                            name="email" 
+                            type="email" 
+                            placeholder="name@example.com" 
+                            value={formData.email} 
+                            onChange={handleChange} 
+                            disabled={!!tempGoogleUser} // Disable if Google autofilled it
+                          />
                           <InputGroup label="Phone Number" icon={Phone} name="phone" type="tel" placeholder="+252..." value={formData.phone} onChange={handleChange} />
                           <PasswordInput label="Password" name="password" placeholder="••••••" value={formData.password} onChange={handleChange} />
                       </div>
@@ -373,11 +424,11 @@ function SignupContent() {
                           </button>
                         ) : (
                           <button type="submit" disabled={loading} className="w-full bg-[#0065eb] text-white py-4 rounded-xl font-bold text-sm hover:bg-[#0052c1] transition-all flex items-center justify-center gap-2 disabled:opacity-70 shadow-lg shadow-blue-500/20">
-                            {loading ? <Loader2 className="animate-spin"/> : 'Create & Verify Account'}
+                            {loading ? <Loader2 className="animate-spin"/> : (tempGoogleUser ? 'Complete Registration' : 'Create & Verify Account')}
                           </button>
                         )}
                         {role === 'hoadmin' && (
-                           <p className="text-center text-xs text-slate-500 mt-4 font-medium">You will set up your hotel details inside the dashboard after verifying your email.</p>
+                           <p className="text-center text-xs text-slate-500 mt-4 font-medium">You will set up your hotel details inside the dashboard after verifying.</p>
                         )}
                       </div>
                    </div>
@@ -392,7 +443,7 @@ function SignupContent() {
 
                       <div className="space-y-4">
                           <div className="flex gap-4">
-                              <div className="flex-1"><ImageUploader label="Profile Photo *" isCircle previewUrl={agentProfile.preview} onChange={(e) => handleImageChange(e, setAgentProfile)} /></div>
+                              <div className="flex-1"><ImageUploader label="Profile Photo *" isCircle previewUrl={agentProfile.preview || tempGoogleUser?.photoURL} onChange={(e) => handleImageChange(e, setAgentProfile)} /></div>
                               <div className="flex-1"><ImageUploader label="Cover Photo" previewUrl={agentCover.preview} onChange={(e) => handleImageChange(e, setAgentCover)} /></div>
                           </div>
 
@@ -503,7 +554,7 @@ const InputGroup = ({ label, name, type, placeholder, value, onChange, icon: Ico
     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">{label}</label>
     <div className="relative group">
       <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb]"><Icon size={18} /></div>
-      <input type={type} name={name} placeholder={placeholder} value={value} onChange={onChange} disabled={disabled} className="w-full pl-10 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:border-[#0065eb] transition-all placeholder:text-slate-300 disabled:opacity-60" />
+      <input type={type} name={name} placeholder={placeholder} value={value} onChange={onChange} disabled={disabled} className="w-full pl-10 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:border-[#0065eb] transition-all placeholder:text-slate-300 disabled:opacity-60 disabled:cursor-not-allowed" />
     </div>
   </div>
 );
