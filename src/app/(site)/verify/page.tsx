@@ -31,6 +31,7 @@ function VerifyContent() {
         if (user) {
           await updateDoc(doc(db, 'users', user.uid), {
             emailVerified: true,
+            isVerified: true, // Added this line to satisfy the login check
           });
         }
 
