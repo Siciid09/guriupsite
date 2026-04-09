@@ -588,16 +588,16 @@ interface InputGroupProps {
 const InputGroup = ({ label, name, type, placeholder, value, onChange, onBlur, icon: Icon, disabled, required, error }: InputGroupProps) => (
   <div>
     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">
-      {label} {required && <span className="text-rose-500">*</span>}
-      {error && <span className="text-rose-500 normal-case tracking-normal float-right">{error}</span>}
-    </label>
+      {label} {required && <span className="text-rose-500">*</span>}
+    </label>
     <div className="relative group">
       <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb]"><Icon size={18} /></div>
       <input type={type} name={name} placeholder={placeholder} value={value} onChange={onChange} onBlur={onBlur} disabled={disabled} required={required} className={`w-full pl-10 pr-4 py-3.5 bg-slate-50 border ${error ? 'border-rose-500 focus:border-rose-500' : 'border-slate-200 focus:border-[#0065eb]'} rounded-xl text-sm font-bold text-slate-900 outline-none transition-all placeholder:text-slate-300 disabled:opacity-60 disabled:cursor-not-allowed`} />
     </div>
+    {/* Short red text error below the input */}
+    {error && <p className="text-[11px] font-bold text-rose-500 mt-1.5 ml-1">{error}</p>}
   </div>
 );
-
 interface SelectGroupProps {
   label: string;
   name: string;
@@ -620,23 +620,29 @@ const SelectGroup = ({ label, name, value, onChange, icon: Icon, options }: Sele
 );
 
 interface PasswordInputProps {
-  label: string;
-  name: string;
-  placeholder?: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<any>) => void;
+  label: string;
+  name: string;
+  placeholder?: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<any>) => void;
+  required?: boolean;
+  error?: string;
 }
 
-const PasswordInput = ({ label, name, placeholder, value, onChange }: PasswordInputProps) => {
-  const [show, setShow] = useState(false);
-  return (
-    <div>
-      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">{label}</label>
-      <div className="relative group">
-        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb]"><Lock size={18} /></div>
-        <input type={show ? "text" : "password"} name={name} placeholder={placeholder} value={value} onChange={onChange} className="w-full pl-10 pr-10 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:border-[#0065eb] placeholder:text-slate-300" />
-        <button type="button" onClick={() => setShow(!show)} className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-[#0065eb]"><Eye size={18} /></button>
-      </div>
-    </div>
-  );
+const PasswordInput = ({ label, name, placeholder, value, onChange, required, error }: PasswordInputProps) => {
+  const [show, setShow] = useState(false);
+  return (
+    <div>
+      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">
+        {label} {required && <span className="text-rose-500">*</span>}
+      </label>
+      <div className="relative group">
+        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb]"><Lock size={18} /></div>
+        <input type={show ? "text" : "password"} name={name} placeholder={placeholder} value={value} onChange={onChange} required={required} className={`w-full pl-10 pr-10 py-3.5 bg-slate-50 border ${error ? 'border-rose-500 focus:border-rose-500' : 'border-slate-200 focus:border-[#0065eb]'} rounded-xl text-sm font-bold text-slate-900 outline-none placeholder:text-slate-300`} />
+        <button type="button" onClick={() => setShow(!show)} className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-[#0065eb]"><Eye size={18} /></button>
+      </div>
+      {/* Short red text error below the input */}
+      {error && <p className="text-[11px] font-bold text-rose-500 mt-1.5 ml-1">{error}</p>}
+    </div>
+  );
 };
