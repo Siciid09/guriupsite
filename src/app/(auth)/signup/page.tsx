@@ -61,19 +61,37 @@ function SignupContent() {
   const [agentCover, setAgentCover] = useState<{file: File | null, preview: string | null}>({file: null, preview: null});
   const [slug, setSlug] = useState('');
 
-  const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    phone: '',
-    password: '',
-    businessName: '', 
-    whatsappNumber: '',
-    city: '',
-    specialty: 'Residential',
-    address: '',
-    bio: ''
-  });
+ const [formData, setFormData] = useState({
+    fullName: '',
+    email: '',
+    phone: '',
+    password: '',
+    businessName: '', 
+    whatsappNumber: '',
+    city: '',
+    specialty: 'Residential',
+    address: '',
+    bio: ''
+  });
 
+  const [fieldErrors, setFieldErrors] = useState<{email?: string, phone?: string}>({});
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    let errorMessage = '';
+    
+    if (value.trim() === '') return; // Let the native 'required' tag handle empty fields
+
+    if (name === 'email') {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(value)) errorMessage = 'Invalid email format';
+    } else if (name === 'phone') {
+      const phoneDigits = value.replace(/\D/g, ''); // strip out +, spaces, or dashes to count real digits
+      if (phoneDigits.length < 7 || phoneDigits.length > 15) errorMessage = 'Invalid phone number';
+    }
+
+    setFieldErrors(prev => ({ ...prev, [name]: errorMessage }));
+  };
   useEffect(() => {
     const roleParam = searchParams.get('role');
     if (['reagent', 'hoadmin', 'user'].includes(roleParam as string)) {
@@ -98,9 +116,10 @@ function SignupContent() {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
-    setError(null);
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
+    setError(null);
+    setFieldErrors(prev => ({ ...prev, [name]: '' })); // Clear specific red field error when typing
 
     if (name === 'businessName' && role === 'reagent') {
       const safeSlug = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
@@ -158,11 +177,23 @@ function SignupContent() {
     setError(null);
 
     try {
-      if (!formData.fullName || !formData.email || !formData.password || !formData.phone) {
-        throw new Error("Please fill in all personal details.");
-      }
-      
-      let formattedPhone = formData.phone.trim();
+     if (!formData.fullName || !formData.email || !formData.password || !formData.phone) {
+        throw new Error("Please fill in all personal details.");
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email)) {
+        setFieldErrors(prev => ({ ...prev, email: 'Invalid email format' }));
+        throw new Error("Please enter a valid email address.");
+      }
+
+      const phoneDigits = formData.phone.replace(/\D/g, '');
+      if (phoneDigits.length < 7 || phoneDigits.length > 15) {
+        setFieldErrors(prev => ({ ...prev, phone: 'Invalid phone number' }));
+        throw new Error("Please enter a valid phone number.");
+      }
+      
+      let formattedPhone = formData.phone.trim();
       if (!formattedPhone.startsWith('+')) {
         if (formattedPhone.startsWith('0')) formattedPhone = formattedPhone.substring(1);
         if (!formattedPhone.startsWith('252')) formattedPhone = `252${formattedPhone}`;
@@ -396,18 +427,20 @@ function SignupContent() {
 
                       <div className="space-y-4">
                           <InputGroup label="Full Name" icon={User} name="fullName" type="text" placeholder="Mubarik Osman" value={formData.fullName} onChange={handleChange} />
-                          <InputGroup 
-                            label="Email" 
-                            icon={Mail} 
-                            name="email" 
-                            type="email" 
-                            placeholder="name@example.com" 
-                            value={formData.email} 
-                            onChange={handleChange} 
-                            disabled={!!tempGoogleUser} // Disable if Google autofilled it
-                          />
-                          <InputGroup label="Phone Number" icon={Phone} name="phone" type="tel" placeholder="+252..." value={formData.phone} onChange={handleChange} />
-                          <PasswordInput label="Password" name="password" placeholder="••••••" value={formData.password} onChange={handleChange} />
+                      <InputGroup 
+                            label="Email" 
+                            icon={Mail} 
+                            name="email" 
+                            type="email" 
+                            placeholder="name@example.com" 
+                            value={formData.email} 
+                            onChange={handleChange}
+                            onBlur={handleBlur}
+                            error={fieldErrors.email}
+                            disabled={!!tempGoogleUser} // Disable if Google autofilled it
+                            required
+                          />
+                          <InputGroup label="Phone Number" icon={Phone} name="phone" type="tel" placeholder="+252..." value={formData.phone} onChange={handleChange} onBlur={handleBlur} error={fieldErrors.phone} required />   <PasswordInput label="Password" name="password" placeholder="••••••" value={formData.password} onChange={handleChange} />
                       </div>
 
                       <div className="pt-8">
@@ -539,24 +572,30 @@ const RoleCard = ({ icon, title, desc, theme, onClick }: RoleCardProps) => {
 };
 
 interface InputGroupProps {
-  label: string;
-  name: string;
-  type: string;
-  placeholder?: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<any>) => void;
-  icon: React.ElementType;
-  disabled?: boolean;
+  label: string;
+  name: string;
+  type: string;
+  placeholder?: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<any>) => void;
+  onBlur?: (e: React.FocusEvent<any>) => void;
+  icon: React.ElementType;
+  disabled?: boolean;
+  required?: boolean;
+  error?: string;
 }
 
-const InputGroup = ({ label, name, type, placeholder, value, onChange, icon: Icon, disabled }: InputGroupProps) => (
-  <div>
-    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">{label}</label>
-    <div className="relative group">
-      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb]"><Icon size={18} /></div>
-      <input type={type} name={name} placeholder={placeholder} value={value} onChange={onChange} disabled={disabled} className="w-full pl-10 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:border-[#0065eb] transition-all placeholder:text-slate-300 disabled:opacity-60 disabled:cursor-not-allowed" />
-    </div>
-  </div>
+const InputGroup = ({ label, name, type, placeholder, value, onChange, onBlur, icon: Icon, disabled, required, error }: InputGroupProps) => (
+  <div>
+    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">
+      {label} {required && <span className="text-rose-500">*</span>}
+      {error && <span className="text-rose-500 normal-case tracking-normal float-right">{error}</span>}
+    </label>
+    <div className="relative group">
+      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb]"><Icon size={18} /></div>
+      <input type={type} name={name} placeholder={placeholder} value={value} onChange={onChange} onBlur={onBlur} disabled={disabled} required={required} className={`w-full pl-10 pr-4 py-3.5 bg-slate-50 border ${error ? 'border-rose-500 focus:border-rose-500' : 'border-slate-200 focus:border-[#0065eb]'} rounded-xl text-sm font-bold text-slate-900 outline-none transition-all placeholder:text-slate-300 disabled:opacity-60 disabled:cursor-not-allowed`} />
+    </div>
+  </div>
 );
 
 interface SelectGroupProps {
