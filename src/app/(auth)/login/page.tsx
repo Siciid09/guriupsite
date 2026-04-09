@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth, db } from '../../lib/firebase'; // Adjust path as needed
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { Mail, Lock, Loader2, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
@@ -16,7 +16,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async (e: React.FormEvent) => {
+ const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -25,19 +25,31 @@ export default function LoginPage() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
+      // 1. CHECK FIREBASE AUTH FIRST (Source of Truth)
+      if (!user.emailVerified) {
+        await auth.signOut();
+        setError('Please verify your email before logging in.');
+        setLoading(false);
+        return;
+      }
+
+      // 2. FETCH FIRESTORE PROFILE
       const userDocRef = doc(db, 'users', user.uid);
       const userDoc = await getDoc(userDocRef);
 
       if (userDoc.exists()) {
         const userData = userDoc.data();
 
+        // 3. SYNC FIRESTORE IF IT'S OUT OF DATE
+        // If Firebase Auth says they are verified, but Firestore says they aren't, update Firestore now.
         if (userData.isVerified !== true) {
-          await auth.signOut();
-          setError('Please verify your email before logging in.');
-          setLoading(false);
-          return;
+          await updateDoc(userDocRef, {
+            isVerified: true,
+            emailVerified: true
+          });
         }
 
+        // 4. ROUTE THE USER
         if (userData.role === 'agent' || userData.isAgent === true) {
           router.push('/dashboard/agent');
         } else {
