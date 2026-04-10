@@ -405,12 +405,12 @@ function SignupContent() {
                       
                       {/* --- GOOGLE SIGN UP BUTTON IS NOW AVAILABLE FOR ALL ROLES --- */}
                       {!tempGoogleUser && (
-                        <div className="mb-6">
-                          <button type="button" onClick={handleGoogleSignIn} className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 p-3.5 rounded-xl text-slate-700 font-bold text-sm hover:bg-slate-50 transition-all">
-                            <Image src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width={20} height={20} alt="G" /> Continue with Google
-                          </button>
-                          <div className="relative my-6"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div><div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-3 text-slate-400 font-bold">Or via Email</span></div></div>
-                        </div>
+                      <div className="mb-2">
+                          <button type="button" onClick={handleGoogleSignIn} className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 p-3.5 rounded-xl text-slate-700 font-bold text-sm hover:bg-slate-50 transition-all">
+                            <Image src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width={20} height={20} alt="G" /> Continue with Google
+                          </button>
+                          <div className="relative my-4"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div><div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-3 text-slate-400 font-bold">Or via Email</span></div></div>
+                        </div>
                       )}
 
                       {/* --- GOOGLE SUCCESS BANNER --- */}
@@ -425,8 +425,8 @@ function SignupContent() {
 
                       {error && <div className="mb-6 p-4 bg-red-50 text-red-600 text-sm font-bold rounded-xl flex items-start gap-2 border border-red-100"><AlertCircle size={18} className="shrink-0 mt-0.5"/><span>{error}</span></div>}
 
-                      <div className="space-y-4">
-                          <InputGroup label="Full Name" icon={User} name="fullName" type="text" placeholder="Mubarik Osman" value={formData.fullName} onChange={handleChange} />
+                     <div className="space-y-2">
+                          <InputGroup label="Full Name" icon={User} name="fullName" type="text" placeholder="Mubarik Osman" value={formData.fullName} onChange={handleChange} />
                       <InputGroup 
                             label="Email" 
                             icon={Mail} 
@@ -475,8 +475,9 @@ function SignupContent() {
                       {error && <div className="mb-6 p-4 bg-red-50 text-red-600 text-sm font-bold rounded-xl flex items-start gap-2 border border-red-100"><AlertCircle size={18} className="shrink-0 mt-0.5"/><span>{error}</span></div>}
 
                       <div className="space-y-4">
-                          <div className="flex gap-4">
-                              <div className="flex-1"><ImageUploader label="Profile Photo *" isCircle previewUrl={agentProfile.preview || tempGoogleUser?.photoURL} onChange={(e) => handleImageChange(e, setAgentProfile)} /></div>
+                        <div className="space-y-2">
+                          <div className="flex gap-4">
+                              <div className="flex-1"><ImageUploader label="Profile Photo *" isCircle previewUrl={agentProfile.preview || tempGoogleUser?.photoURL} onChange={(e) => handleImageChange(e, setAgentProfile)} /></div>
                               <div className="flex-1"><ImageUploader label="Cover Photo" previewUrl={agentCover.preview} onChange={(e) => handleImageChange(e, setAgentCover)} /></div>
                           </div>
 
