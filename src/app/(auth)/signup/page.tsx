@@ -425,23 +425,24 @@ function SignupContent() {
 
                       {error && <div className="mb-6 p-4 bg-red-50 text-red-600 text-sm font-bold rounded-xl flex items-start gap-2 border border-red-100"><AlertCircle size={18} className="shrink-0 mt-0.5"/><span>{error}</span></div>}
 
-                     <div className="space-y-2">
-                          <InputGroup label="Full Name" icon={User} name="fullName" type="text" placeholder="Mubarik Osman" value={formData.fullName} onChange={handleChange} />
-                      <InputGroup 
+                    <div className="space-y-3">
+                          <InputGroup label="Full Name" icon={User} name="fullName" type="text" placeholder="Full Name (e.g. Muse)" value={formData.fullName} onChange={handleChange} required />
+                          <InputGroup 
                             label="Email" 
                             icon={Mail} 
                             name="email" 
                             type="email" 
-                            placeholder="name@example.com" 
+                            placeholder="Email (e.g. info@app.com)" 
                             value={formData.email} 
                             onChange={handleChange}
                             onBlur={handleBlur}
                             error={fieldErrors.email}
-                            disabled={!!tempGoogleUser} // Disable if Google autofilled it
+                            disabled={!!tempGoogleUser}
                             required
                           />
-                          <InputGroup label="Phone Number" icon={Phone} name="phone" type="tel" placeholder="+252..." value={formData.phone} onChange={handleChange} onBlur={handleBlur} error={fieldErrors.phone} required />   <PasswordInput label="Password" name="password" placeholder="••••••" value={formData.password} onChange={handleChange} />
-                      </div>
+                          <InputGroup label="Phone Number" icon={Phone} name="phone" type="tel" placeholder="Phone (e.g. +252...)" value={formData.phone} onChange={handleChange} onBlur={handleBlur} error={fieldErrors.phone} required />
+                          <PasswordInput label="Password" name="password" placeholder="Password (••••••)" value={formData.password} onChange={handleChange} required />
+                      </div>
 
                       <div className="pt-8">
                         {role === 'reagent' ? (
@@ -588,15 +589,12 @@ interface InputGroupProps {
 
 const InputGroup = ({ label, name, type, placeholder, value, onChange, onBlur, icon: Icon, disabled, required, error }: InputGroupProps) => (
   <div>
-    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">
-      {label} {required && <span className="text-rose-500">*</span>}
-    </label>
     <div className="relative group">
       <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb]"><Icon size={18} /></div>
-      <input type={type} name={name} placeholder={placeholder} value={value} onChange={onChange} onBlur={onBlur} disabled={disabled} required={required} className={`w-full pl-10 pr-4 py-3.5 bg-slate-50 border ${error ? 'border-rose-500 focus:border-rose-500' : 'border-slate-200 focus:border-[#0065eb]'} rounded-xl text-sm font-bold text-slate-900 outline-none transition-all placeholder:text-slate-300 disabled:opacity-60 disabled:cursor-not-allowed`} />
+      <input type={type} name={name} placeholder={required ? `${placeholder} *` : placeholder} value={value} onChange={onChange} onBlur={onBlur} disabled={disabled} required={required} className={`w-full pl-10 pr-4 py-3.5 bg-slate-50 border ${error ? 'border-rose-500 focus:border-rose-500' : 'border-slate-200 focus:border-[#0065eb]'} rounded-xl text-sm font-bold text-slate-900 outline-none transition-all placeholder:text-slate-400 disabled:opacity-60 disabled:cursor-not-allowed`} />
     </div>
-    {/* Short red text error below the input */}
-    {error && <p className="text-[11px] font-bold text-rose-500 mt-1.5 ml-1">{error}</p>}
+    {/* Short red text error below the input */}
+    {error && <p className="text-[11px] font-bold text-rose-500 mt-1.5 ml-1">{error}</p>}
   </div>
 );
 interface SelectGroupProps {
@@ -609,15 +607,15 @@ interface SelectGroupProps {
 }
 
 const SelectGroup = ({ label, name, value, onChange, icon: Icon, options }: SelectGroupProps) => (
-  <div>
-    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">{label}</label>
-    <div className="relative group">
-      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb]"><Icon size={18} /></div>
-      <select name={name} value={value} onChange={onChange} className="w-full pl-10 pr-10 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:border-[#0065eb] appearance-none cursor-pointer">
-        {options.map((opt: string) => (<option key={opt} value={opt}>{opt}</option>))}
-      </select>
-    </div>
-  </div>
+  <div>
+    <div className="relative group">
+      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb]"><Icon size={18} /></div>
+      <select name={name} value={value} onChange={onChange} className="w-full pl-10 pr-10 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:border-[#0065eb] appearance-none cursor-pointer">
+        <option value="" disabled>Select {label} *</option>
+        {options.map((opt: string) => (<option key={opt} value={opt}>{opt}</option>))}
+      </select>
+    </div>
+  </div>
 );
 
 interface PasswordInputProps {
@@ -634,16 +632,14 @@ const PasswordInput = ({ label, name, placeholder, value, onChange, required, er
   const [show, setShow] = useState(false);
   return (
     <div>
-      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">
-        {label} {required && <span className="text-rose-500">*</span>}
-      </label>
       <div className="relative group">
         <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb]"><Lock size={18} /></div>
-        <input type={show ? "text" : "password"} name={name} placeholder={placeholder} value={value} onChange={onChange} required={required} className={`w-full pl-10 pr-10 py-3.5 bg-slate-50 border ${error ? 'border-rose-500 focus:border-rose-500' : 'border-slate-200 focus:border-[#0065eb]'} rounded-xl text-sm font-bold text-slate-900 outline-none placeholder:text-slate-300`} />
+        <input type={show ? "text" : "password"} name={name} placeholder={required ? `${placeholder} *` : placeholder} value={value} onChange={onChange} required={required} className={`w-full pl-10 pr-10 py-3.5 bg-slate-50 border ${error ? 'border-rose-500 focus:border-rose-500' : 'border-slate-200 focus:border-[#0065eb]'} rounded-xl text-sm font-bold text-slate-900 outline-none placeholder:text-slate-400`} />
         <button type="button" onClick={() => setShow(!show)} className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-[#0065eb]"><Eye size={18} /></button>
       </div>
-      {/* Short red text error below the input */}
-      {error && <p className="text-[11px] font-bold text-rose-500 mt-1.5 ml-1">{error}</p>}
+      {/* Short red text error below the input */}
+      {error && <p className="text-[11px] font-bold text-rose-500 mt-1.5 ml-1">{error}</p>}
     </div>
   );
+};
 };
