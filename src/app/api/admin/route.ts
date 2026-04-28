@@ -1,159 +1,195 @@
 import { NextResponse } from 'next/server';
-import { db } from '../../lib/firebase';
-import { 
-  collection, 
-  doc, 
-  getDoc, 
-  getDocs, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
-  orderBy, 
-  limit, 
-  where,
-  writeBatch
-} from 'firebase/firestore';
+// IMPORTANT: You must initialize the Firebase Admin SDK in this file!
+// e.g., import { adminDb, adminAuth } from '@/app/lib/firebase-admin';
+import { adminDb, adminAuth } from '../../lib/firebase-admin'; 
 
 export const dynamic = 'force-dynamic';
 
-// --- SECURITY: CHECK S-ADMIN ---
-async function checkSuperAdmin(uid: string | null) {
-  if (!uid) return false;
-  const userSnap = await getDoc(doc(db, 'users', uid));
-  if (!userSnap.exists()) return false;
-  return userSnap.data()?.role === 'sadmin'; 
-}
+// --- SECURITY: SUPER ADMIN SECURE TOKEN CHECK ---
+async function checkSuperAdmin(request: Request) {
+  const authHeader = request.headers.get('Authorization');
+  
+  // Require Bearer token
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return false;
+  }
 
-// --- GET: FETCH ALL RESOURCES ---
-export async function GET(request: Request) {
+  const token = authHeader.split('Bearer ')[1];
+
   try {
-    const { searchParams } = new URL(request.url);
-    const adminUid = request.headers.get('x-admin-uid');
-    const resource = searchParams.get('resource'); // 'users', 'agents', 'hotels', 'properties'
+    // 1. Verify the JWT token securely
+    const decodedToken = await adminAuth.verifyIdToken(token);
+    const uid = decodedToken.uid;
 
-    if (!await checkSuperAdmin(adminUid)) {
-      return NextResponse.json({ error: 'Unauthorized: Super Admin Access Required' }, { status: 403 });
-    }
-
-    let collectionName = '';
-    let dateField = 'createdAt'; 
-
-    switch (resource) {
-      case 'users': collectionName = 'users'; break;
-      case 'agents': 
-        collectionName = 'agents'; 
-        dateField = 'joinDate'; 
-        break;
-      case 'hotels': collectionName = 'hotels'; break;
-      case 'properties': collectionName = 'property'; break;
-      default: return NextResponse.json({ error: 'Invalid Resource' }, { status: 400 });
-    }
-
-    const q = query(collection(db, collectionName), orderBy(dateField, 'desc'), limit(100));
-    const snapshot = await getDocs(q);
+    // 2. Fetch user role directly from Admin SDK (bypasses security rules)
+    const userSnap = await adminDb.collection('users').doc(uid).get();
+    if (!userSnap.exists) return false;
     
-    const data = snapshot.docs.map(doc => {
-        const d = doc.data();
-        return { 
-            id: doc.id, 
-            ...d,
-            name: d.agencyName || d.name || 'Unnamed', 
-            email: d.email || '',
-            planTier: d.planTier || 'free',
-            createdAt: d[dateField] || new Date().toISOString(), 
-            isVerified: d.isVerified || false,
-            featured: d.featured || false
-        };
-    });
-
-    return NextResponse.json({ success: true, count: data.length, data });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return userSnap.data()?.role === 'sadmin'; 
+  } catch (e) {
+    console.error("Auth validation failed:", e);
+    return false;
   }
 }
 
-// --- PATCH: UPDATE & SMART SYNC ---
+// --- GET: FETCH RESOURCES ---
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const resource = searchParams.get('resource'); 
+
+    // Secure Check
+    if (!await checkSuperAdmin(request)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    }
+
+    let queryRef;
+    
+    try {
+      // Use Admin SDK collections
+      switch (resource) {
+        case 'users':
+          queryRef = adminDb.collection('users').limit(50); 
+          break;
+        case 'agents':
+          queryRef = adminDb.collection('agents').limit(50);
+          break;
+        case 'hotels':
+          queryRef = adminDb.collection('hotels').limit(50);
+          break;
+        case 'properties':
+          queryRef = adminDb.collection('property').limit(50);
+          break;
+        default:
+          return NextResponse.json({ error: 'Invalid Resource' }, { status: 400 });
+      }
+
+      const snapshot = await queryRef.get();
+      const data = snapshot.docs.map(doc => {
+        const d = doc.data();
+        
+        // Safe Date Parsing for Admin SDK
+        let createdAtStr = new Date().toISOString();
+        if (d.createdAt?.toDate) createdAtStr = d.createdAt.toDate().toISOString();
+        else if (d.joinDate?.toDate) createdAtStr = d.joinDate.toDate().toISOString();
+        else if (typeof d.createdAt === 'string') createdAtStr = d.createdAt;
+
+        return { 
+          id: doc.id, 
+          ...d,
+          name: d.name || d.agencyName || d.hotelName || d.title || 'Unnamed', 
+          email: d.email || 'N/A',
+          planTier: d.planTier || 'free',
+          createdAt: createdAtStr,
+          isVerified: d.isVerified || d.agentVerified || false,
+          featured: d.featured || d.isFeatured || false
+        };
+      });
+
+      return NextResponse.json({ success: true, count: data.length, data });
+
+    } catch (dbError: any) {
+      console.error("Database Error:", dbError.message);
+      return NextResponse.json({ 
+        error: "Firebase Query Failed", 
+        details: dbError.message
+      }, { status: 400 });
+    }
+
+  } catch (error: any) {
+    return NextResponse.json({ error: "Server Crash", details: error.message }, { status: 500 });
+  }
+}
+
+// --- PATCH: UPDATE & SMART SYNC (FLUTTER 2024 COMPLIANT) ---
 export async function PATCH(request: Request) {
   try {
-    const body = await request.json();
-    const { adminUid, resourceId, resourceType, action, payload } = body;
-    
-    if (!await checkSuperAdmin(adminUid)) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    // Note: We still check SuperAdmin using the token in the headers!
+    if (!await checkSuperAdmin(request)) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    }
 
-    let collectionName = resourceType === 'property' ? 'property' : `${resourceType}s`;
-    const docRef = doc(db, collectionName, resourceId);
+    const body = await request.json();
+    // adminUid is no longer needed in the body since we verify via headers, 
+    // but we extract the rest of the payload.
+    const { resourceId, resourceType, action, payload } = body;
+    
+    // 1. Determine target collection
+    let collectionName = 'users';
+    if (resourceType === 'property') collectionName = 'property';
+    if (resourceType === 'hotel') collectionName = 'hotels';
+    if (resourceType === 'agent') collectionName = 'agents';
+    
+    const docRef = adminDb.collection(collectionName).doc(resourceId);
     let updateData: any = {};
 
+    // 2. Prepare Primary Update
     switch (action) {
       case 'promote_plan':
-        const isPro = payload.plan === 'pro';
+        const newTier = payload.plan || 'pro'; 
+        const isPremium = newTier !== 'free';
         updateData = { 
-            planTier: isPro ? 'pro' : 'free',
-            isVerified: isPro,
-            featured: isPro,
-            isFeatured: isPro,
-            verifiedAt: isPro ? new Date().toISOString() : null,
-            status: 'active'
+            planTier: newTier,
+            isVerified: isPremium,
+            agentVerified: isPremium, 
+            featured: isPremium,
+            isFeatured: isPremium,
+            status: 'active',
+            planExpiryDate: payload.expiryDate ? new Date(payload.expiryDate) : null
         };
         break;
       case 'ban':
-        updateData = { status: 'banned', isBanned: true, planTier: 'free', isVerified: false, featured: false };
+        updateData = { status: 'banned', isBanned: true, planTier: 'free' };
         break;
       case 'unban':
         updateData = { status: 'active', isBanned: false };
         break;
-      case 'feature':
-        updateData = { featured: payload.featured, isFeatured: payload.featured };
-        break;
       default: return NextResponse.json({ error: 'Invalid Action' }, { status: 400 });
     }
 
-    await updateDoc(docRef, updateData);
+    // Use Admin SDK update
+    await docRef.update(updateData);
 
-    // --- SMART SYNC FOR PROPERTIES ---
-    if (resourceType === 'agent' && (action === 'promote_plan' || action === 'ban')) {
-       const isPro = payload?.plan === 'pro';
-       const isBan = action === 'ban';
-       const agentSnap = await getDoc(doc(db, 'agents', resourceId));
-       const realUserId = agentSnap.exists() ? (agentSnap.data().userid || resourceId) : resourceId;
+    // 3. --- SMART CASCADE SYNC (FLUTTER APP COMPATIBILITY) ---
+    // If we update an AGENT -> Update all their PROPERTIES
+    if (resourceType === 'agent' || resourceType === 'user') {
+        const isPro = updateData.planTier && updateData.planTier !== 'free';
+        const props = await adminDb.collection('property').where('agentId', '==', resourceId).get();
+        
+        if (!props.empty) {
+            const batch = adminDb.batch();
+            props.docs.forEach(p => {
+                batch.update(p.ref, { 
+                    agentVerified: isPro,
+                    planTier: updateData.planTier || 'free',
+                    status: action === 'ban' ? 'archived' : 'available'
+                });
+            });
+            await batch.commit();
+        }
+    }
 
-       const q = query(collection(db, 'property'), where('agentId', 'in', [resourceId, realUserId]));
-       const props = await getDocs(q);
-       
-       if (!props.empty) {
-           const batch = writeBatch(db);
-           props.docs.forEach(docSnap => {
-               batch.update(docSnap.ref, { 
-                   agentVerified: !isBan && isPro,
-                   isVerified: !isBan && isPro,
-                   featured: !isBan && isPro,
-                   isFeatured: !isBan && isPro,
-                   planTier: isBan ? 'free' : (isPro ? 'pro' : 'free'),
-                   planTierAtUpload: isBan ? 'free' : (isPro ? 'pro' : 'free'),
-                   isArchived: isBan,
-                   status: isBan ? 'archived' : 'available'
-               });
-           });
-           await batch.commit();
-       }
+    // If we update a HOTEL ADMIN -> Update all their HOTELS
+    if (resourceType === 'user' || resourceType === 'hoadmin') {
+        const isPro = updateData.planTier && updateData.planTier !== 'free';
+        const hotelSnaps = await adminDb.collection('hotels').where('hotelAdminId', '==', resourceId).get();
+        
+        if (!hotelSnaps.empty) {
+            const batch = adminDb.batch();
+            hotelSnaps.docs.forEach(h => {
+                batch.update(h.ref, { 
+                    isVerified: isPro,
+                    planTier: updateData.planTier || 'free',
+                    status: action === 'ban' ? 'inactive' : 'active'
+                });
+            });
+            await batch.commit();
+        }
     }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
+    console.error("Admin PATCH Error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-}
-
-// --- DELETE: SINGLE ITEM ---
-export async function DELETE(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const adminUid = request.headers.get('x-admin-uid');
-  const id = searchParams.get('id');
-  const type = searchParams.get('type');
-
-  if (!await checkSuperAdmin(adminUid)) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-
-  const col = type === 'property' ? 'property' : `${type}s`;
-  await deleteDoc(doc(db, col, id!));
-  return NextResponse.json({ success: true });
 }

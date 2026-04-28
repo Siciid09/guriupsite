@@ -110,6 +110,10 @@ export default function AdminDashboard() {
   // Chat State
   const [chatConfig, setChatConfig] = useState({ isOpen: false, recipientId: '', recipientName: '' });
 
+  // Pro Plan Modal State
+  const [planModal, setPlanModal] = useState<{isOpen: boolean, item: any}>({isOpen: false, item: null});
+  const [expiryDate, setExpiryDate] = useState('');
+
   // ------------------------------------------
   // SECURITY GUARD: SADMIN CHECK
   // ------------------------------------------
@@ -137,15 +141,20 @@ export default function AdminDashboard() {
   }, [user, authLoading, router]);
 
   // ------------------------------------------
-  // LIST DATA FETCHING
+  // LIST DATA FETCHING (FIXED WITH JWT TOKENS)
   // ------------------------------------------
   const fetchListData = async (resource: TabType) => {
     if (!user) return;
     setLoading(true);
     try {
-      // Using standard API call for list speed
+      // 1. Get the secure JWT Token
+      const token = await user.getIdToken();
+
+      // 2. Pass as Bearer Authorization
       const res = await fetch(`/api/admin?resource=${resource}`, { 
-        headers: { 'x-admin-uid': user.uid } 
+        headers: { 
+          'Authorization': `Bearer ${token}` 
+        } 
       });
       const json = await res.json();
       if (json.success) setData(json.data);
@@ -169,10 +178,9 @@ export default function AdminDashboard() {
     
     try {
       let active = 0, sold = 0, views = 0, rating = item.averageRating || 0, rooms = 0;
-      const targetId = item.userid || item.id; // Agents often store auth uid in `userid`
+      const targetId = item.userid || item.id;
 
       if (type === 'agents') {
-        // Query exact properties owned by this agent
         const q = query(collection(db, 'property'), where('agentId', '==', targetId));
         const snaps = await getDocs(q);
         
@@ -184,16 +192,13 @@ export default function AdminDashboard() {
           views += (p.views || p.totalViews || 0);
         });
         
-        // Add standalone analytics if present
         views += (item.analytics?.views || 0);
 
       } else if (type === 'hotels') {
-        // Similar logic for hotels if needed, or just map standard properties
         rooms = item.rooms?.length || item.totalRooms || 0;
         active = item.listings?.length || 0;
         views = item.totalViews || item.views || 0;
       } else {
-        // Fallbacks for standard users/properties
         active = item.totalListings || 0;
         views = item.views || 0;
       }
@@ -219,7 +224,7 @@ export default function AdminDashboard() {
   };
 
   // ------------------------------------------
-  // QUICK ACTIONS
+  // QUICK ACTIONS (FIXED WITH JWT TOKENS)
   // ------------------------------------------
   const handleAction = async (id: string, type: string, action: string, payload: any = {}) => {
     if (!user) return;
@@ -229,23 +234,28 @@ export default function AdminDashboard() {
       if (item.id === id) {
         if (action === 'promote_plan') {
           const isPro = payload.plan === 'pro';
-          return { ...item, planTier: payload.plan, isVerified: isPro, agentVerified: isPro, featured: isPro };
+          return { ...item, planTier: payload.plan, isVerified: isPro, agentVerified: isPro, featured: isPro, planExpiryDate: payload.expiryDate || null };
         }
         if (action === 'ban') return { ...item, status: 'banned', isBanned: true };
       }
       return item;
     }));
 
-    // If modal is open for this item, update it too
     if (selectedItem?.id === id) {
       setSelectedItem((prev: any) => ({ ...prev, planTier: payload.plan || prev.planTier, status: action === 'ban' ? 'banned' : prev.status }));
     }
 
     try {
+      // 1. Get the secure JWT Token
+      const token = await user.getIdToken();
+
       await fetch('/api/admin', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ adminUid: user.uid, resourceId: id, resourceType: type, action, payload })
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` // 2. Pass as Bearer Authorization
+        },
+        body: JSON.stringify({ resourceId: id, resourceType: type, action, payload })
       });
     } catch (error) {
       console.error("Action failed", error);
@@ -420,7 +430,13 @@ export default function AdminDashboard() {
                   </button>
                   <div className="grid grid-cols-2 gap-2">
                     <button 
-                      onClick={() => handleAction(item.id, activeTab.slice(0,-1), 'promote_plan', {plan: item.planTier === 'pro' ? 'free' : 'pro'})} 
+                      onClick={() => {
+                        if (item.planTier === 'pro') {
+                          handleAction(item.id, activeTab.slice(0,-1), 'promote_plan', {plan: 'free'}); // Revoke instantly
+                        } else {
+                          setPlanModal({isOpen: true, item}); // Open Expiry Date Modal
+                        }
+                      }} 
                       className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
                         item.planTier === 'pro' ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-[#0065eb]/10 text-[#0065eb] hover:bg-[#0065eb]/20'
                       }`}
@@ -547,6 +563,45 @@ export default function AdminDashboard() {
                 </div>
 
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- EXPIRY DATE MODAL --- */}
+      {planModal.isOpen && (
+        <div className="fixed inset-0 z-[110] bg-slate-900/80 backdrop-blur-md flex justify-center items-center p-4 animate-in fade-in">
+          <div className="bg-white p-6 rounded-[2rem] shadow-xl w-full max-w-sm border border-slate-200 animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-black text-slate-900 mb-2">Grant Pro Plan</h3>
+            <p className="text-sm text-slate-500 mb-6">Set an expiration date for <span className="font-bold text-[#0065eb]">{planModal.item?.name || 'this entity'}</span>'s subscription.</p>
+            
+            <input 
+              type="date" 
+              value={expiryDate}
+              onChange={(e) => setExpiryDate(e.target.value)}
+              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 font-bold text-slate-700 outline-none focus:border-[#0065eb] focus:bg-white transition-all"
+              min={new Date().toISOString().split("T")[0]} // Prevent selecting past dates
+            />
+            
+            <div className="flex gap-3">
+              <button 
+                onClick={() => { setPlanModal({isOpen: false, item: null}); setExpiryDate(''); }} 
+                className="flex-1 py-3.5 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-all"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  if (!expiryDate) return;
+                  handleAction(planModal.item.id, activeTab.slice(0,-1), 'promote_plan', {plan: 'pro', expiryDate});
+                  setPlanModal({isOpen: false, item: null});
+                  setExpiryDate('');
+                }} 
+                className="flex-1 py-3.5 bg-[#0065eb] text-white rounded-xl font-bold hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!expiryDate}
+              >
+                Confirm
+              </button>
             </div>
           </div>
         </div>

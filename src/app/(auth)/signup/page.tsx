@@ -26,7 +26,7 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { auth, db, storage } from '../../lib/firebase'; // Adjust path as needed
+import { auth, db, storage } from '../../lib/firebase'; 
 import { 
   User, Building2, Briefcase, Mail, Lock, Phone, ArrowRight, ArrowLeft, 
   Building, MapPin, MessageCircle, Loader2, AlertCircle, Eye, EyeOff, 
@@ -35,14 +35,24 @@ import {
 
 type Role = 'user' | 'reagent' | 'hoadmin' | null;
 
+// ======================================================================
+// MAIN PAGE EXPORT (Wrapped in Suspense for Vercel)
+// ======================================================================
 export default function SignupPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]"><Loader2 className="animate-spin text-[#0065eb]"/></div>}>
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
+        <Loader2 className="animate-spin text-[#0065eb]" size={40}/>
+      </div>
+    }>
       <SignupContent />
     </Suspense>
   );
 }
 
+// ======================================================================
+// SIGNUP CONTENT COMPONENT
+// ======================================================================
 function SignupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -54,9 +64,10 @@ function SignupContent() {
   const [verificationSent, setVerificationSent] = useState(false);
   const [emailSentTo, setEmailSentTo] = useState('');
 
-  // --- NEW: GOOGLE INTERCEPT STATE ---
+  // Google Intercept State
   const [tempGoogleUser, setTempGoogleUser] = useState<FirebaseUser | null>(null);
 
+  // Reagent Specific Assets
   const [agentProfile, setAgentProfile] = useState<{file: File | null, preview: string | null}>({file: null, preview: null});
   const [agentCover, setAgentCover] = useState<{file: File | null, preview: string | null}>({file: null, preview: null});
   const [slug, setSlug] = useState('');
@@ -74,6 +85,26 @@ function SignupContent() {
     bio: ''
   });
 
+  const [fieldErrors, setFieldErrors] = useState<{email?: string, phone?: string}>({});
+
+  // --- VALIDATION HANDLERS ---
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    let errorMessage = '';
+    
+    if (value.trim() === '') return; 
+
+    if (name === 'email') {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(value)) errorMessage = 'Invalid email format';
+    } else if (name === 'phone') {
+      const phoneDigits = value.replace(/\D/g, ''); 
+      if (phoneDigits.length < 7 || phoneDigits.length > 15) errorMessage = 'Invalid phone number';
+    }
+
+    setFieldErrors(prev => ({ ...prev, [name]: errorMessage }));
+  };
+
   useEffect(() => {
     const roleParam = searchParams.get('role');
     if (['reagent', 'hoadmin', 'user'].includes(roleParam as string)) {
@@ -84,7 +115,6 @@ function SignupContent() {
   }, [searchParams]);
 
   const updateRole = async (newRole: Role) => {
-    // If they change roles during a Google signup, clear the Google session so they start fresh
     if (tempGoogleUser) {
       await signOut(auth);
       setTempGoogleUser(null);
@@ -101,6 +131,7 @@ function SignupContent() {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
     setError(null);
+    setFieldErrors(prev => ({ ...prev, [name]: '' })); 
 
     if (name === 'businessName' && role === 'reagent') {
       const safeSlug = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
@@ -120,6 +151,7 @@ function SignupContent() {
     }
   };
 
+  // --- GOOGLE SIGN IN ---
   const handleGoogleSignIn = async () => {
     setLoading(true);
     setError(null);
@@ -128,14 +160,11 @@ function SignupContent() {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
-      const userDocRef = doc(db, 'users', user.uid);
-      const userDoc = await getDoc(userDocRef);
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
 
       if (userDoc.exists()) {
-        // User already has a complete account -> Log them in
         router.push('/'); 
       } else {
-        // NEW USER -> Intercept and populate form, DO NOT save to Firestore yet!
         setTempGoogleUser(user);
         setFormData(prev => ({
           ...prev,
@@ -152,6 +181,7 @@ function SignupContent() {
     }
   };
 
+  // --- REGISTRATION LOGIC ---
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -161,7 +191,7 @@ function SignupContent() {
       if (!formData.fullName || !formData.email || !formData.password || !formData.phone) {
         throw new Error("Please fill in all personal details.");
       }
-      
+
       let formattedPhone = formData.phone.trim();
       if (!formattedPhone.startsWith('+')) {
         if (formattedPhone.startsWith('0')) formattedPhone = formattedPhone.substring(1);
@@ -172,33 +202,21 @@ function SignupContent() {
       const phoneQuery = query(collection(db, 'users'), where('phone', '==', formattedPhone));
       const phoneSnapshot = await getDocs(phoneQuery);
       if (!phoneSnapshot.empty) {
-        throw new Error("This phone number is already registered. Please log in.");
+        throw new Error("This phone number is already registered.");
       }
 
-      if (role === 'reagent') {
-        if (!formData.businessName || !formData.city || !formData.whatsappNumber) {
-          throw new Error("Please fill in all business details.");
-        }
-        if (!agentProfile.file) {
-          throw new Error("Please upload a Profile Photo.");
-        }
+      if (role === 'reagent' && !agentProfile.file) {
+        throw new Error("Please upload a Profile Photo.");
       }
 
       let user: FirebaseUser;
-
       if (tempGoogleUser) {
-        // --- GOOGLE USER: Link the password they just typed to their Google Account ---
         user = tempGoogleUser;
-        try {
-           const credential = EmailAuthProvider.credential(user.email!, formData.password);
-           await linkWithCredential(user, credential);
-        } catch (linkErr) {
-           console.warn("Could not link password (may already be linked):", linkErr);
-        }
+        const credential = EmailAuthProvider.credential(user.email!, formData.password);
+        try { await linkWithCredential(user, credential); } catch(e) { console.warn("Link Error:", e); }
       } else {
-        // --- NORMAL USER: Create Account ---
-        const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-        user = userCredential.user;
+        const cred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+        user = cred.user;
         await updateProfile(user, { displayName: formData.fullName });
         await sendEmailVerification(user);
       }
@@ -207,38 +225,34 @@ function SignupContent() {
       let finalCoverUrl = "";
 
       if (role === 'reagent') {
-        try {
-          if (agentProfile.file) {
-            const ext = agentProfile.file.name.split('.').pop();
-            const sRef = ref(storage, `agent_profiles/${user.uid}_profile_${Date.now()}.${ext}`);
-            await uploadBytes(sRef, agentProfile.file);
-            finalProfileUrl = await getDownloadURL(sRef);
-          }
-          if (agentCover.file) {
-            const ext = agentCover.file.name.split('.').pop();
-            const sRef = ref(storage, `agent_covers/${user.uid}_cover_${Date.now()}.${ext}`);
-            await uploadBytes(sRef, agentCover.file);
-            finalCoverUrl = await getDownloadURL(sRef);
-          }
-        } catch (uploadErr) {
-          console.error("Image Upload Failed:", uploadErr);
+        if (agentProfile.file) {
+          const sRef = ref(storage, `agent_profiles/${user.uid}_${Date.now()}`);
+          await uploadBytes(sRef, agentProfile.file);
+          finalProfileUrl = await getDownloadURL(sRef);
+        }
+        if (agentCover.file) {
+          const sRef = ref(storage, `agent_covers/${user.uid}_${Date.now()}`);
+          await uploadBytes(sRef, agentCover.file);
+          finalCoverUrl = await getDownloadURL(sRef);
         }
       }
 
+      // --- SYNC WITH FLUTTER MODELS ---
       const userData = {
         uid: user.uid,
         authMethod: tempGoogleUser ? 'google' : 'email_password',
         createdAt: serverTimestamp(),
         email: formData.email.trim(),
-        emailVerified: tempGoogleUser ? true : false, // Google users are pre-verified
+        emailVerified: !!tempGoogleUser,
         name: formData.fullName.trim(),
         phone: formattedPhone,
-        photoUrl: finalProfileUrl || "", 
+        photoUrl: finalProfileUrl, 
         planTier: 'free',
         role: role, 
         isAgent: role === 'reagent',
         slug: slug || "", 
-        activeDays: []
+        isBanned: false,
+        status: 'active'
       };
 
       await setDoc(doc(db, 'users', user.uid), userData);
@@ -246,31 +260,22 @@ function SignupContent() {
       if (role === 'reagent') {
         const agencyData = {
           agencyName: formData.businessName.trim(),
-          agentVerified: false,
+          agentVerified: false, 
+          isVerified: false,
           analytics: { clicks: 0, leads: 0, views: 0 },
-          averageRating: 0,
           bio: formData.bio.trim(),
           coverPhoto: finalCoverUrl,
           email: formData.email.trim(),
           featured: false,
           isFeatured: false,
-          isVerified: false,
           joinDate: serverTimestamp(),
-          languages: ["Somali", "English"],
-          lastUpdated: serverTimestamp(),
-          licenseNumber: 'PENDING',
-          migratedAt: serverTimestamp(),
           name: formData.businessName.trim(),
           phone: formattedPhone,
           planTier: 'free',
           profileImageUrl: finalProfileUrl,
-          propertiesSold: 0,
           slug: slug, 
-          specialties: [formData.specialty],
           status: "active",
-          totalListings: 0,
           userid: user.uid,
-          verifiedAt: null,
           city: formData.city.trim(),
           ownerName: formData.fullName.trim(),
           whatsappNumber: formData.whatsappNumber.trim(),
@@ -282,20 +287,14 @@ function SignupContent() {
       await signOut(auth);
 
       if (!tempGoogleUser) {
-        // Show verification screen for normal email/pass signups
         setEmailSentTo(formData.email);
         setVerificationSent(true);
       } else {
-        // Google users are already verified, push directly to login
         router.push('/login');
       }
 
     } catch (err: any) {
-      console.error("Registration Error:", err);
-      let msg = err.message || "An error occurred.";
-      if (err.code === 'auth/email-already-in-use') msg = "This email is already registered.";
-      if (err.code === 'auth/weak-password') msg = "Password must be at least 6 characters.";
-      setError(msg);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -303,20 +302,16 @@ function SignupContent() {
 
   if (verificationSent) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 relative overflow-hidden">
-        <div className="bg-white/90 backdrop-blur-xl border border-slate-200 p-10 rounded-[2.5rem] shadow-2xl max-w-md w-full text-center relative z-10">
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
+        <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl max-w-md w-full text-center">
           <div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
             <ShieldCheck size={48} />
           </div>
           <h2 className="text-3xl font-black text-slate-900 mb-2">Verify Account</h2>
-          <p className="text-slate-500 mb-8 font-medium leading-relaxed">
-            We've sent a secure verification link to <br/>
-            <span className="text-slate-900 font-bold bg-slate-100 px-2 py-1 rounded-lg mt-1 inline-block">{emailSentTo}</span>
+          <p className="text-slate-500 mb-8 font-medium">
+            A link was sent to <span className="text-slate-900 font-bold">{emailSentTo}</span>.
           </p>
-          <button 
-            onClick={() => router.push('/login')} 
-            className="w-full bg-[#0065eb] text-white py-4 rounded-xl font-bold hover:bg-[#0052c1] transition-all shadow-lg shadow-blue-500/20"
-          >
+          <button onClick={() => router.push('/login')} className="w-full bg-[#0065eb] text-white py-4 rounded-xl font-bold">
             Proceed to Login
           </button>
         </div>
@@ -329,11 +324,11 @@ function SignupContent() {
       <div className="w-full max-w-6xl mx-auto">
         
         {!role && (
-          <div className="text-center mb-16">
+          <div className="text-center mb-16 animate-in fade-in duration-700">
             <h1 className="text-4xl md:text-6xl font-black text-slate-900 mb-4 tracking-tight">
               Join the <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#0065eb] to-indigo-600">Future</span> of Real Estate
             </h1>
-            <p className="text-lg text-slate-500 font-medium">Select how you want to use GuriUp.</p>
+            <p className="text-lg text-slate-500 font-medium">Select your account type to continue.</p>
           </div>
         )}
 
@@ -346,7 +341,7 @@ function SignupContent() {
         )}
 
         {role && (
-          <div className="max-w-5xl mx-auto bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col md:flex-row border border-slate-100">
+          <div className="max-w-5xl mx-auto bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col md:flex-row border border-slate-100 animate-in zoom-in-95 duration-300">
             
             <div className="w-full md:w-5/12 bg-slate-900 p-10 flex flex-col justify-between relative overflow-hidden">
               <div className="absolute inset-0 bg-gradient-to-br from-[#0065eb]/80 to-indigo-900/90 z-10"></div>
@@ -372,63 +367,61 @@ function SignupContent() {
                   <div className="animate-in fade-in slide-in-from-right-8 duration-500">
                       <h2 className="text-2xl font-bold text-slate-900 mb-6">Personal Details</h2>
                       
-                      {/* --- GOOGLE SIGN UP BUTTON IS NOW AVAILABLE FOR ALL ROLES --- */}
                       {!tempGoogleUser && (
-                        <div className="mb-6">
+                      <div className="mb-2">
                           <button type="button" onClick={handleGoogleSignIn} className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 p-3.5 rounded-xl text-slate-700 font-bold text-sm hover:bg-slate-50 transition-all">
                             <Image src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width={20} height={20} alt="G" /> Continue with Google
                           </button>
-                          <div className="relative my-6"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div><div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-3 text-slate-400 font-bold">Or via Email</span></div></div>
+                          <div className="relative my-4"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div><div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-3 text-slate-400 font-bold">Or via Email</span></div></div>
                         </div>
                       )}
 
-                      {/* --- GOOGLE SUCCESS BANNER --- */}
                       {tempGoogleUser && (
-                         <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-center gap-3 animate-in fade-in">
+                         <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-center gap-3">
                            <div className="bg-white p-1.5 rounded-full shadow-sm">
                              <Image src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width={18} height={18} alt="G" />
                            </div>
-                           <p className="text-sm font-bold text-blue-800">Google linked! Add your phone and a password to finish.</p>
+                           <p className="text-sm font-bold text-blue-800">Google linked! Finish the form below.</p>
                          </div>
                       )}
 
                       {error && <div className="mb-6 p-4 bg-red-50 text-red-600 text-sm font-bold rounded-xl flex items-start gap-2 border border-red-100"><AlertCircle size={18} className="shrink-0 mt-0.5"/><span>{error}</span></div>}
 
-                      <div className="space-y-4">
-                          <InputGroup label="Full Name" icon={User} name="fullName" type="text" placeholder="Mubarik Osman" value={formData.fullName} onChange={handleChange} />
+                    <div className="space-y-3">
+                          <InputGroup label="Full Name" icon={User} name="fullName" type="text" placeholder="Full Name" value={formData.fullName} onChange={handleChange} required />
                           <InputGroup 
                             label="Email" 
                             icon={Mail} 
                             name="email" 
                             type="email" 
-                            placeholder="name@example.com" 
+                            placeholder="Email Address" 
                             value={formData.email} 
-                            onChange={handleChange} 
-                            disabled={!!tempGoogleUser} // Disable if Google autofilled it
+                            onChange={handleChange}
+                            onBlur={handleBlur}
+                            error={fieldErrors.email}
+                            disabled={!!tempGoogleUser}
+                            required
                           />
-                          <InputGroup label="Phone Number" icon={Phone} name="phone" type="tel" placeholder="+252..." value={formData.phone} onChange={handleChange} />
-                          <PasswordInput label="Password" name="password" placeholder="••••••" value={formData.password} onChange={handleChange} />
+                          <InputGroup label="Phone" icon={Phone} name="phone" type="tel" placeholder="Phone" value={formData.phone} onChange={handleChange} onBlur={handleBlur} error={fieldErrors.phone} required />
+                          <PasswordInput label="Password" name="password" placeholder="Password" value={formData.password} onChange={handleChange} required />
                       </div>
 
                       <div className="pt-8">
                         {role === 'reagent' ? (
                           <button type="button" onClick={() => {
                               if (!formData.fullName || !formData.email || !formData.phone || !formData.password) {
-                                setError("Please fill in all personal details."); return;
+                                setError("Please complete all fields."); return;
                               }
                               setError(null); setStep(2);
                             }} 
                             className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-sm hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-lg"
                           >
-                            Next Step: Agency Info <ArrowRight size={18} />
+                            Next: Agency Info <ArrowRight size={18} />
                           </button>
                         ) : (
-                          <button type="submit" disabled={loading} className="w-full bg-[#0065eb] text-white py-4 rounded-xl font-bold text-sm hover:bg-[#0052c1] transition-all flex items-center justify-center gap-2 disabled:opacity-70 shadow-lg shadow-blue-500/20">
-                            {loading ? <Loader2 className="animate-spin"/> : (tempGoogleUser ? 'Complete Registration' : 'Create & Verify Account')}
+                          <button type="submit" disabled={loading} className="w-full bg-[#0065eb] text-white py-4 rounded-xl font-bold text-sm hover:bg-[#0052c1] transition-all flex items-center justify-center gap-2 disabled:opacity-70 shadow-lg">
+                            {loading ? <Loader2 className="animate-spin"/> : 'Complete Signup'}
                           </button>
-                        )}
-                        {role === 'hoadmin' && (
-                           <p className="text-center text-xs text-slate-500 mt-4 font-medium">You will set up your hotel details inside the dashboard after verifying.</p>
                         )}
                       </div>
                    </div>
@@ -436,15 +429,28 @@ function SignupContent() {
 
                 {step === 2 && role === 'reagent' && (
                   <div className="animate-in fade-in slide-in-from-right-8 duration-500">
-                      <button type="button" onClick={() => setStep(1)} className="text-xs font-bold text-slate-400 hover:text-blue-600 mb-4 flex items-center gap-1"><ArrowLeft size={12}/> Back to Personal</button>
-                      <h2 className="text-2xl font-bold text-slate-900 mb-6">Agency Details</h2>
+                      <button type="button" onClick={() => setStep(1)} className="text-xs font-bold text-slate-400 hover:text-blue-600 mb-4 flex items-center gap-1"><ArrowLeft size={12}/> Personal Info</button>
+                      <h2 className="text-2xl font-bold text-slate-900 mb-6">Agency Profile</h2>
                       
                       {error && <div className="mb-6 p-4 bg-red-50 text-red-600 text-sm font-bold rounded-xl flex items-start gap-2 border border-red-100"><AlertCircle size={18} className="shrink-0 mt-0.5"/><span>{error}</span></div>}
 
                       <div className="space-y-4">
                           <div className="flex gap-4">
-                              <div className="flex-1"><ImageUploader label="Profile Photo *" isCircle previewUrl={agentProfile.preview || tempGoogleUser?.photoURL} onChange={(e) => handleImageChange(e, setAgentProfile)} /></div>
-                              <div className="flex-1"><ImageUploader label="Cover Photo" previewUrl={agentCover.preview} onChange={(e) => handleImageChange(e, setAgentCover)} /></div>
+                              <div className="flex-1">
+                                <ImageUploader 
+                                  label="Profile Photo *" 
+                                  isCircle 
+                                  previewUrl={agentProfile.preview || tempGoogleUser?.photoURL} 
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleImageChange(e, setAgentProfile)} 
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <ImageUploader 
+                                  label="Cover Photo" 
+                                  previewUrl={agentCover.preview} 
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleImageChange(e, setAgentCover)} 
+                                />
+                              </div>
                           </div>
 
                           <InputGroup label="Agency Name *" icon={Building} name="businessName" type="text" placeholder="Horn Properties" value={formData.businessName} onChange={handleChange} />
@@ -457,17 +463,17 @@ function SignupContent() {
                           <SelectGroup label="Specialty *" icon={Layers} name="specialty" value={formData.specialty} onChange={handleChange} options={["Residential", "Commercial", "Land", "Luxury"]} />
                           
                           <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">Bio / Description</label>
-                            <textarea name="bio" value={formData.bio} onChange={handleChange} rows={3} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#0065eb]" placeholder="Tell clients about your agency..."></textarea>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">Bio</label>
+                            <textarea name="bio" value={formData.bio} onChange={handleChange} rows={3} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#0065eb]" placeholder="Agency description..."></textarea>
                           </div>
                       </div>
 
                       <div className="pt-8">
-                        <button type="submit" disabled={loading} className="w-full bg-[#0065eb] text-white py-4 rounded-xl font-bold text-sm hover:bg-[#0052c1] transition-all flex items-center justify-center gap-2 disabled:opacity-70 shadow-lg shadow-blue-500/20">
-                          {loading ? <><Loader2 className="animate-spin"/> Creating...</> : 'Launch Agency Profile'}
+                        <button type="submit" disabled={loading} className="w-full bg-[#0065eb] text-white py-4 rounded-xl font-bold text-sm hover:bg-[#0052c1] transition-all flex items-center justify-center gap-2 disabled:opacity-70 shadow-lg">
+                          {loading ? <><Loader2 className="animate-spin"/> Saving...</> : 'Launch Profile'}
                         </button>
                       </div>
-                   </div>
+                  </div>
                 )}
               </form>
             </div>
@@ -485,16 +491,61 @@ function SignupContent() {
   );
 }
 
-// --- REUSABLE COMPONENTS WITH STRICT TYPES ---
+// ======================================================================
+// REUSABLE UI COMPONENTS
+// ======================================================================
 
-interface ImageUploaderProps {
-  label: string;
-  isCircle?: boolean;
-  previewUrl?: string | null;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-}
+const RoleCard = ({ icon, title, desc, theme, onClick }: any) => {
+  const themes: any = {
+    blue: { bg: 'bg-blue-50', text: 'text-blue-600', ring: 'hover:ring-blue-200' },
+    indigo: { bg: 'bg-indigo-50', text: 'text-indigo-600', ring: 'hover:ring-indigo-200' },
+    orange: { bg: 'bg-orange-50', text: 'text-orange-600', ring: 'hover:ring-orange-200' },
+  };
+  const t = themes[theme];
+  return (
+    <button onClick={onClick} className={`group bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all text-left flex flex-col items-start h-full hover:ring-2 ${t.ring} ring-offset-2 ring-transparent`}>
+      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-transform ${t.bg} ${t.text} group-hover:scale-110`}>{icon}</div>
+      <h3 className="text-xl font-black text-slate-900 mb-2">{title}</h3>
+      <p className="text-slate-500 text-sm font-medium leading-relaxed">{desc}</p>
+    </button>
+  );
+};
 
-const ImageUploader = ({ label, isCircle, previewUrl, onChange }: ImageUploaderProps) => {
+const InputGroup = ({ label, name, type, placeholder, value, onChange, onBlur, icon: Icon, disabled, required, error }: any) => (
+  <div>
+    <div className="relative group">
+      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb]"><Icon size={18} /></div>
+      <input type={type} name={name} placeholder={required ? `${placeholder} *` : placeholder} value={value} onChange={onChange} onBlur={onBlur} disabled={disabled} required={required} className={`w-full pl-10 pr-4 py-3.5 bg-slate-50 border ${error ? 'border-rose-500 focus:border-rose-500' : 'border-slate-200 focus:border-[#0065eb]'} rounded-xl text-sm font-bold text-slate-900 outline-none transition-all placeholder:text-slate-400 disabled:opacity-60 disabled:cursor-not-allowed`} />
+    </div>
+    {error && <p className="text-[11px] font-bold text-rose-500 mt-1.5 ml-1">{error}</p>}
+  </div>
+);
+
+const PasswordInput = ({ label, name, placeholder, value, onChange, required, error }: any) => {
+  const [show, setShow] = useState(false);
+  return (
+    <div>
+      <div className="relative group">
+        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb]"><Lock size={18} /></div>
+        <input type={show ? "text" : "password"} name={name} placeholder={required ? `${placeholder} *` : placeholder} value={value} onChange={onChange} required={required} className={`w-full pl-10 pr-10 py-3.5 bg-slate-50 border ${error ? 'border-rose-500 focus:border-rose-500' : 'border-slate-200 focus:border-[#0065eb]'} rounded-xl text-sm font-bold text-slate-900 outline-none placeholder:text-slate-400`} />
+        <button type="button" onClick={() => setShow(!show)} className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-[#0065eb]"><Eye size={18} /></button>
+      </div>
+      {error && <p className="text-[11px] font-bold text-rose-500 mt-1.5 ml-1">{error}</p>}
+    </div>
+  );
+};
+
+const SelectGroup = ({ label, name, value, onChange, icon: Icon, options }: any) => (
+  <div className="relative group">
+    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb]"><Icon size={18} /></div>
+    <select name={name} value={value} onChange={onChange} className="w-full pl-10 pr-10 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:border-[#0065eb] appearance-none cursor-pointer">
+      <option value="" disabled>Select {label} *</option>
+      {options.map((opt: string) => (<option key={opt} value={opt}>{opt}</option>))}
+    </select>
+  </div>
+);
+
+const ImageUploader = ({ label, isCircle, previewUrl, onChange }: { label: string, isCircle?: boolean, previewUrl?: string | null, onChange: (e: React.ChangeEvent<HTMLInputElement>) => void }) => {
   const id = `upload-${label.replace(/\s+/g, '')}`;
   return (
     <div className="mb-2">
@@ -510,94 +561,6 @@ const ImageUploader = ({ label, isCircle, previewUrl, onChange }: ImageUploaderP
           <div className="text-slate-400 group-hover:text-blue-500 flex flex-col items-center"><UploadCloud size={20} className="mb-1" /></div>
         )}
       </label>
-    </div>
-  );
-};
-
-interface RoleCardProps {
-  icon: React.ReactNode;
-  title: string;
-  desc: string;
-  theme: 'blue' | 'indigo' | 'orange';
-  onClick: () => void;
-}
-
-const RoleCard = ({ icon, title, desc, theme, onClick }: RoleCardProps) => {
-  const themes: Record<string, { bg: string, text: string, ring: string }> = {
-    blue: { bg: 'bg-blue-50', text: 'text-blue-600', ring: 'hover:ring-blue-200' },
-    indigo: { bg: 'bg-indigo-50', text: 'text-indigo-600', ring: 'hover:ring-indigo-200' },
-    orange: { bg: 'bg-orange-50', text: 'text-orange-600', ring: 'hover:ring-orange-200' },
-  };
-  const t = themes[theme];
-  return (
-    <button onClick={onClick} className={`group bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all text-left flex flex-col items-start h-full hover:ring-2 ${t.ring} ring-offset-2 ring-transparent`}>
-      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-transform ${t.bg} ${t.text} group-hover:scale-110`}>{icon}</div>
-      <h3 className="text-xl font-black text-slate-900 mb-2">{title}</h3>
-      <p className="text-slate-500 text-sm font-medium leading-relaxed">{desc}</p>
-    </button>
-  );
-};
-
-interface InputGroupProps {
-  label: string;
-  name: string;
-  type: string;
-  placeholder?: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<any>) => void;
-  icon: React.ElementType;
-  disabled?: boolean;
-}
-
-const InputGroup = ({ label, name, type, placeholder, value, onChange, icon: Icon, disabled }: InputGroupProps) => (
-  <div>
-    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">{label}</label>
-    <div className="relative group">
-      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb]"><Icon size={18} /></div>
-      <input type={type} name={name} placeholder={placeholder} value={value} onChange={onChange} disabled={disabled} className="w-full pl-10 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:border-[#0065eb] transition-all placeholder:text-slate-300 disabled:opacity-60 disabled:cursor-not-allowed" />
-    </div>
-  </div>
-);
-
-interface SelectGroupProps {
-  label: string;
-  name: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<any>) => void;
-  icon: React.ElementType;
-  options: string[];
-}
-
-const SelectGroup = ({ label, name, value, onChange, icon: Icon, options }: SelectGroupProps) => (
-  <div>
-    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">{label}</label>
-    <div className="relative group">
-      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb]"><Icon size={18} /></div>
-      <select name={name} value={value} onChange={onChange} className="w-full pl-10 pr-10 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:border-[#0065eb] appearance-none cursor-pointer">
-        {options.map((opt: string) => (<option key={opt} value={opt}>{opt}</option>))}
-      </select>
-    </div>
-  </div>
-);
-
-interface PasswordInputProps {
-  label: string;
-  name: string;
-  placeholder?: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<any>) => void;
-}
-
-const PasswordInput = ({ label, name, placeholder, value, onChange }: PasswordInputProps) => {
-  const [show, setShow] = useState(false);
-  return (
-    <div>
-      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">{label}</label>
-      <div className="relative group">
-        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb]"><Lock size={18} /></div>
-        <input type={show ? "text" : "password"} name={name} placeholder={placeholder} value={value} onChange={onChange} className="w-full pl-10 pr-10 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:border-[#0065eb] placeholder:text-slate-300" />
-        <button type="button" onClick={() => setShow(!show)} className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-[#0065eb]"><Eye size={18} /></button>
-      </div>
     </div>
   );
 };
