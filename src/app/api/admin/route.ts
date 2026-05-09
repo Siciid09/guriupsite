@@ -162,7 +162,8 @@ export async function PATCH(request: Request) {
                 batch.update(p.ref, { 
                     agentVerified: isPro,
                     planTier: updateData.planTier || 'free',
-                    status: action === 'ban' ? 'archived' : 'available'
+                    status: action === 'ban' ? 'archived' : 'available',
+                    isArchived: action === 'ban' // ✅ FIX: Now syncs the boolean your Flutter app relies on
                 });
             });
             await batch.commit();
