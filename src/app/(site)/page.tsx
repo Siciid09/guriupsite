@@ -28,7 +28,7 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://guriup.com"),
   openGraph: {
     title: 'GuriUp | The Best Real Estate & Hotel App',
-    description: "Discover African's finest real estate and luxury stays. From bustling cities to coastal retreats, GuriUp is the premier platform to find your dream home or book a weekend getaway across the continent. Buy, rent, and explore with confidence. Download the GuriUp app today.",
+    description: "Discover Africa's finest real estate and luxury stays. From bustling cities to coastal retreats, GuriUp is the premier platform to find your dream home or book a weekend getaway across the continent. Buy, rent, and explore with confidence. Download the GuriUp app today.",
     url: 'https://guriup.com',
     siteName: 'GuriUp',
     images: [

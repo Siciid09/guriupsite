@@ -132,10 +132,17 @@ export async function PATCH(request: Request) {
             planTier: newTier,
             isVerified: isPremium,
             agentVerified: isPremium, 
-            featured: isPremium,
-            isFeatured: isPremium,
+            // ✅ FIX: Removed auto-featured flags to allow manual curation
             status: 'active',
             planExpiryDate: payload.expiryDate ? new Date(payload.expiryDate) : null
+        };
+        break;
+
+      // ✅ FIX: Added independent toggle for admin curation of featured carousels
+      case 'set_featured':
+        updateData = {
+          featured: payload.isFeatured === true,
+          isFeatured: payload.isFeatured === true
         };
         break;
       case 'ban':

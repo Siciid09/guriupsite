@@ -1,7 +1,11 @@
 import { Metadata } from "next";
 import PropertiesUI from "@/components/templates/PropertiesUI";
+// ✅ Import direct database functions to bypass HTTP overhead
+import { getFeaturedProperties, getAllProperties } from "@/app/lib/data";
 
 export const dynamic = "force-dynamic";
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://guriup.com';
 
 // --- 1. SEO METADATA (Targeting Africa & Global Real Estate) ---
 export const metadata: Metadata = {
@@ -14,7 +18,7 @@ export const metadata: Metadata = {
     type: 'website',
     siteName: 'GuriUp',
     locale: 'en_US',
-    url: 'https://guriup.com/properties', // Update with your actual domain if different
+    url: `${BASE_URL}/properties`,
   },
   twitter: {
     card: 'summary_large_image',
@@ -22,7 +26,7 @@ export const metadata: Metadata = {
     description: 'Discover top houses, apartments, and commercial properties for sale and rent across Africa and worldwide.',
   },
   alternates: {
-    canonical: 'https://guriup.com/properties', // SEO: Prevents duplicate content penalties
+    canonical: `${BASE_URL}/properties`,
   }
 };
 
@@ -52,34 +56,23 @@ interface Property {
   createdAt: string; 
 }
 
-// 3. FETCH DATA HELPER (UNTOUCHED)
+// 3. FETCH DATA HELPER (UPDATED to use direct DB calls)
 async function getPropertiesData() {
-  const baseUrl = 
-    process.env.NODE_ENV === 'development' 
-      ? "http://localhost:3000" 
-      : (process.env.NEXT_PUBLIC_BASE_URL || "https://guriup.hiigsitech.com");
-
   try {
-    // --- FETCH DATA ---
-    const [featuredRes, allRes] = await Promise.all([
-      fetch(`${baseUrl}/api/properties?featured=true`, { cache: "no-store" }),
-      fetch(`${baseUrl}/api/properties?limit=300`, { cache: "no-store" }),
+    // ✅ FIX: Call DB directly instead of HTTP fetch to our own API. 
+    // Faster, safer, and immune to domain/ENV mismatch!
+    const [featuredData, allData] = await Promise.all([
+      getFeaturedProperties(),
+      getAllProperties()
     ]);
 
-    if (!featuredRes.ok) console.error(`Featured API Error: ${featuredRes.status}`);
-    if (!allRes.ok) console.error(`All Properties API Error: ${allRes.status}`);
-
-    // Parse JSON and cast to the Property array type
-    const featuredData: Property[] = featuredRes.ok ? await featuredRes.json() : [];
-    const allData: Property[] = allRes.ok ? await allRes.json() : [];
-
-    // --- FILTER & MAP ---
-    // We filter for pro/premium and then ensure 'featured' is true for the UI
-    const featuredProperties: Property[] = featuredData
-      .filter((p: Property) => p.agentPlanTier === "pro" || p.agentPlanTier === "premium")
-      .map((p: Property) => ({ ...p, featured: true }));
-
-    const allProperties: Property[] = allData;
+    // Map to ensure the 'featured' flag is set to true for the UI
+    const featuredProperties: Property[] = (featuredData as unknown as Property[]).map(p => ({ 
+      ...p, 
+      featured: true 
+    }));
+    
+    const allProperties: Property[] = allData as unknown as Property[];
 
     return { featuredProperties, allProperties };
   } catch (error) {
@@ -98,7 +91,7 @@ export default async function PropertiesPage() {
     '@type': 'CollectionPage',
     name: 'Real Estate & Properties in Africa & The World',
     description: 'Browse houses, apartments, and commercial spaces for sale and rent globally.',
-    url: 'https://guriup.com/properties',
+    url: `${BASE_URL}/properties`,
     provider: {
       '@type': 'Organization',
       name: 'GuriUp',
@@ -112,7 +105,7 @@ export default async function PropertiesPage() {
         item: {
           '@type': 'RealEstateListing',
           name: property?.title || 'GuriUp Premium Property',
-          url: `https://guriup.com/properties/${property?.slug || property?.id || ''}`
+          url: `${BASE_URL}/properties/${property?.slug || property?.id || ''}`
         }
       }))
     }

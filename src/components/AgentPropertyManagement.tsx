@@ -1,5 +1,18 @@
 'use client';
+// Add this near your other imports at the top
+import { GoogleMap, Marker, useLoadScript } from '@react-google-maps/api';
 
+// Define the map container size
+const mapContainerStyle = {
+  width: '100%',
+  height: '300px'
+};
+
+// Default center (e.g., Hargeisa)
+const defaultCenter = {
+  lat: 9.560, 
+  lng: 44.068
+};
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { 
@@ -49,6 +62,11 @@ export default function CompletePropertyManagement({
   onUpgrade 
 }: AgentPropertyManagementProps) {
   
+  // ✅ ADDED: Load Google Maps Script
+  const { isLoaded } = useLoadScript({
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY as string,
+  });
+
   // --- CORE STATE ---
   const [viewMode, setViewMode] = useState<'list' | 'form'>('list');
   const [properties, setProperties] = useState<Property[]>([]);
@@ -424,11 +442,65 @@ export default function CompletePropertyManagement({
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Area / Neighborhood</label>
                 <input required type="text" value={editingProp.location.area} onChange={e => setEditingProp({...editingProp, location: {...editingProp.location, area: e.target.value}})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
-              {/* Pro Feature: GPS */}
-              <div className="md:col-span-2 relative">
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">GPS Coordinates (Optional)</label>
-                <input disabled={!isPro} type="text" value={editingProp.location.gpsCoordinates || ''} onChange={e => setEditingProp({...editingProp, location: {...editingProp.location, gpsCoordinates: e.target.value}})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" placeholder={isPro ? "e.g. 9.5624, 44.0770" : "Upgrade to Pro to map GPS Pins"} />
-                {!isPro && <Lock className="absolute right-3 top-10 text-slate-400" size={16} />}
+              
+              {/* ✅ EXACT MAP PICKER (Locked for free users) */}
+              <div className="md:col-span-2 relative mt-4">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Exact Location (Tap Map to Drop Pin)</label>
+                
+                {!isPro ? (
+                  <div className="w-full h-[300px] bg-slate-50 rounded-xl flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-200">
+                    <Lock size={32} className="mb-2 text-slate-300" />
+                    <span className="font-bold">Upgrade to Pro to map GPS Pins</span>
+                  </div>
+                ) : !isLoaded ? (
+                  <div className="w-full h-[300px] bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 font-bold animate-pulse border-2 border-slate-200">
+                    Loading Interactive Map...
+                  </div>
+                ) : (
+                  <div className="rounded-xl overflow-hidden border-2 border-slate-200 shadow-sm relative z-0">
+                    <GoogleMap
+                      mapContainerStyle={mapContainerStyle}
+                      center={
+                        editingProp.location?.gpsCoordinates 
+                          ? { 
+                              lat: parseFloat(editingProp.location.gpsCoordinates.split(',')[0]), 
+                              lng: parseFloat(editingProp.location.gpsCoordinates.split(',')[1]) 
+                            }
+                          : defaultCenter
+                      }
+                      zoom={13}
+                      onClick={(e) => {
+                        if (e.latLng) {
+                          const lat = e.latLng.lat();
+                          const lng = e.latLng.lng();
+                          setEditingProp({
+                            ...editingProp, 
+                            location: {
+                              ...editingProp.location, 
+                              gpsCoordinates: `${lat}, ${lng}`
+                            }
+                          });
+                        }
+                      }}
+                    >
+                      {editingProp.location?.gpsCoordinates && (
+                        <Marker 
+                          position={{
+                            lat: parseFloat(editingProp.location.gpsCoordinates.split(',')[0]),
+                            lng: parseFloat(editingProp.location.gpsCoordinates.split(',')[1])
+                          }} 
+                        />
+                      )}
+                    </GoogleMap>
+                  </div>
+                )}
+                
+                {editingProp.location?.gpsCoordinates && isPro && (
+                  <p className="text-xs text-blue-600 font-bold mt-3 flex items-center gap-1 bg-blue-50 w-fit px-3 py-1.5 rounded-lg border border-blue-100">
+                    <MapPin size={14} /> 
+                    Pin Dropped: {editingProp.location.gpsCoordinates}
+                  </p>
+                )}
               </div>
             </div>
           </div>

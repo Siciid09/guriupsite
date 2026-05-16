@@ -10,6 +10,11 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+function isPaidTier(plan: string): boolean {
+  const tier = (plan || 'free').toLowerCase().trim();
+  return ['pro', 'premium', 'agent_pro', 'agentpro', 'admin', 'sadmin'].includes(tier);
+}
+
 // ==================================================================
 // 1. SHARED LOGIC (RELAXED FILTERING)
 // ==================================================================
@@ -59,9 +64,8 @@ export async function getHotelsDataInternal(options: {
 
       // 3. RECOMMENDED CHECK (STRICT PRO/PREMIUM)
       if (isFeatured) {
-        // Must be explicitly Pro or Premium
         const tier = (data.planTier || data.planTierAtUpload || 'free').toLowerCase();
-        if (tier !== 'pro' && tier !== 'premium') return false;
+        if (!isPaidTier(tier)) return false;
       }
 
       return true;
@@ -72,8 +76,8 @@ export async function getHotelsDataInternal(options: {
       const tierA = (a.data().planTier || 'free').toLowerCase();
       const tierB = (b.data().planTier || 'free').toLowerCase();
       
-      const isAPro = tierA === 'pro' || tierA === 'premium';
-      const isBPro = tierB === 'pro' || tierB === 'premium';
+      const isAPro = isPaidTier(tierA);
+      const isBPro = isPaidTier(tierB);
 
       if (isAPro && !isBPro) return -1;
       if (!isAPro && isBPro) return 1;
@@ -197,6 +201,13 @@ function mergeAndNormalizeHotel(hotelDoc: DocumentSnapshot, liveAdminData: any) 
     location: {
       city: h.location?.city || h.city || 'Unknown City',
       area: h.location?.area || h.area || 'Unknown Area',
+      // ✅ ADDED: Pass the exact map coordinates to the mobile app and website
+      latDisplay: h.location?.latDisplay || null,
+      lngDisplay: h.location?.lngDisplay || null,
+      // Also provide a combined string just in case the mobile app prefers it this way!
+      gpsCoordinates: (h.location?.latDisplay && h.location?.lngDisplay) 
+        ? `${h.location.latDisplay}, ${h.location.lngDisplay}` 
+        : null,
     },
     amenities: amenitiesList,
     planTier: plan,

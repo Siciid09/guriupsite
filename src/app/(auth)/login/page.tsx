@@ -50,12 +50,14 @@ export default function LoginPage() {
 
     } catch (err: any) {
       console.error("Login Error:", err);
-      if (err.code === 'auth/invalid-credential') {
-        setError('Invalid email or password.');
-      } else if (err.code === 'auth/user-not-found') {
-        setError('No user found with this email.');
-      } else if (err.code === 'auth/wrong-password') {
-         setError('Incorrect password.');
+      if (err.code === 'auth/invalid-credential' || 
+          err.code === 'auth/user-not-found' || 
+          err.code === 'auth/wrong-password') {
+        setError('Invalid email or password. Please check your credentials.');
+      } else if (err.code === 'auth/too-many-requests') {
+        setError('Too many failed attempts. Please try again later.');
+      } else if (err.code === 'auth/user-disabled') {
+        setError('This account has been disabled. Contact support.');
       } else {
         setError('Failed to log in. Please try again.');
       }
@@ -77,6 +79,11 @@ export default function LoginPage() {
       const userDoc = await getDoc(userDocRef);
 
       if (!userDoc.exists()) {
+        // Check if they have an agent profile first to recover agent status
+        const agentDocRef = doc(db, 'agents', user.uid);
+        const agentDoc = await getDoc(agentDocRef);
+        const isAgent = agentDoc.exists();
+
         // Create new user matching your exact database schema
         await setDoc(userDocRef, {
           uid: user.uid,
@@ -84,16 +91,16 @@ export default function LoginPage() {
           name: user.displayName || 'Google User',
           phone: user.phoneNumber || '',
           photoUrl: user.photoURL || '',
-          role: 'user', 
-          isAgent: false,
-          planTier: 'free',
+          role: isAgent ? 'agent' : 'user', 
+          isAgent: isAgent,
+          planTier: agentDoc.exists() ? (agentDoc.data()?.planTier ?? 'free') : 'free',
           authMethod: 'google',
           createdAt: serverTimestamp(),
           isVerified: true, // Google emails are verified automatically
           activeDays: [],
           slug: ''
         });
-        router.push('/');
+        router.push(isAgent ? '/dashboard/agent' : '/');
       } else {
          const userData = userDoc.data();
          

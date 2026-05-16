@@ -257,15 +257,15 @@ export async function getRelatedProperties(property: Property): Promise<Property
   const q = query(
     collection(db, 'property'),
     where('location.city', '==', property.location.city),
-    where('id', '!=', property.id),
-    limit(10)
+    limit(10) // fetch slightly more to account for filtering
   );
   
   const snapshot = await getDocs(q);
   const rawData = snapshot.docs.map(doc => transformDoc<Property>(doc));
 
+  // ✅ FIX: Filter out the current property ID in-memory instead of Firestore
   const filteredData = rawData
-    .filter(p => p.isArchived !== true)
+    .filter(p => p.id !== property.id && p.isArchived !== true)
     .slice(0, 4);
 
   return await mergeAgentsWithProperties(filteredData);
@@ -315,10 +315,15 @@ export async function getRelatedHotels(hotel: Hotel): Promise<Hotel[]> {
   const q = query(
     hotelsRef,
     where('location.city', '==', hotel.location.city),
-    where('id', '!=', hotel.id),
-    limit(4)
+    limit(8) // fetch slightly more to account for filtering
   );
   const querySnapshot = await getDocs(q);
   if (querySnapshot.empty) return [];
-  return querySnapshot.docs.map(doc => transformDoc<Hotel>(doc));
+  
+  const rawData = querySnapshot.docs.map(doc => transformDoc<Hotel>(doc));
+
+  // ✅ FIX: Filter out the current hotel ID in-memory and slice to limit
+  return rawData
+    .filter(h => h.id !== hotel.id)
+    .slice(0, 4);
 }

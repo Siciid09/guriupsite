@@ -4,6 +4,8 @@ import { getHotelsDataInternal } from '@/app/api/hotels/route';
 
 export const dynamic = 'force-dynamic';
 
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://guriup.com';
+
 // --- 1. SEO METADATA (Targeting Africa & Global) ---
 export const metadata: Metadata = {
   title: 'Explore Top Hotels in Africa & The World | GuriUp',
@@ -15,7 +17,7 @@ export const metadata: Metadata = {
     type: 'website',
     siteName: 'GuriUp',
     locale: 'en_US',
-    url: 'https://guriup.com/hotels', // Update domain if needed
+    url: `${BASE_URL}/hotels`, 
   },
   twitter: {
     card: 'summary_large_image',
@@ -23,7 +25,7 @@ export const metadata: Metadata = {
     description: 'Book the best luxury, business, and budget-friendly hotels across Africa and worldwide.',
   },
   alternates: {
-    canonical: 'https://guriup.com/hotels', // Prevents duplicate content SEO penalties
+    canonical: `${BASE_URL}/hotels`,
   }
 };
 
@@ -46,7 +48,7 @@ export default async function HotelsPage() {
     '@type': 'CollectionPage',
     name: 'Top Hotels in Africa & The World',
     description: 'Browse and book premium and budget hotels across Africa and globally.',
-    url: 'https://guriup.com/hotels',
+    url: `${BASE_URL}/hotels`,
     provider: {
       '@type': 'Organization',
       name: 'GuriUp',
@@ -60,7 +62,7 @@ export default async function HotelsPage() {
         item: {
           '@type': 'Hotel',
           name: hotel?.name || 'GuriUp Featured Hotel',
-          url: `https://guriup.com/hotels/${hotel?.slug || hotel?.id || ''}`
+          url: `${BASE_URL}/hotels/${hotel?.slug || hotel?.id || ''}`
         }
       }))
     }

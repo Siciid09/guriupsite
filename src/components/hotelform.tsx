@@ -18,6 +18,18 @@ import {
   Building, MapPin, Phone, Info, Image as ImageIcon, CheckCircle, 
   X, Plus, Lock, Star, CreditCard, Video, Loader2
 } from 'lucide-react';
+// ✅ ADDED: Google Maps Imports
+import { GoogleMap, Marker, useLoadScript } from '@react-google-maps/api';
+
+const mapContainerStyle = {
+  width: '100%',
+  height: '300px'
+};
+
+const defaultCenter = {
+  lat: 9.560, // Default to Hargeisa
+  lng: 44.068 
+};
 
 // --- DATA CONSTANTS ---
 const HOTEL_TYPES = [
@@ -39,6 +51,11 @@ interface HotelFormProps {
 export default function HotelForm({ hotelId }: HotelFormProps) {
   const router = useRouter();
   const isEditing = !!hotelId;
+
+  // ✅ ADDED: Load Google Maps Script
+  const { isLoaded } = useLoadScript({
+    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY as string,
+  });
 
   // --- STATE: UI & Loading ---
   const [isLoading, setIsLoading] = useState(false);
@@ -363,9 +380,51 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
 
            <div className={`p-4 rounded-xl border-2 border-dashed ${isPro ? 'border-slate-300 bg-slate-50' : 'border-amber-200 bg-amber-50/50 relative overflow-hidden'}`}>
               {!isPro && <ProOverlay text="GPS Coordinates Locked" />}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <Input label="Latitude" value={lat} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLat(e.target.value)} disabled={!isPro} placeholder="9.5623" />
-                 <Input label="Longitude" value={lng} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLng(e.target.value)} disabled={!isPro} placeholder="44.0653" />
+              
+              {/* ✅ EXACT MAP PICKER FOR HOTELS */}
+              <div className="w-full relative mt-2">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Exact Location (Tap Map to Drop Pin)</label>
+                
+                {!isPro ? (
+                  <div className="w-full h-[300px] bg-amber-50/50 rounded-xl flex items-center justify-center text-amber-500 font-bold border border-amber-200">
+                    Map feature requires Pro
+                  </div>
+                ) : !isLoaded ? (
+                  <div className="w-full h-[300px] bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 font-bold animate-pulse border-2 border-slate-200">
+                    Loading Interactive Map...
+                  </div>
+                ) : (
+                  <div className="rounded-xl overflow-hidden border-2 border-slate-200 shadow-sm relative z-0">
+                    <GoogleMap
+                      mapContainerStyle={mapContainerStyle}
+                      center={
+                        lat && lng 
+                          ? { lat: parseFloat(lat), lng: parseFloat(lng) }
+                          : defaultCenter
+                      }
+                      zoom={14}
+                      onClick={(e) => {
+                        if (e.latLng) {
+                          setLat(e.latLng.lat().toString());
+                          setLng(e.latLng.lng().toString());
+                        }
+                      }}
+                    >
+                      {lat && lng && (
+                        <Marker 
+                          position={{ lat: parseFloat(lat), lng: parseFloat(lng) }} 
+                        />
+                      )}
+                    </GoogleMap>
+                  </div>
+                )}
+                
+                {lat && lng && isPro && (
+                  <p className="text-xs text-blue-600 font-bold mt-3 flex items-center gap-1 bg-blue-50 w-fit px-3 py-1.5 rounded-lg border border-blue-100">
+                    <MapPin size={14} /> 
+                    Coordinates Saved: {lat}, {lng}
+                  </p>
+                )}
               </div>
            </div>
         </Section>

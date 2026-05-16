@@ -440,31 +440,47 @@ export default function HotelDetailPage() {
 
          {/* --- RIGHT: MAP (40%) --- */}
           <div className="w-full lg:w-[40%] bg-slate-100 rounded-[2.5rem] border border-slate-200 overflow-hidden relative group min-h-[400px]">
-             {(isVerified && hotel.location?.coordinates) ? (
-               <iframe
-                 width="100%"
-                 height="100%"
-                 style={{ border: 0, minHeight: '400px' }}
-                 loading="lazy"
-                 allowFullScreen
-                 referrerPolicy="no-referrer-when-downgrade"
-                 src={`https://maps.google.com/maps?q=${hotel.location.coordinates.latitude},${hotel.location.coordinates.longitude}&hl=en&z=15&output=embed`}
-               ></iframe>
-             ) : (
-               <>
-                 <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=800')] bg-cover bg-center opacity-60 group-hover:scale-105 transition-transform duration-700"></div>
-                 <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
-                    <div className="bg-white p-4 rounded-full shadow-2xl mb-4 animate-bounce">
-                       <MapPin size={32} className="text-[#0065eb] fill-[#0065eb]" />
+             {(() => {
+                // ✅ FIX: Read latDisplay and lngDisplay from the Hotels API
+                const lat = hotel.location?.latDisplay;
+                const lng = hotel.location?.lngDisplay;
+                const hasMap = isVerified && lat && lng;
+
+                return hasMap ? (
+                  <>
+                    <iframe
+                      width="100%"
+                      height="100%"
+                      style={{ border: 0, minHeight: '400px' }}
+                      loading="lazy"
+                      allowFullScreen
+                      referrerPolicy="no-referrer-when-downgrade"
+                      // ✅ FIX: Corrected Google Maps Embed URL
+                      src={`https://maps.google.com/maps?q=${lat},${lng}&hl=en&z=15&output=embed`}
+                    ></iframe>
+                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10">
+                       <button onClick={() => window.open(`https://maps.google.com/maps?q=${lat},${lng}`, '_blank')} className="px-8 py-4 bg-white text-slate-900 rounded-2xl text-xs font-black uppercase tracking-widest shadow-2xl hover:bg-[#0065eb] hover:text-white transition-all transform hover:-translate-y-1 hover:scale-105">
+                          Open Map App
+                       </button>
                     </div>
-                    <h4 className="text-xl font-black text-slate-900 mb-2 relative z-10">Explore Area</h4>
-                    <p className="text-sm text-slate-700 font-bold max-w-[200px] relative z-10">{hotel.location?.area || 'City Center'}, {hotel.location?.city}</p>
-                    <a href={`https://maps.google.com/?q=${encodeURIComponent(hotel.location?.city || '')}`} target="_blank" rel="noreferrer" className="mt-6 px-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg hover:bg-[#0065eb] transition-colors relative z-10">
-                       Open Map
-                    </a>
-                 </div>
-               </>
-             )}
+                  </>
+                ) : (
+                  <>
+                    <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=800')] bg-cover bg-center opacity-60 group-hover:scale-105 transition-transform duration-700"></div>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
+                       <div className="bg-white p-4 rounded-full shadow-2xl mb-4 animate-bounce">
+                          <MapPin size={32} className="text-[#0065eb] fill-[#0065eb]" />
+                       </div>
+                       <h4 className="text-xl font-black text-slate-900 mb-2 relative z-10">Explore Area</h4>
+                       <p className="text-sm text-slate-700 font-bold max-w-[200px] relative z-10">{hotel.location?.area || 'City Center'}, {hotel.location?.city}</p>
+                       {/* Fallback to generic city search if no exact coordinates */}
+                       <a href={`https://maps.google.com/maps?q=${encodeURIComponent((hotel.location?.area || '') + ' ' + (hotel.location?.city || ''))}`} target="_blank" rel="noreferrer" className="mt-6 px-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg hover:bg-[#0065eb] transition-colors relative z-10">
+                          Search on Map
+                       </a>
+                    </div>
+                  </>
+                );
+             })()}
           </div>
         </div>
 

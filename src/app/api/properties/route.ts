@@ -13,6 +13,11 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+function isPaidTier(plan: string): boolean {
+  const tier = (plan || 'free').toLowerCase().trim();
+  return ['pro', 'premium', 'agent_pro', 'agentpro', 'admin', 'sadmin'].includes(tier);
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -102,9 +107,9 @@ export async function GET(request: Request) {
       return mergeAndNormalize(propDoc, liveAgent);
     });
 
-    // BUSINESS LOGIC: Only allow "Pro" or "Premium" in the featured list
+    // BUSINESS LOGIC: Only allow paid tiers in the featured list
     if (isFeatured) {
-      mergedData = mergedData.filter(p => p.agentPlanTier === 'pro' || p.agentPlanTier === 'premium');
+      mergedData = mergedData.filter(p => isPaidTier(p.agentPlanTier));
     }
 
     return NextResponse.json(mergedData);
@@ -119,7 +124,7 @@ function mergeAndNormalize(propDoc: DocumentSnapshot, liveAgentData: any) {
   const p = propDoc.data() || {};
   
   const livePlan = (liveAgentData.planTier || p.planTier || 'free').toLowerCase();
-  const isVerified = (livePlan === 'pro' || livePlan === 'premium'); 
+  const isVerified = isPaidTier(livePlan); 
   const isManualVerified = (liveAgentData.isVerified === true) || (p.agentVerified === true);
   const finalVerifiedStatus = isVerified || isManualVerified;
 
@@ -150,6 +155,8 @@ function mergeAndNormalize(propDoc: DocumentSnapshot, liveAgentData: any) {
     location: {
       city: p.location?.city || 'Unknown City',
       area: p.location?.area || 'Unknown Area',
+      // ✅ ADDED: Pass the exact map coordinates to the mobile app and website
+      gpsCoordinates: p.location?.gpsCoordinates || null,
     },
     bedrooms: Number(p.bedrooms || feats.bedrooms || 0),
     bathrooms: Number(p.bathrooms || feats.bathrooms || 0),

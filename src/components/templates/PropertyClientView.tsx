@@ -25,7 +25,8 @@ export interface Property {
   description: string;
   images: string[];
   agentId: string;
-  location: { city: string; area: string; address?: string; lat?: number; lng?: number };
+  // ✅ FIX: Added gpsCoordinates to the TypeScript definition so it stops complaining!
+  location: { city: string; area: string; address?: string; lat?: number; lng?: number; gpsCoordinates?: string };
   features: { 
     bedrooms?: number; 
     bathrooms?: number; 
@@ -335,17 +336,42 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
            </div>
            {/* RIGHT: MAP */}
            <div className="relative bg-slate-100 rounded-[2.5rem] border border-slate-200 overflow-hidden min-h-[400px] lg:min-h-full group">
-             {(isVerified && property.location.lat && property.location.lng) ? (
-               <iframe width="100%" height="100%" style={{ border: 0, minHeight: '400px' }} loading="lazy" allowFullScreen referrerPolicy="no-referrer-when-downgrade" src={`https://maps.google.com/maps?q=$${property.location.lat},${property.location.lng}&hl=en&z=15&output=embed`}></iframe>
-             ) : (
-               <Image src="https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=1200" alt="Map" fill className={`object-cover transition-transform duration-1000 group-hover:scale-105 ${!isVerified ? 'blur-sm opacity-60' : ''}`} />
-             )}
-             <div className={`absolute inset-0 flex flex-col items-center justify-center p-8 text-center pointer-events-none backdrop-blur-[2px] ${!isVerified ? 'bg-black/30' : 'bg-transparent'}`}>
-                <div className="bg-white p-5 rounded-full shadow-2xl animate-bounce mb-6">{isVerified ? <MapPin size={32} className="text-[#0065eb] fill-[#0065eb]" /> : <Lock size={32} className="text-amber-500" />}</div>
-                <h4 className="text-white text-3xl font-black drop-shadow-lg mb-2">{isVerified ? property.location.city : 'Location Hidden'}</h4>
-                <p className="text-white/90 font-bold text-sm drop-shadow-md mb-8 bg-white/10 px-4 py-1 rounded-full backdrop-blur-md border border-white/10">{isVerified ? property.location.area : 'Unverified Agent'}</p>
-                <button onClick={() => handleRestrictedAction("Map", () => window.open(`https://maps.google.com/?q=${property.location.area},${property.location.city}`, '_blank'))} className="px-8 py-4 bg-white text-slate-900 rounded-2xl text-xs font-black uppercase tracking-widest shadow-2xl hover:bg-[#0065eb] hover:text-white transition-all transform hover:-translate-y-1 hover:scale-105">{isVerified ? 'Open in Google Maps' : 'Unlock Location'}</button>
-             </div>
+             {(() => {
+               // ✅ FIX: Read the exact gpsCoordinates string from the API
+               const gpsParts = property.location?.gpsCoordinates?.split(',') || [];
+               const lat = gpsParts[0]?.trim();
+               const lng = gpsParts[1]?.trim();
+               const hasMap = isVerified && lat && lng;
+
+               return (
+                 <>
+                   {hasMap ? (
+                     // ✅ FIX: Corrected the Google Maps Embed URL
+                     <iframe width="100%" height="100%" style={{ border: 0, minHeight: '400px' }} loading="lazy" allowFullScreen referrerPolicy="no-referrer-when-downgrade" src={`https://maps.google.com/maps?q=${lat},${lng}&hl=en&z=15&output=embed`}></iframe>
+                   ) : (
+                     <Image src="https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=1200" alt="Map" fill className={`object-cover transition-transform duration-1000 group-hover:scale-105 ${!isVerified ? 'blur-sm opacity-60' : ''}`} />
+                   )}
+                   
+                   {!hasMap && (
+                     <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center pointer-events-none backdrop-blur-[2px] bg-black/30">
+                        <div className="bg-white p-5 rounded-full shadow-2xl animate-bounce mb-6"><Lock size={32} className="text-amber-500" /></div>
+                        <h4 className="text-white text-3xl font-black drop-shadow-lg mb-2">Location Hidden</h4>
+                        <p className="text-white/90 font-bold text-sm drop-shadow-md mb-8 bg-white/10 px-4 py-1 rounded-full backdrop-blur-md border border-white/10">Unverified Agent</p>
+                        <button className="px-8 py-4 bg-white text-slate-900 rounded-2xl text-xs font-black uppercase tracking-widest shadow-2xl">Unlock Location</button>
+                     </div>
+                   )}
+
+                   {hasMap && (
+                     // ✅ FIX: "Open Map" button now links to correct GPS directions
+                     <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10">
+                        <button onClick={() => window.open(`https://maps.google.com/maps?q=${lat},${lng}`, '_blank')} className="px-8 py-4 bg-white text-slate-900 rounded-2xl text-xs font-black uppercase tracking-widest shadow-2xl hover:bg-[#0065eb] hover:text-white transition-all transform hover:-translate-y-1 hover:scale-105">
+                           Open in Google Maps
+                        </button>
+                     </div>
+                   )}
+                 </>
+               );
+             })()}
            </div>
         </div>
 
