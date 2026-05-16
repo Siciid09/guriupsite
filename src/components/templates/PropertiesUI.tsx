@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/app/lib/firebase';
 import Image from 'next/image';
+import LocationSelectorModal, { LocationResult } from '@/components/LocationSelectorModal';
 import { 
   MapPin, Home, Award, ShieldCheck, ChevronDown, 
   SlidersHorizontal, X, Bed, Bath, Move, Building2, 
@@ -76,41 +77,18 @@ export default function PropertiesUI({
   // Filter Modal
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [selectedCity, setSelectedCity] = useState('All Cities');
+  const [selectedLocation, setSelectedLocation] = useState<LocationResult | null>(null);
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 1000000]);
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([]);
-  
-  // Dynamic Cities
-  const [popularCities, setPopularCities] = useState<string[]>(['All Cities']);
-
-  // Fetch dynamic cities from Firebase
-  useEffect(() => {
-    const fetchCities = async () => {
-      try {
-        const q = query(collection(db, 'cities'), where('isVerified', '==', true));
-        const snap = await getDocs(q);
-        const fetched = snap.docs.map(doc => {
-          const name = doc.data().name || '';
-          return name.replace(/\b\w/g, (l: string) => l.toUpperCase());
-        });
-        setPopularCities(['All Cities', ...fetched]);
-      } catch (e) {
-        console.error("Failed to fetch cities:", e);
-      }
-    };
-    fetchCities();
-  }, []);
 
   // Dropdowns
   const [isCatDropdownOpen, setIsCatDropdownOpen] = useState(false);
-  const [isCityDropdownOpen, setIsCityDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const cityDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) setIsCatDropdownOpen(false);
-      if (cityDropdownRef.current && !cityDropdownRef.current.contains(event.target as Node)) setIsCityDropdownOpen(false);
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -133,8 +111,9 @@ export default function PropertiesUI({
         if (!matches) return false;
       }
 
-      // 3. City
-      if (selectedCity !== 'All Cities' && p.location?.city !== selectedCity) return false;
+      // 3. Location (Exact Modal Match)
+      if (selectedLocation?.city && p.location?.city !== selectedLocation.city) return false;
+      if (selectedLocation?.district && p.location?.area !== selectedLocation.district) return false;
 
       // 4. Category
       if (selectedCategory !== 'All' && p.type?.toLowerCase() !== selectedCategory.toLowerCase()) return false;
@@ -161,12 +140,12 @@ export default function PropertiesUI({
   // 1. Filtered Featured List (Strictly Pro/Featured from API)
   const filteredFeatured = useMemo(() => {
     return applyFilters(featuredProperties);
-  }, [featuredProperties, searchQuery, selectedCity, filterTab, selectedCategory, priceRange, selectedAmenities]);
+  }, [featuredProperties, searchQuery, selectedLocation, filterTab, selectedCategory, priceRange, selectedAmenities]);
 
   // 2. Filtered Latest List (Includes everything, mixed)
   const filteredLatest = useMemo(() => {
     return applyFilters(allProperties);
-  }, [allProperties, searchQuery, selectedCity, filterTab, selectedCategory, priceRange, selectedAmenities]);
+  }, [allProperties, searchQuery, selectedLocation, filterTab, selectedCategory, priceRange, selectedAmenities]);
 
 
   // Pagination helpers for featured
@@ -211,7 +190,7 @@ export default function PropertiesUI({
               </div>
             </div>
             <div className="p-6 border-t border-slate-100 flex gap-3">
-               <button onClick={() => { setPriceRange([0, 1000000]); setSelectedAmenities([]); setSelectedCity('All Cities'); }} className="flex-1 py-4 font-bold text-slate-500 bg-slate-50 rounded-2xl">Reset</button>
+               <button onClick={() => { setPriceRange([0, 1000000]); setSelectedAmenities([]); setSelectedLocation(null); }} className="flex-1 py-4 font-bold text-slate-500 bg-slate-50 rounded-2xl">Reset</button>
                <button onClick={() => setIsFilterOpen(false)} className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg">Show Results</button>
             </div>
           </div>
@@ -227,20 +206,25 @@ export default function PropertiesUI({
           
           {/* SEARCH CAPSULE */}
           <div className="glass-card p-2 rounded-[2rem] shadow-2xl max-w-4xl mx-auto flex flex-col md:flex-row gap-2 relative z-[50]">
-            {/* City Dropdown */}
-            <div className="flex-1 relative" ref={cityDropdownRef}>
-              <button onClick={() => setIsCityDropdownOpen(!isCityDropdownOpen)} className="w-full h-full flex items-center gap-3 px-5 py-3 bg-slate-50/50 rounded-[1.5rem] hover:bg-white text-left">
+            {/* Location Modal Trigger */}
+            <div className="flex-1 relative">
+              <button onClick={() => setIsLocationModalOpen(true)} className="w-full h-full flex items-center gap-3 px-5 py-3 bg-slate-50/50 rounded-[1.5rem] hover:bg-white text-left">
                 <MapPin className="text-blue-500" size={20} />
-                <div className="flex-1 overflow-hidden"><p className="text-[9px] font-black uppercase text-slate-400">Location</p><span className="font-bold text-sm text-slate-900">{selectedCity}</span></div>
+                <div className="flex-1 overflow-hidden">
+                   <p className="text-[9px] font-black uppercase text-slate-400">Location</p>
+                   <span className="font-bold text-sm text-slate-900 truncate block">
+                     {selectedLocation ? `${selectedLocation.city}${selectedLocation.district ? `, ${selectedLocation.district}` : ''}` : 'All Cities'}
+                   </span>
+                </div>
                 <ChevronDown size={14} className="text-slate-400" />
               </button>
-           {isCityDropdownOpen && (
-                <div className="absolute top-full left-0 right-0 mt-3 bg-white rounded-[1.5rem] shadow-2xl p-2 z-[999] border border-slate-100 max-h-60 overflow-y-auto">
-                  {popularCities.map(city => (
-                    <button key={city} onClick={() => { setSelectedCity(city); setIsCityDropdownOpen(false); }} className={`w-full text-left p-3 hover:bg-blue-50 rounded-xl font-bold text-sm ${selectedCity === city ? 'text-blue-600 bg-blue-50' : ''}`}>{city}</button>
-                  ))}
-                </div>
-              )}
+              
+              <LocationSelectorModal 
+                isOpen={isLocationModalOpen}
+                onClose={() => setIsLocationModalOpen(false)}
+                onSelect={(res) => setSelectedLocation(res)}
+                lang="en"
+              />
             </div>
 
             {/* Category Dropdown */}

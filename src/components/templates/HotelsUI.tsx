@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/app/lib/firebase';
 import Image from 'next/image';
+import LocationSelectorModal, { LocationResult } from '@/components/LocationSelectorModal';
 import { 
   MapPin, Users, Search, 
   CheckCircle, Star, ArrowRight, ShieldCheck, 
@@ -69,34 +70,14 @@ const HotelsUI = ({ featuredHotels, allHotels }: HotelsUIProps) => {
   const [favorites, setFavorites] = useState<string[]>([]);
 
   // Search State
-const [searchDestination, setSearchDestination] = useState('');
   const [searchType, setSearchType] = useState('');
   
-  // Dynamic Cities
-  const [popularCities, setPopularCities] = useState<string[]>([]);
-
-  useEffect(() => {
-    const fetchCities = async () => {
-      try {
-        const q = query(collection(db, 'cities'), where('isVerified', '==', true));
-        const snap = await getDocs(q);
-        const fetched = snap.docs.map(doc => {
-          const name = doc.data().name || '';
-          return name.replace(/\b\w/g, (l: string) => l.toUpperCase());
-        });
-        setPopularCities(fetched);
-      } catch (e) {
-        console.error("Failed to fetch cities:", e);
-      }
-    };
-    fetchCities();
-  }, []);
+  // Location Modal State
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState<LocationResult | null>(null);
 
   // Dropdown UI States
-  const [isCityDropdownOpen, setIsCityDropdownOpen] = useState(false);
   const [isTypeDropdownOpen, setIsTypeDropdownOpen] = useState(false);
-  
-  const cityRef = useRef<HTMLDivElement>(null);
   const typeRef = useRef<HTMLDivElement>(null);
 
   // LOGIC FIX: Changed default from [50, 1000] to [0, 2000] to include cheaper hotels on load
@@ -107,7 +88,6 @@ const [searchDestination, setSearchDestination] = useState('');
   // --- CLICK OUTSIDE HANDLER ---
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (cityRef.current && !cityRef.current.contains(event.target as Node)) setIsCityDropdownOpen(false);
       if (typeRef.current && !typeRef.current.contains(event.target as Node)) setIsTypeDropdownOpen(false);
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -128,12 +108,25 @@ const [searchDestination, setSearchDestination] = useState('');
   useEffect(() => {
     let result = [...allHotels];
 
-    // Destination Filter
-    if (searchDestination) {
-      const term = searchDestination.toLowerCase();
+    // Location Filter (Exact Match with Modal Data)
+    if (selectedLocation?.city) {
+      const targetCity = selectedLocation.city.toLowerCase();
+      const targetDistrict = selectedLocation.district?.toLowerCase();
+      
       result = result.filter(h => {
-        const locString = typeof h.location === 'string' ? h.location : `${h.location?.city} ${h.location?.area}`;
-        return h.name.toLowerCase().includes(term) || locString.toLowerCase().includes(term);
+        const locIsString = typeof h.location === 'string';
+        
+        const cityMatch = locIsString 
+          ? h.location.toLowerCase().includes(targetCity)
+          : h.location?.city?.toLowerCase() === targetCity;
+          
+        if (!targetDistrict) return cityMatch;
+        
+        const districtMatch = locIsString
+          ? h.location.toLowerCase().includes(targetDistrict)
+          : h.location?.area?.toLowerCase() === targetDistrict;
+          
+        return cityMatch && districtMatch;
       });
     }
 
@@ -161,7 +154,7 @@ const [searchDestination, setSearchDestination] = useState('');
     }
 
     setFilteredHotels(sortHotels(result));
-  }, [allHotels, searchDestination, searchType, priceRange, minRating, selectedAmenities]);
+  }, [allHotels, selectedLocation, searchType, priceRange, minRating, selectedAmenities]);
 
   // --- HELPERS ---
   const handleShare = (e: React.MouseEvent, id: string) => {
@@ -234,7 +227,7 @@ const [searchDestination, setSearchDestination] = useState('');
               </div>
             </div>
             <div className="p-6 border-t flex gap-3">
-               <button onClick={() => { setPriceRange([0, 2000]); setSelectedAmenities([]); setMinRating(0); setSearchDestination(''); setSearchType(''); }} className="flex-1 py-4 font-bold text-slate-500 bg-slate-50 rounded-2xl">Reset</button>
+               <button onClick={() => { setPriceRange([0, 2000]); setSelectedAmenities([]); setMinRating(0); setSelectedLocation(null); setSearchType(''); }} className="flex-1 py-4 font-bold text-slate-500 bg-slate-50 rounded-2xl">Reset</button>
                <button onClick={() => setIsFilterOpen(false)} className="flex-[2] py-4 bg-[#0065eb] text-white rounded-2xl font-bold">Show Results</button>
             </div>
           </div>
@@ -253,17 +246,24 @@ const [searchDestination, setSearchDestination] = useState('');
 
           {/* SEARCH CAPSULE */}
           <div className="glass-card p-3 rounded-3xl md:rounded-full shadow-2xl w-full max-w-3xl mx-auto grid grid-cols-2 md:flex md:items-center relative z-[50] gap-2 md:gap-6">
-            <div className="relative w-full" ref={cityRef}>
-              <button onClick={() => setIsCityDropdownOpen(!isCityDropdownOpen)} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl md:rounded-full hover:bg-slate-100/50 transition-all text-left">
+            {/* Location Modal Trigger */}
+            <div className="relative w-full">
+              <button onClick={() => setIsLocationModalOpen(true)} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl md:rounded-full hover:bg-slate-100/50 transition-all text-left">
                 <MapPin className="text-[#0065eb]" size={20} />
-                <div className="flex-1 overflow-hidden"><p className="text-[9px] font-black uppercase text-slate-400">Destination</p><span className="font-bold text-sm text-slate-900 truncate">{searchDestination || 'Select City'}</span></div>
-              </button>
-              {isCityDropdownOpen && (
-                <div className="absolute top-full left-0 mt-4 w-[280px] bg-white rounded-[1.5rem] shadow-2xl p-2 z-[9999] max-h-60 overflow-y-auto">
-                  <button onClick={() => { setSearchDestination(''); setIsCityDropdownOpen(false); }} className="w-full text-left px-4 py-3 rounded-[1rem] hover:bg-slate-50 text-sm font-bold text-slate-500">Anywhere</button>
-                  {popularCities.map((c) => <button key={c} onClick={() => { setSearchDestination(c); setIsCityDropdownOpen(false); }} className="w-full flex items-center gap-3 p-3 rounded-[1rem] hover:bg-slate-50 font-bold text-sm text-slate-900"><MapPin size={16} className="text-slate-400"/> {c}</button>)}
+                <div className="flex-1 overflow-hidden">
+                   <p className="text-[9px] font-black uppercase text-slate-400">Destination</p>
+                   <span className="font-bold text-sm text-slate-900 truncate block">
+                     {selectedLocation ? `${selectedLocation.city}${selectedLocation.district ? `, ${selectedLocation.district}` : ''}` : 'Anywhere'}
+                   </span>
                 </div>
-              )}
+              </button>
+              
+              <LocationSelectorModal 
+                isOpen={isLocationModalOpen}
+                onClose={() => setIsLocationModalOpen(false)}
+                onSelect={(res) => setSelectedLocation(res)}
+                lang="en"
+              />
             </div>
             <div className="relative w-full" ref={typeRef}>
               <button onClick={() => setIsTypeDropdownOpen(!isTypeDropdownOpen)} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl md:rounded-full hover:bg-slate-100/50 transition-all text-left">
@@ -325,7 +325,7 @@ const [searchDestination, setSearchDestination] = useState('');
           ) : (
             <div className="text-center py-20 bg-gray-50 rounded-[3rem]">
               <h3 className="text-xl font-bold text-slate-900">No hotels found</h3>
-              <button onClick={() => { setSearchDestination(''); setSearchType(''); setPriceRange([0, 2000]); setSelectedAmenities([]); }} className="mt-4 text-[#0065eb] font-bold underline">Clear all filters</button>
+              <button onClick={() => { setSelectedLocation(null); setSearchType(''); setPriceRange([0, 2000]); setSelectedAmenities([]); }} className="mt-4 text-[#0065eb] font-bold underline">Clear all filters</button>
             </div>
           )}
         </div>

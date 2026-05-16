@@ -6,6 +6,7 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/app/lib/firebase';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import LocationSelectorModal, { LocationResult } from '@/components/LocationSelectorModal';
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 
 // --- TYPES (Updated to match your API/Firestore Types) ---
@@ -69,7 +70,8 @@ const HomeUI = ({
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   
   // Selection State
-  const [selectedCity, setSelectedCity] = useState('All Cities');
+  const [selectedLocation, setSelectedLocation] = useState<LocationResult | null>(null);
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [selectedType, setSelectedType] = useState('Any Type'); 
   const [selectedPrice, setSelectedPrice] = useState('Any Price');
 
@@ -77,26 +79,6 @@ const HomeUI = ({
   const [featIndex, setFeatIndex] = useState(0);
 
   // --- FILTER DATA ---
-  const [cities, setCities] = useState<string[]>(['All Cities']);
-
-  // Fetch dynamic cities from Firebase
-  useEffect(() => {
-    const fetchCities = async () => {
-      try {
-        const q = query(collection(db, 'cities'), where('isVerified', '==', true));
-        const snap = await getDocs(q);
-        const fetched = snap.docs.map(doc => {
-          const name = doc.data().name || '';
-          // Capitalize first letter of each word
-          return name.replace(/\b\w/g, (l: string) => l.toUpperCase());
-        });
-        setCities(['All Cities', ...fetched]);
-      } catch (e) {
-        console.error("Failed to fetch cities:", e);
-      }
-    };
-    fetchCities();
-  }, []);
   const propertyTypes = ['Any Type', 'Apartment', 'Villa', 'Office', 'House', 'Land', 'Commercial', 'Hall'];
   const hotelRoomTypes = ['Any Room', 'Single Room', 'Double Room', 'Twin Room', 'Triple Room', 'Family Room', 'Suite', 'Deluxe Room', 'Studio Room'];
   const buyPrices = ['Any Price', '$10k - $50k', '$50k - $100k', '$100k - $200k', '$200k+'];
@@ -125,12 +107,16 @@ const HomeUI = ({
   const handleSearch = () => {
     const params = new URLSearchParams();
     params.set('mode', filterTab);
-    if (selectedCity && selectedCity !== 'All Cities') params.set('city', selectedCity);
+    
+    if (selectedLocation?.city) params.set('city', selectedLocation.city);
+    if (selectedLocation?.district) params.set('area', selectedLocation.district);
+    
     if (selectedType && selectedType !== 'Any Type' && selectedType !== 'Any Room') {
        if (filterTab === 'hotel') params.set('roomType', selectedType);
        else params.set('type', selectedType);
     }
     if (selectedPrice && selectedPrice !== 'Any Price') params.set('price', selectedPrice);
+    
     router.push(`/search?${params.toString()}`);
   };
 
@@ -381,26 +367,27 @@ const HomeUI = ({
                 {/* 2. INPUTS ROW */}
                 <div className="flex flex-col md:flex-row items-center bg-gray-50 rounded-[1.5rem] border border-gray-100 p-2">
                   
-                  {/* --- CITY DROPDOWN --- */}
-                  <div className="flex flex-1 items-center gap-3 px-4 py-5 w-full border-b md:border-b-0 md:border-r border-gray-200 hover:bg-white transition-colors group rounded-xl relative">
+                  {/* --- LOCATION MODAL TRIGGER --- */}
+                  <div className="flex flex-1 items-center gap-3 px-4 py-5 w-full border-b md:border-b-0 md:border-r border-gray-200 hover:bg-white transition-colors group rounded-xl relative cursor-pointer" onClick={() => setIsLocationModalOpen(true)}>
                       <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center group-hover:bg-[#0065eb] group-hover:text-white transition-colors">
                         <svg className="w-4 h-4 text-[#0065eb] group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                       </div>
-                      <div className="flex flex-col w-full" onClick={() => toggleDropdown('city')}>
-                        <span className="text-[9px] uppercase font-black text-gray-400 tracking-wider mb-0.5">City</span>
-                        <div className="flex items-center justify-between cursor-pointer">
-                            <span className="text-xs font-bold text-slate-900">{selectedCity}</span>
-                            <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                      <div className="flex flex-col w-full overflow-hidden">
+                        <span className="text-[9px] uppercase font-black text-gray-400 tracking-wider mb-0.5">Location</span>
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-900 truncate">
+                               {selectedLocation ? `${selectedLocation.city}${selectedLocation.district ? `, ${selectedLocation.district}` : ''}` : 'All Cities'}
+                            </span>
+                            <svg className="w-3 h-3 text-gray-400 shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                         </div>
                       </div>
-                      {/* City Menu */}
-                      {openDropdown === 'city' && (
-                        <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-[60] max-h-60 overflow-y-auto">
-                           {cities.map((city) => (
-                                <div key={city} onClick={() => selectOption(setSelectedCity, city)} className="px-4 py-3 hover:bg-gray-50 cursor-pointer text-xs font-bold text-slate-700">{city}</div>
-                           ))}
-                        </div>
-                      )}
+                      
+                      <LocationSelectorModal 
+                        isOpen={isLocationModalOpen}
+                        onClose={() => setIsLocationModalOpen(false)}
+                        onSelect={(res) => setSelectedLocation(res)}
+                        lang="en"
+                      />
                   </div>
 
                   {/* --- TYPE DROPDOWN --- */}
