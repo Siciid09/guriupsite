@@ -211,7 +211,9 @@ export async function getFeaturedHotels(): Promise<Hotel[]> {
     .map(h => ({ 
       ...h, 
       isPro: true,
-      displayPrice: (h.hasDiscount && h.discountPrice > 0) ? h.discountPrice : h.pricePerNight
+      displayPrice: (h.hasDiscount && h.discountPrice > 0) ? h.discountPrice : h.pricePerNight,
+      // ✅ FIX: Force amenities to be a valid array so the UI never crashes
+      amenities: Array.isArray(h.amenities) ? h.amenities : []
     }))
     .slice(0, 10);
 }
@@ -290,7 +292,9 @@ export async function getAllHotels(): Promise<Hotel[]> {
     .map(h => ({
       ...h,
       isPro: ['pro', 'premium', 'agent_pro', 'admin'].includes((h.planTier || '').toLowerCase()),
-      displayPrice: (h.hasDiscount && h.discountPrice > 0) ? h.discountPrice : h.pricePerNight
+      displayPrice: (h.hasDiscount && h.discountPrice > 0) ? h.discountPrice : h.pricePerNight,
+      // ✅ FIX: Force amenities to be a valid array so the UI never crashes
+      amenities: Array.isArray(h.amenities) ? h.amenities : []
     }))
     .sort((a, b) => {
       const timeA = new Date(a.createdAt || 0).getTime();
