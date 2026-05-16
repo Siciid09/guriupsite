@@ -207,9 +207,12 @@ export default function LocationSelectorModal({ isOpen, onClose, onSelect, lang 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+    <div 
+      className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
+      onClick={(e) => e.stopPropagation()} // ✅ FIX 1: Stops clicks from reaching the parent page!
+    >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose}></div>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={(e) => { e.stopPropagation(); onClose(); }}></div>
       
       {/* Bottom Sheet / Modal */}
       <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-[2rem] max-h-[85vh] sm:max-h-[80vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom-10 sm:slide-in-from-bottom-4 duration-300">
@@ -232,7 +235,7 @@ export default function LocationSelectorModal({ isOpen, onClose, onSelect, lang 
               <p className="text-xs font-bold text-slate-400 mt-0.5">{getHeaderSubtitle()}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 bg-slate-50 hover:bg-red-50 hover:text-red-500 rounded-full text-slate-400 transition-colors">
+          <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="p-2 bg-slate-50 hover:bg-red-50 hover:text-red-500 rounded-full text-slate-400 transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -264,7 +267,10 @@ export default function LocationSelectorModal({ isOpen, onClose, onSelect, lang 
               {items.map(item => (
                 <button
                   key={item.id}
-                  onClick={() => handleSelection(item)}
+                  onClick={(e) => { 
+                    e.stopPropagation(); // ✅ FIX 2: Secures the final district click!
+                    handleSelection(item); 
+                  }}
                   className="w-full flex items-center justify-between p-4 rounded-2xl hover:bg-slate-50 transition-colors group text-left"
                 >
                   <span className="font-bold text-slate-700 group-hover:text-slate-900">{item.name}</span>
