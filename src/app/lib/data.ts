@@ -200,19 +200,20 @@ export async function getPropertyBySlug(slug: string): Promise<Property | null> 
 // =======================================================================
 
 export async function getFeaturedHotels(): Promise<Hotel[]> {
-  // Fetch generic list first
-  const q = query(collection(db, 'hotels'), limit(20));
+  const q = query(collection(db, 'hotels'), limit(50));
   const snapshot = await getDocs(q);
   
   const rawData = snapshot.docs.map(doc => transformDoc<Hotel>(doc));
 
-  // JS Filter: Auto-feature if Plan is Pro/Premium OR if manually featured
-  const filteredData = rawData
-    .filter(h => (h.planTier === 'pro' || h.planTier === 'premium' || h.featured === true) && h.isArchived !== true)
-    .map(h => ({ ...h, isPro: true })) // Visual badge helper
-    .slice(0, 4);
-
-  return filteredData;
+  // ✅ FIX: Supports all paid tiers and maps display prices for the UI
+  return rawData
+    .filter(h => (['pro', 'premium', 'agent_pro', 'admin'].includes((h.planTier || '').toLowerCase()) || h.featured === true) && h.isArchived !== true && h.status !== 'banned')
+    .map(h => ({ 
+      ...h, 
+      isPro: true,
+      displayPrice: (h.hasDiscount && h.discountPrice > 0) ? h.discountPrice : h.pricePerNight
+    }))
+    .slice(0, 10);
 }
 
 export async function getLatestHotels(): Promise<Hotel[]> {
@@ -278,8 +279,24 @@ export async function getPropertyTypes(): Promise<string[]> {
 }
 
 export async function getAllHotels(): Promise<Hotel[]> {
-  const snapshot = await getDocs(collection(db, 'hotels'));
-  return snapshot.docs.map(doc => transformDoc<Hotel>(doc));
+  // Fetch without strict Firestore ordering to prevent skipping documents missing a timestamp
+  const q = query(collection(db, 'hotels'), limit(150));
+  const snapshot = await getDocs(q);
+  const rawData = snapshot.docs.map(doc => transformDoc<Hotel>(doc));
+
+  // ✅ FIX: Safely filters archived items and sorts perfectly in-memory
+  return rawData
+    .filter(h => h.isArchived !== true && h.status !== 'banned' && h.status !== 'archived')
+    .map(h => ({
+      ...h,
+      isPro: ['pro', 'premium', 'agent_pro', 'admin'].includes((h.planTier || '').toLowerCase()),
+      displayPrice: (h.hasDiscount && h.discountPrice > 0) ? h.discountPrice : h.pricePerNight
+    }))
+    .sort((a, b) => {
+      const timeA = new Date(a.createdAt || 0).getTime();
+      const timeB = new Date(b.createdAt || 0).getTime();
+      return timeB - timeA;
+    });
 }
 
 export async function getHotelBySlug(slug: string): Promise<Hotel | null> {
