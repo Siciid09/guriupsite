@@ -163,7 +163,9 @@ function SignupContent() {
       const userDoc = await getDoc(doc(db, 'users', user.uid));
 
       if (userDoc.exists()) {
-        router.push('/'); 
+        // 🚫 SCAM/BYPASS PREVENTION: If they already have an account, stop them!
+        await signOut(auth);
+        setError("Account already exists. Please go to the Log In page.");
       } else {
         setTempGoogleUser(user);
         setFormData(prev => ({
@@ -212,8 +214,7 @@ function SignupContent() {
       let user: FirebaseUser;
       if (tempGoogleUser) {
         user = tempGoogleUser;
-        const credential = EmailAuthProvider.credential(user.email!, formData.password);
-        try { await linkWithCredential(user, credential); } catch(e) { console.warn("Link Error:", e); }
+        // 🔒 SECURITY: Google users are already authenticated. No need to link a fake password credential.
       } else {
         const cred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
         user = cred.user;
@@ -287,10 +288,14 @@ function SignupContent() {
       await signOut(auth);
 
       if (!tempGoogleUser) {
+        // 📧 Standard Email: Show the "Check your email" verification screen
         setEmailSentTo(formData.email);
         setVerificationSent(true);
       } else {
-        router.push('/login');
+        // 🚀 Google Auth: Already verified! Route directly to their chosen dashboard!
+        if (role === 'hoadmin') router.push('/dashboard/hotel');
+        else if (role === 'reagent') router.push('/dashboard/agent');
+        else router.push('/dashboard/user');
       }
 
     } catch (err: any) {
@@ -403,13 +408,18 @@ function SignupContent() {
                             required
                           />
                           <InputGroup label="Phone" icon={Phone} name="phone" type="tel" placeholder="Phone" value={formData.phone} onChange={handleChange} onBlur={handleBlur} error={fieldErrors.phone} required />
-                          <PasswordInput label="Password" name="password" placeholder="Password" value={formData.password} onChange={handleChange} required />
+                          
+                          {/* 🔒 SECURITY: Only ask for a password if they are NOT using Google */}
+                          {!tempGoogleUser && (
+                            <PasswordInput label="Password" name="password" placeholder="Password" value={formData.password} onChange={handleChange} required />
+                          )}
                       </div>
 
                       <div className="pt-8">
                         {role === 'reagent' ? (
                           <button type="button" onClick={() => {
-                              if (!formData.fullName || !formData.email || !formData.phone || !formData.password) {
+                              // ✅ FIX: Don't require a password if they are a Google user!
+                              if (!formData.fullName || !formData.email || !formData.phone || (!tempGoogleUser && !formData.password)) {
                                 setError("Please complete all fields."); return;
                               }
                               setError(null); setStep(2);

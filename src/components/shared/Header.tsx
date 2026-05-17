@@ -34,7 +34,7 @@ const Header = () => {
   const handleSignOut = async () => {
     try {
       await signOut(auth);
-      toggleNav(); // Close mobile menu if open
+      setIsNavOpen(false); // ✅ FIX: Always force close, never toggle open!
     } catch (error) {
       console.error("Error signing out: ", error);
     }

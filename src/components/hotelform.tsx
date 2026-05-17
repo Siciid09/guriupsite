@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 // ✅ ADDED: Google Maps Imports
 import { GoogleMap, Marker, useLoadScript } from '@react-google-maps/api';
+// ✅ ADDED: Location Selector Import
+import LocationSelectorModal, { LocationResult } from '@/components/LocationSelectorModal';
 
 const mapContainerStyle = {
   width: '100%',
@@ -79,10 +81,13 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
   const [videoUrl, setVideoUrl] = useState('');
 
   // Location
+  const [country, setCountry] = useState('Somalia'); // ✅ ADDED
   const [city, setCity] = useState('');
   const [area, setArea] = useState('');
+  const [address, setAddress] = useState(''); // ✅ ADDED
   const [lat, setLat] = useState('');
   const [lng, setLng] = useState('');
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false); // ✅ ADDED
 
   // Contact
   const [phoneCall, setPhoneCall] = useState('');
@@ -134,8 +139,10 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
             setRating(data.rating?.toString() || '3');
             setVideoUrl(data.videoUrl || '');
             
+            setCountry(data.location?.country || 'Somalia');
             setCity(data.location?.city || '');
             setArea(data.location?.area || '');
+            setAddress(data.location?.address || '');
             setLat(data.location?.latDisplay || '');
             setLng(data.location?.lngDisplay || '');
 
@@ -256,8 +263,10 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
         videoUrl: videoUrl.trim(),
         
         location: {
+          country: country.trim(),
           city: city.trim(),
           area: area.trim(),
+          address: address.trim(),
           coordinates: geoPoint,
           latDisplay: isPro ? lat : null,
           lngDisplay: isPro ? lng : null,
@@ -374,8 +383,39 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
 
         <Section title="Location" icon={MapPin}>
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-             <Input label="City *" value={city} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCity(e.target.value)} required />
-             <Input label="Area (e.g. Downtown) *" value={area} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setArea(e.target.value)} required />
+             {/* ✅ ADDED: Modal Trigger */}
+             <div className="flex flex-col">
+               <label className="block text-xs font-bold text-slate-500 uppercase mb-2">City & District *</label>
+               <button 
+                 type="button" 
+                 onClick={() => setIsLocationModalOpen(true)}
+                 className="w-full bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl p-3.5 text-sm font-bold text-left flex items-center justify-between transition-colors"
+               >
+                 <span className={city ? 'text-slate-900' : 'text-slate-400'}>
+                   {city && area ? `${area}, ${city}` : 'Select Location...'}
+                 </span>
+                 <MapPin size={16} className="text-slate-400" />
+               </button>
+               
+               <LocationSelectorModal 
+                 isOpen={isLocationModalOpen}
+                 onClose={() => setIsLocationModalOpen(false)}
+                 onSelect={(res) => {
+                   setCountry(res.country || 'Somalia');
+                   setCity(res.city || '');
+                   setArea(res.district || '');
+                 }}
+                 lang="en"
+               />
+             </div>
+
+             {/* ✅ ADDED: Manual Address */}
+             <Input 
+               label="Street Address / Landmark (Optional)" 
+               value={address} 
+               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAddress(e.target.value)} 
+               placeholder="e.g. Main Street, near the bank" 
+             />
            </div>
 
            <div className={`p-4 rounded-xl border-2 border-dashed ${isPro ? 'border-slate-300 bg-slate-50' : 'border-amber-200 bg-amber-50/50 relative overflow-hidden'}`}>

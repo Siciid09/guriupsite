@@ -31,11 +31,18 @@ export default function LoginPage() {
       if (userDoc.exists()) {
         const userData = userDoc.data();
 
-        if (userData.isVerified !== true) {
+        // 🔒 SECURITY FIX: Rely on Google/Firebase's internal security token
+        if (!user.emailVerified) {
           await auth.signOut();
-          setError('Please verify your email before logging in.');
+          setError('Account not verified. Please check your email and click the link.');
           setLoading(false);
           return;
+        }
+
+        // 🛠️ AUTO-REPAIR: If Firebase says they clicked the link, but your DB missed it, fix the DB silently!
+        if (user.emailVerified && userData.isVerified !== true) {
+          await setDoc(userDocRef, { isVerified: true }, { merge: true });
+          userData.isVerified = true;
         }
 
         if (userData.role === 'agent' || userData.isAgent === true) {
@@ -79,28 +86,12 @@ export default function LoginPage() {
       const userDoc = await getDoc(userDocRef);
 
       if (!userDoc.exists()) {
-        // Check if they have an agent profile first to recover agent status
-        const agentDocRef = doc(db, 'agents', user.uid);
-        const agentDoc = await getDoc(agentDocRef);
-        const isAgent = agentDoc.exists();
-
-        // Create new user matching your exact database schema
-        await setDoc(userDocRef, {
-          uid: user.uid,
-          email: user.email,
-          name: user.displayName || 'Google User',
-          phone: user.phoneNumber || '',
-          photoUrl: user.photoURL || '',
-          role: isAgent ? 'agent' : 'user', 
-          isAgent: isAgent,
-          planTier: agentDoc.exists() ? (agentDoc.data()?.planTier ?? 'free') : 'free',
-          authMethod: 'google',
-          createdAt: serverTimestamp(),
-          isVerified: true, // Google emails are verified automatically
-          activeDays: [],
-          slug: ''
-        });
-        router.push(isAgent ? '/dashboard/agent' : '/');
+        // 🚫 SCAM PREVENTION: Do not let random Google clicks create default accounts here.
+        // Force them to go through the proper Signup page to accept terms and pick a role.
+        await auth.signOut();
+        setError('No account found. Please go to the Sign Up page to create an account.');
+        setLoading(false);
+        return;
       } else {
          const userData = userDoc.data();
          

@@ -27,6 +27,8 @@ import {
   Building, CheckCircle, ArrowUpRight, Lock, Image as ImageIcon,
   Save, ArrowLeft
 } from 'lucide-react';
+// ✅ ADDED: Import the new Location Selector
+import LocationSelectorModal, { LocationResult } from '@/components/LocationSelectorModal';
 
 // --- TYPES ---
 interface Property {
@@ -35,7 +37,8 @@ interface Property {
   price: number;
   status: string;
   images: string[];
-  location: { city: string; area: string; gpsCoordinates?: string };
+  // ✅ ADDED: country and address
+  location: { country?: string; city: string; area: string; address?: string; gpsCoordinates?: string };
   propertyType: string; // House, Apartment, Studio, Office, Land, Hall
   isForSale: boolean;
   isArchived: boolean;
@@ -83,6 +86,7 @@ export default function CompletePropertyManagement({
   const [isSaving, setIsSaving] = useState(false);
   const [formImages, setFormImages] = useState<File[]>([]);
   const [existingImages, setExistingImages] = useState<string[]>([]);
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false); // ✅ ADDED Modal State
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isPro = ['pro', 'premium', 'agent_pro'].includes(userPlan?.toLowerCase() || 'free');
@@ -149,7 +153,8 @@ export default function CompletePropertyManagement({
     
     setEditingProp(prop || {
       title: '', price: 0, status: 'available', images: [], 
-      location: { city: 'Hargeisa', area: '' }, // Default city optimization
+      // ✅ ADDED: Default country and address
+      location: { country: 'Somalia', city: 'Hargeisa', area: '', address: '' }, 
       propertyType: 'House', isForSale: false, isArchived: false,
       description: '', features: {}, agentId: currentUserUid
     });
@@ -434,13 +439,48 @@ export default function CompletePropertyManagement({
           <div className="space-y-4">
             <h3 className="font-bold text-slate-900 flex items-center gap-2"><MapPin size={18} className="text-emerald-500"/> Location</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">City</label>
-                <input required type="text" value={editingProp.location.city} onChange={e => setEditingProp({...editingProp, location: {...editingProp.location, city: e.target.value}})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500" />
+              {/* ✅ ADDED: Location Selector Button */}
+              <div className="md:col-span-1">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">City & District *</label>
+                <button 
+                  type="button" 
+                  onClick={() => setIsLocationModalOpen(true)}
+                  className="w-full bg-slate-50 hover:bg-slate-100 border-2 border-slate-100 rounded-xl p-3 text-sm font-bold text-left flex items-center justify-between transition-colors"
+                >
+                  <span className={editingProp.location.city ? 'text-slate-900' : 'text-slate-400'}>
+                    {editingProp.location.city && editingProp.location.area 
+                      ? `${editingProp.location.area}, ${editingProp.location.city}` 
+                      : 'Select Location...'}
+                  </span>
+                  <MapPin size={16} className="text-[#0065eb]" />
+                </button>
+                
+                <LocationSelectorModal 
+                  isOpen={isLocationModalOpen}
+                  onClose={() => setIsLocationModalOpen(false)}
+                  onSelect={(res) => setEditingProp({
+                    ...editingProp, 
+                    location: {
+                      ...editingProp.location, 
+                      country: res.country || 'Somalia',
+                      city: res.city || '', 
+                      area: res.district || ''
+                    }
+                  })}
+                  lang="en"
+                />
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Area / Neighborhood</label>
-                <input required type="text" value={editingProp.location.area} onChange={e => setEditingProp({...editingProp, location: {...editingProp.location, area: e.target.value}})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500" />
+
+              {/* ✅ ADDED: Manual Address/Landmark Input */}
+              <div className="md:col-span-1">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Street Address / Landmark (Optional)</label>
+                <input 
+                  type="text" 
+                  value={editingProp.location.address || ''} 
+                  onChange={e => setEditingProp({...editingProp, location: {...editingProp.location, address: e.target.value}})} 
+                  className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-300" 
+                  placeholder="e.g. Near Mansoor Hotel" 
+                />
               </div>
               
               {/* ✅ EXACT MAP PICKER (Locked for free users) */}
