@@ -27,7 +27,7 @@ const transformDoc = <T>(document: QueryDocumentSnapshot<DocumentData>): T => {
     if (data[key] instanceof GeoPoint) {
       data[key] = { latitude: data[key].latitude, longitude: data[key].longitude };
     }
-    // Handle nested GeoPoints (common in location objects)
+    // 🚨 SAFE FIX: Handle both nested GeoPoints AND nested Timestamps
     if (typeof data[key] === 'object' && data[key] !== null) {
       for (const nestedKey in data[key]) {
         if (data[key][nestedKey] instanceof GeoPoint) {
@@ -35,6 +35,8 @@ const transformDoc = <T>(document: QueryDocumentSnapshot<DocumentData>): T => {
             latitude: data[key][nestedKey].latitude,
             longitude: data[key][nestedKey].longitude,
           };
+        } else if (data[key][nestedKey] instanceof Timestamp) {
+          data[key][nestedKey] = data[key][nestedKey].toDate().toISOString();
         }
       }
     }
@@ -257,6 +259,9 @@ export async function getAgentDetails(agentId: string): Promise<Agent | null> {
 }
 
 export async function getRelatedProperties(property: Property): Promise<Property[]> {
+  // 🚨 SAFE FIX: Prevent crash if property is missing location data
+  if (!property?.location?.city) return [];
+
   const q = query(
     collection(db, 'property'),
     where('location.city', '==', property.location.city),
@@ -332,6 +337,9 @@ export async function getHotelReviews(hotelId: string): Promise<Review[]> {
 }
 
 export async function getRelatedHotels(hotel: Hotel): Promise<Hotel[]> {
+  // 🚨 SAFE FIX: Prevent crash if hotel is missing location data
+  if (!hotel?.location?.city) return [];
+
   const hotelsRef = collection(db, 'hotels');
   const q = query(
     hotelsRef,
