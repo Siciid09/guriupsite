@@ -447,7 +447,7 @@ const AgentsPage = () => {
                           </div>
                       </div>
 
-                      {/* Action Buttons */}
+                      {/* Action Buttons n */}
                      <div className="mt-auto pb-6 pt-5 border-t border-slate-50/50 grid grid-cols-2 gap-3">
                           <button 
                               onClick={(e) => handleContactClick(e, agent, 'call')}
