@@ -17,7 +17,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { 
   collection, query, where, getDocs, doc, addDoc,
-  updateDoc, deleteDoc, serverTimestamp 
+  updateDoc, deleteDoc, serverTimestamp, onSnapshot
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from './.././../src/app/lib/firebase'; // Adjust to your firebase config path
@@ -25,7 +25,8 @@ import {
   Search, Plus, MapPin, Edit3, Trash2, X, Upload,
   BarChart2, MoreVertical, Archive, RefreshCw,
   Building, CheckCircle, ArrowUpRight, Lock, Image as ImageIcon,
-  Save, ArrowLeft
+  Save, ArrowLeft, Eye, Star, TrendingUp, Clock
+  
 } from 'lucide-react';
 // ✅ ADDED: Import the new Location Selector
 import LocationSelectorModal, { LocationResult } from '@/components/LocationSelectorModal';
@@ -35,6 +36,9 @@ interface Property {
   id?: string; // Optional for new properties
   title: string;
   price: number;
+  views?: number;           // ✅ REAL data from Flutter
+  favoritedBy?: string[];   // ✅ REAL data from Flutter
+  clicks?: number;          // ✅ REAL data from Flutter// ✅ REAL data from Flutter App
   status: string;
   images: string[];
   // ✅ ADDED: country and address
@@ -87,30 +91,74 @@ export default function CompletePropertyManagement({
   const [formImages, setFormImages] = useState<File[]>([]);
   const [existingImages, setExistingImages] = useState<string[]>([]);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false); // ✅ ADDED Modal State
+  const [statsProp, setStatsProp] = useState<Property | null>(null); // ✅ ADDED Stats Modal State
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isPro = ['pro', 'premium', 'agent_pro'].includes(userPlan?.toLowerCase() || 'free');
 
-  // --- 1. FETCH DATA ---
-  const fetchProperties = async () => {
-    setIsLoading(true);
-    try {
-      const q = query(collection(db, 'property'), where('agentId', '==', currentUserUid));
-      const snap = await getDocs(q);
-      const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() } as Property));
-      
-      // Client-side sort for 'Newest'
-      fetched.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
-      setProperties(fetched);
-    } catch (error) {
-      console.error("Error fetching properties:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  // --- 1. REAL-TIME DATA LISTENER ---
   useEffect(() => {
-    if (currentUserUid) fetchProperties();
+    if (!currentUserUid) return;
+    setIsLoading(true);
+
+    const qProps = query(collection(db, 'property'), where('agentId', '==', currentUserUid));
+    const qAnalytics = query(collection(db, 'analytics_views'), where('agentId', '==', currentUserUid));
+
+    let rawProperties: Property[] = [];
+    let analyticsMap: Record<string, { views: number, clicks: number }> = {};
+
+    // Helper to merge the properties with the analytics
+    const updateMergedState = () => {
+      const merged = rawProperties.map(p => ({
+        ...p,
+        views: analyticsMap[p.id!]?.views || 0,
+        clicks: analyticsMap[p.id!]?.clicks || 0,
+      }));
+      
+      merged.sort((a: Property, b: Property) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+      setProperties(merged);
+
+      setStatsProp(prevStatsProp => {
+        if (!prevStatsProp) return null;
+        const updatedProp = merged.find((p: Property) => p.id === prevStatsProp.id);
+        return updatedProp || prevStatsProp;
+      });
+      
+      setIsLoading(false);
+    };
+
+    // Listen to Properties
+    const unsubProps = onSnapshot(qProps, (snap: any) => {
+      rawProperties = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Property));
+      updateMergedState();
+    }, (error: any) => {
+      console.error("Error fetching properties:", error);
+      setIsLoading(false);
+    });
+
+    // Listen to Flutter Analytics
+    const unsubAnalytics = onSnapshot(qAnalytics, (snap: any) => {
+      analyticsMap = {};
+      snap.docs.forEach((doc: any) => {
+        const data = doc.data();
+        const pid = data.listingId;
+        if (!pid) return;
+
+        if (!analyticsMap[pid]) analyticsMap[pid] = { views: 0, clicks: 0 };
+
+        if (data.type === 'view_property') {
+          analyticsMap[pid].views++;
+        } else if (data.type && data.type.startsWith('click_')) {
+          analyticsMap[pid].clicks++; // Includes call, whatsapp, and chat clicks
+        }
+      });
+      updateMergedState();
+    });
+
+    return () => {
+      unsubProps();
+      unsubAnalytics();
+    };
   }, [currentUserUid]);
 
   // --- 2. LIST ACTIONS ---
@@ -205,6 +253,9 @@ export default function CompletePropertyManagement({
         ...editingProp,
         images: finalImages,
         updatedAt: serverTimestamp(),
+        // ✅ FIX: The Flutter Map requires 'planTier' to exist to show the pin!
+        planTier: userPlan || 'free', 
+        planTierAtUpload: userPlan || 'free',
       };
 
       // 3. Save to Firestore
@@ -358,7 +409,8 @@ export default function CompletePropertyManagement({
                     <button onClick={() => openForm(prop)} className="flex-1 flex justify-center items-center gap-1.5 p-2 bg-blue-50/50 text-blue-600 rounded-xl hover:bg-blue-50 transition-colors">
                       <Edit3 size={14}/> <span className="text-xs font-bold">Edit</span>
                     </button>
-                    <button onClick={() => isPro ? alert("Stats Component Logic") : onUpgrade()} className="flex-1 flex justify-center items-center gap-1.5 p-2 bg-purple-50/50 text-purple-600 rounded-xl hover:bg-purple-50 transition-colors">
+                    {/* ✅ FIX: Open the real Stats Modal instead of the dummy alert */}
+                    <button onClick={() => isPro ? setStatsProp(prop) : onUpgrade()} className="flex-1 flex justify-center items-center gap-1.5 p-2 bg-purple-50/50 text-purple-600 rounded-xl hover:bg-purple-50 active:scale-95 transition-all">
                       {isPro ? <BarChart2 size={14}/> : <Lock size={12}/>} <span className="text-xs font-bold">Stats</span>
                     </button>
                     <button onClick={() => toggleStatus(prop)} className={`flex-1 flex justify-center items-center gap-1.5 p-2 rounded-xl transition-colors ${isSold ? 'bg-emerald-50/50 text-emerald-600 hover:bg-emerald-50' : 'bg-orange-50/50 text-orange-600 hover:bg-orange-50'}`}>
@@ -377,6 +429,44 @@ export default function CompletePropertyManagement({
           <button onClick={() => canAdd ? openForm() : onUpgrade()} className="mt-4 inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm bg-slate-900 text-white hover:bg-slate-800 transition-colors">
             <Plus size={16} /> Add New Listing
           </button>
+        </div>
+      )}
+
+      {/* ✅ REAL DYNAMIC STATS MODAL - SAFELY PLACED */}
+      {statsProp && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[32px] w-full max-w-sm shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="p-6 border-b border-slate-50 flex justify-between items-center">
+              <h3 className="font-black text-xl text-slate-900 truncate pr-4">{statsProp.title}</h3>
+              <button onClick={() => setStatsProp(null)} className="p-2 hover:bg-slate-100 text-slate-400 hover:text-slate-900 rounded-full transition-colors"><X size={20}/></button>
+            </div>
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-2xl flex flex-col items-center text-center">
+                  <div className="text-blue-500 mb-2 bg-white p-2 rounded-xl shadow-sm"><Eye size={20}/></div>
+                  <h4 className="text-2xl font-black text-slate-900">{statsProp.views || 0}</h4>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Total Views</p>
+                </div>
+                <div className="bg-rose-50/50 border border-rose-100 p-4 rounded-2xl flex flex-col items-center text-center">
+                  <div className="text-rose-500 mb-2 bg-white p-2 rounded-xl shadow-sm"><Star size={20}/></div>
+                  <h4 className="text-2xl font-black text-slate-900">{statsProp.favoritedBy?.length || 0}</h4>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Favorites</p>
+                </div>
+                <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-2xl flex flex-col items-center text-center">
+                  <div className="text-emerald-500 mb-2 bg-white p-2 rounded-xl shadow-sm"><TrendingUp size={20}/></div>
+                  <h4 className="text-2xl font-black text-slate-900">{statsProp.clicks || 0}</h4>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Inquiries</p>
+                </div>
+                <div className="bg-purple-50/50 border border-purple-100 p-4 rounded-2xl flex flex-col items-center text-center">
+                  <div className="text-purple-500 mb-2 bg-white p-2 rounded-xl shadow-sm"><Clock size={20}/></div>
+                  <h4 className="text-2xl font-black text-slate-900">
+                      {statsProp.createdAt ? Math.max(1, Math.floor((new Date().getTime() - (statsProp.createdAt?.toMillis?.() || new Date().getTime())) / (1000 * 3600 * 24))) : 1}
+                  </h4>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Days Active</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
