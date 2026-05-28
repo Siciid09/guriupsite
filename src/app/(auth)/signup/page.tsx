@@ -190,8 +190,9 @@ function SignupContent() {
     setError(null);
 
     try {
-      if (!formData.fullName || !formData.email || !formData.password || !formData.phone) {
-        throw new Error("Please fill in all personal details.");
+      // ✅ FIX: Don't require a password if they are using Google
+      if (!formData.fullName || !formData.email || !formData.phone || (!tempGoogleUser && !formData.password)) {
+        throw new Error("Please fill in all required details.");
       }
 
       let formattedPhone = formData.phone.trim();
@@ -207,7 +208,8 @@ function SignupContent() {
         throw new Error("This phone number is already registered.");
       }
 
-      if (role === 'reagent' && !agentProfile.file) {
+      // ✅ FIX: Let Google users use their Google profile picture
+      if (role === 'reagent' && !agentProfile.file && !tempGoogleUser?.photoURL) {
         throw new Error("Please upload a Profile Photo.");
       }
 
@@ -285,14 +287,13 @@ function SignupContent() {
         await setDoc(doc(db, 'agents', user.uid), agencyData);
       } 
       
-      await signOut(auth);
-
       if (!tempGoogleUser) {
-        // 📧 Standard Email: Show the "Check your email" verification screen
+        // 📧 Standard Email: Sign out to force verification, then show screen
+        await signOut(auth);
         setEmailSentTo(formData.email);
         setVerificationSent(true);
       } else {
-        // 🚀 Google Auth: Already verified! Route directly to their chosen dashboard!
+        // 🚀 Google Auth: Already verified! DO NOT sign out. Route directly!
         if (role === 'hoadmin') router.push('/dashboard/hotel');
         else if (role === 'reagent') router.push('/dashboard/agent');
         else router.push('/dashboard/user');

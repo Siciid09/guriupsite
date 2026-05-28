@@ -40,9 +40,9 @@ export default function LoginPage() {
         }
 
         // 🛠️ AUTO-REPAIR: If Firebase says they clicked the link, but your DB missed it, fix the DB silently!
-        if (user.emailVerified && userData.isVerified !== true) {
-          await setDoc(userDocRef, { isVerified: true }, { merge: true });
-          userData.isVerified = true;
+        if (user.emailVerified && userData.emailVerified !== true) {
+          await setDoc(userDocRef, { emailVerified: true }, { merge: true });
+          userData.emailVerified = true; // 🚨 FIX: Repair emailVerified, not Admin isVerified
         }
 
         if (userData.role === 'agent' || userData.isAgent === true) {
@@ -95,15 +95,19 @@ export default function LoginPage() {
       } else {
          const userData = userDoc.data();
          
-         if (userData.isVerified !== true) {
+         // ✅ FIX: Check if banned, not isVerified. Google users are auto-verified.
+         if (userData.isBanned === true) {
            await auth.signOut();
-           setError('Account disabled or unverified.');
+           setError('This account has been disabled.');
            setLoading(false);
            return;
          }
 
-         if (userData.role === 'agent' || userData.isAgent === true) {
+         // ✅ FIX: Properly route all role types (added reagent and hoadmin)
+         if (userData.role === 'agent' || userData.isAgent === true || userData.role === 'reagent') {
             router.push('/dashboard/agent');
+         } else if (userData.role === 'hoadmin') {
+            router.push('/dashboard/hotel');
          } else {
             router.push('/');
          }
