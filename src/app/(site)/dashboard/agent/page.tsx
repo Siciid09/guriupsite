@@ -98,17 +98,26 @@ function DashboardContent() {
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
       if (!user) return router.push('/login');
       
-      // 1. Fetch Profile
-      const userSnap = await getDoc(doc(db, 'users', user.uid));
-      if (userSnap.exists()) {
-        const d = userSnap.data();
+      // 1. Fetch Profile (Check Agents collection first for Business Data)
+      let d = null;
+      const agentSnap = await getDoc(doc(db, 'agents', user.uid));
+      
+      if (agentSnap.exists()) {
+        d = agentSnap.data();
+      } else {
+        // Fallback to users collection if no agent profile exists yet
+        const userSnap = await getDoc(doc(db, 'users', user.uid));
+        if (userSnap.exists()) d = userSnap.data();
+      }
+
+      if (d) {
         setProfile({
           uid: user.uid,
-          name: d.name || 'Agent',
-          agencyName: d.agencyName || 'Independent',
+          name: d.name || d.ownerName || 'Agent',
+          agencyName: d.agencyName || d.businessName || 'Independent',
           planTier: d.planTier || 'free',
           profileImageUrl: d.profileImageUrl || d.photoUrl || '',
-          isVerified: d.isVerified || false
+          isVerified: d.isVerified || d.agentVerified || false
         });
       }
 
@@ -161,7 +170,13 @@ function DashboardContent() {
           <div className="bg-[#0065eb] p-2.5 rounded-2xl shadow-lg shadow-blue-500/20 text-white"><Building size={24} /></div>
           <div>
             <h2 className="text-lg font-black tracking-tight leading-tight truncate w-40">{profile?.agencyName}</h2>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{profile?.planTier.replace('_', ' ')} Plan</p>
+            <div className="mt-1.5">
+              {profile?.planTier === 'free' ? (
+                <span className="bg-slate-100 text-slate-500 text-[9px] font-black uppercase px-2 py-1 rounded-md tracking-widest border border-slate-200">Free Plan</span>
+              ) : (
+                <span className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white text-[9px] font-black uppercase px-2 py-1 rounded-md tracking-widest shadow-sm">Pro Agent</span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -186,7 +201,14 @@ function DashboardContent() {
    <div className="flex items-center gap-3">
       <div className="bg-[#0065eb] p-2 rounded-xl text-white"><Building size={18} /></div>
       {/* Updated this line to be dynamic */}
-      <span className="font-black text-lg truncate max-w-[200px]">{profile?.name || 'Agent'}</span>
+      <div className="flex items-center gap-2">
+         <span className="font-black text-lg truncate max-w-[200px]">{profile?.name || 'Agent'}</span>
+         {profile?.planTier === 'free' ? (
+            <span className="bg-slate-100 text-slate-500 text-[9px] font-black uppercase px-2 py-0.5 rounded-md">Free</span>
+         ) : (
+            <span className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-md">Pro</span>
+         )}
+      </div>
    </div>
          <button className="relative w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-600">
             <Bell size={20} />
@@ -375,9 +397,16 @@ function DashboardContent() {
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity cursor-pointer"><Camera size={20}/></div>
                       </div>
                       <div>
-                         <h3 className="text-2xl font-black text-slate-900">{profile?.name}</h3>
+                         <div className="flex items-center gap-3 mb-1">
+                           <h3 className="text-2xl font-black text-slate-900">{profile?.name}</h3>
+                           {profile?.planTier !== 'free' ? (
+                             <span className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest shadow-sm">Pro</span>
+                           ) : (
+                             <span className="bg-slate-100 text-slate-500 px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest border border-slate-200">Free</span>
+                           )}
+                         </div>
                          <p className="text-slate-500 font-medium">Manage your agency profile and verification status.</p>
-                         {profile?.isVerified && <span className="inline-flex items-center gap-1.5 text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase mt-2">Verified Agent</span>}
+                         {profile?.isVerified && <span className="inline-flex items-center gap-1.5 text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase mt-2">✓ Verified Entity</span>}
                       </div>
                    </div>
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
