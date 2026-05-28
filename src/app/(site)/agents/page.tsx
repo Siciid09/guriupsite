@@ -85,19 +85,18 @@ const AgentsPage = () => {
       const agentsRef = collection(db, 'agents');
       let q;
 
-      // QUERY: Filter only 'pro' or 'premium'
+      // QUERY: Filter only paid agents
+      // 🚨 FIX: Removed orderBy('totalListings') because Firestore hides documents missing this field!
       if (isInitial) {
         q = query(
           agentsRef, 
-          where('planTier', 'in', ['pro', 'premium']), 
-          orderBy('totalListings', 'desc'), 
+          where('planTier', 'in', ['pro', 'premium', 'agent_pro']), 
           limit(ITEMS_PER_PAGE)
         );
       } else if (lastVisible) {
         q = query(
           agentsRef, 
-          where('planTier', 'in', ['pro', 'premium']),
-          orderBy('totalListings', 'desc'), 
+          where('planTier', 'in', ['pro', 'premium', 'agent_pro']),
           startAfter(lastVisible), 
           limit(ITEMS_PER_PAGE)
         );
@@ -149,10 +148,16 @@ const AgentsPage = () => {
         };
       }));
 
+      // 🚨 FIX: Sort the agents in-memory by their REAL listing count
+      fetchedAgents.sort((a, b) => b.totalListings - a.totalListings);
+
       if (isInitial) {
         setAgents(fetchedAgents);
       } else {
-        setAgents(prev => [...prev, ...fetchedAgents]);
+        setAgents(prev => {
+          const combined = [...prev, ...fetchedAgents];
+          return combined.sort((a, b) => b.totalListings - a.totalListings);
+        });
       }
 
     } catch (error) {
@@ -329,13 +334,13 @@ const AgentsPage = () => {
             </div>
             
             <div className="relative w-full md:w-[400px] group">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb] transition-colors">
+              <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb] transition-colors">
                 <Icons.Search />
               </div>
               <input 
                 type="text" 
                 placeholder="Search agents by name or agency..." 
-                className="w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-[#0065eb]/20 focus:border-[#0065eb] transition-all"
+                className="w-full pl-12 pr-5 py-4 bg-white border-2 border-slate-100 shadow-sm rounded-full text-sm font-bold outline-none focus:ring-4 focus:ring-[#0065eb]/10 focus:border-[#0065eb] hover:border-blue-200 transition-all placeholder:text-slate-400"
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
@@ -358,8 +363,8 @@ const AgentsPage = () => {
                 <div 
                   key={agent.id} 
                   onClick={() => router.push(`/agents/${agent.slug || agent.id}`)}
-                  className={`group bg-white rounded-[32px] border shadow-sm transition-all duration-300 cursor-pointer overflow-hidden flex flex-col h-full hover:-translate-y-1 hover:shadow-2xl
-                    ${agent.isVerified ? 'border-blue-100 hover:border-blue-300 hover:shadow-blue-900/10' : 'border-slate-100 hover:shadow-slate-200'}
+                  className={`group bg-white rounded-[32px] border shadow-sm transition-all duration-500 cursor-pointer overflow-hidden flex flex-col h-full hover:-translate-y-2 hover:scale-[1.02] hover:shadow-[0_20px_40px_-15px_rgba(0,101,235,0.2)]
+                    ${agent.isVerified ? 'border-blue-100/60 hover:border-blue-400/50' : 'border-slate-100 hover:border-slate-300'}
                   `}
                 >
                   
@@ -377,17 +382,20 @@ const AgentsPage = () => {
                   <div className="px-6 relative flex-1 flex flex-col">
                       {/* Avatar Floating */}
                       <div className="-mt-14 mb-3 flex justify-between items-end">
-                          <div className="relative">
-                              <div className={`w-24 h-24 rounded-2xl p-1 bg-white shadow-xl rotate-2 group-hover:rotate-0 transition-transform duration-300 overflow-hidden relative ${agent.isVerified ? 'ring-2 ring-blue-500/20' : ''}`}>
+                          <div className="relative group-hover:scale-105 transition-transform duration-500">
+                              {agent.isVerified && (
+                                  <div className="absolute inset-0 bg-blue-500 rounded-2xl blur-md opacity-30 group-hover:opacity-60 transition-opacity duration-500 animate-pulse"></div>
+                              )}
+                              <div className={`w-24 h-24 rounded-[20px] p-1 bg-white shadow-xl rotate-3 group-hover:rotate-0 transition-all duration-500 overflow-hidden relative z-10 ${agent.isVerified ? 'ring-4 ring-blue-50' : ''}`}>
                                   <Image 
                                       src={agent.profileImageUrl || 'https://ui-avatars.com/api/?background=random&name=' + agent.name} 
                                       alt={agent.name} 
                                       fill
-                                      className="object-cover rounded-xl bg-slate-50"
+                                      className="object-cover rounded-[14px] bg-slate-50"
                                   />
                               </div>
                               {agent.isVerified && (
-                                  <div className="absolute -right-2 -bottom-2 bg-blue-500 text-white p-1.5 rounded-full border-[3px] border-white shadow-lg shadow-blue-500/30">
+                                  <div className="absolute -right-3 -bottom-3 bg-gradient-to-br from-[#0065eb] to-blue-400 text-white p-2 rounded-xl border-[3px] border-white shadow-xl z-20 group-hover:rotate-12 transition-transform duration-300">
                                       <Icons.Verified />
                                   </div>
                               )}
@@ -440,17 +448,17 @@ const AgentsPage = () => {
                       </div>
 
                       {/* Action Buttons */}
-                     <div className="mt-auto pb-6 pt-4 border-t border-slate-50 grid grid-cols-2 gap-3">
+                     <div className="mt-auto pb-6 pt-5 border-t border-slate-50/50 grid grid-cols-2 gap-3">
                           <button 
                               onClick={(e) => handleContactClick(e, agent, 'call')}
-                              className="py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all bg-white border-2 border-slate-100 text-slate-700 hover:border-slate-900 hover:text-slate-900"
+                              className="py-3.5 rounded-2xl font-black flex items-center justify-center gap-2 text-xs transition-all bg-slate-50 text-slate-700 hover:bg-slate-900 hover:text-white hover:shadow-xl hover:shadow-slate-900/20 active:scale-95"
                           >
                               <Icons.Phone /> Call
                           </button>
 
                           <button 
                               onClick={(e) => handleContactClick(e, agent, 'whatsapp')}
-                              className="py-3 rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all bg-[#25D366] text-white shadow-lg shadow-green-100 hover:bg-[#1fa851] hover:shadow-green-200"
+                              className="py-3.5 rounded-2xl font-black flex items-center justify-center gap-2 text-xs transition-all bg-gradient-to-r from-[#25D366] to-[#1fa851] text-white shadow-lg shadow-green-500/30 hover:shadow-green-500/50 hover:-translate-y-0.5 active:scale-95"
                           >
                               <Icons.Whatsapp /> WhatsApp
                           </button>
