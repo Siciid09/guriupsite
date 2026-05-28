@@ -165,6 +165,10 @@ export default function CompletePropertyManagement({
   const toggleStatus = async (prop: Property) => {
     const isAvailable = prop.status.toLowerCase() === 'available' || prop.status.toLowerCase() === 'active';
     const newStatus = isAvailable ? 'sold' : 'available';
+    
+    // Add a confirmation dialog so it doesn't mark it sold by accidental click
+    if (!window.confirm(`Are you sure you want to mark this property as ${newStatus.toUpperCase()}?`)) return;
+    
     try {
       await updateDoc(doc(db, 'property', prop.id!), { status: newStatus, isArchived: false, updatedAt: new Date() });
       setProperties(prev => prev.map(p => p.id === prop.id ? { ...p, status: newStatus, isArchived: false } : p));
@@ -405,15 +409,14 @@ export default function CompletePropertyManagement({
                   </div>
 
                   {/* Actions */}
-                  <div className="flex justify-between items-center pt-4 border-t border-slate-50 gap-2">
-                    <button onClick={() => openForm(prop)} className="flex-1 flex justify-center items-center gap-1.5 p-2 bg-blue-50/50 text-blue-600 rounded-xl hover:bg-blue-50 transition-colors">
+                  <div className="flex flex-wrap pt-4 border-t border-slate-50 gap-2">
+                    <button onClick={() => openForm(prop)} className="flex-1 min-w-[80px] flex justify-center items-center gap-1.5 p-2 bg-blue-50/50 text-blue-600 rounded-xl hover:bg-blue-50 transition-colors">
                       <Edit3 size={14}/> <span className="text-xs font-bold">Edit</span>
                     </button>
-                    {/* ✅ FIX: Open the real Stats Modal instead of the dummy alert */}
-                    <button onClick={() => isPro ? setStatsProp(prop) : onUpgrade()} className="flex-1 flex justify-center items-center gap-1.5 p-2 bg-purple-50/50 text-purple-600 rounded-xl hover:bg-purple-50 active:scale-95 transition-all">
+                    <button onClick={() => isPro ? setStatsProp(prop) : onUpgrade()} className="flex-1 min-w-[80px] flex justify-center items-center gap-1.5 p-2 bg-purple-50/50 text-purple-600 rounded-xl hover:bg-purple-50 active:scale-95 transition-all">
                       {isPro ? <BarChart2 size={14}/> : <Lock size={12}/>} <span className="text-xs font-bold">Stats</span>
                     </button>
-                    <button onClick={() => toggleStatus(prop)} className={`flex-1 flex justify-center items-center gap-1.5 p-2 rounded-xl transition-colors ${isSold ? 'bg-emerald-50/50 text-emerald-600 hover:bg-emerald-50' : 'bg-orange-50/50 text-orange-600 hover:bg-orange-50'}`}>
+                    <button onClick={() => toggleStatus(prop)} className={`flex-1 min-w-[80px] flex justify-center items-center gap-1.5 p-2 rounded-xl transition-colors ${isSold ? 'bg-emerald-50/50 text-emerald-600 hover:bg-emerald-50' : 'bg-orange-50/50 text-orange-600 hover:bg-orange-50'}`}>
                       {isSold ? <ArrowUpRight size={14}/> : <CheckCircle size={14}/>} <span className="text-xs font-bold">{isSold ? 'Relist' : 'Sold'}</span>
                     </button>
                   </div>

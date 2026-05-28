@@ -21,6 +21,7 @@ import {
 // --- IMPORT YOUR COMPLETED FORMS ---
 import HotelForm from '../../../../components/hotelform'; 
 import AddEditRoom from '../../../../components/room'; // Your AddEditRoom component
+import HotelAnalytics from '@/components/hotelstats';
 
 // ============================================================================
 // STRICT TYPES
@@ -565,8 +566,15 @@ function DashboardContent() {
              </motion.div>
           )}
 
-          {/* --- LOCKED PRO TABS --- */}
-          {['analytics', 'reports', 'guests', 'staff'].includes(activeTab) && hotel && !needsSetup && (
+          {/* --- REAL DYNAMIC ANALYTICS --- */}
+          {activeTab === 'analytics' && hotel && !needsSetup && (
+             <motion.div key="analytics" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+                <HotelAnalytics hotelId={hotel.id} />
+             </motion.div>
+          )}
+
+          {/* --- REMAINING LOCKED PRO TABS --- */}
+          {['reports', 'guests', 'staff'].includes(activeTab) && hotel && !needsSetup && (
              <motion.div key="locked" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
                 <ProLockOverlay featureName={activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} />
              </motion.div>

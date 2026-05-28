@@ -75,8 +75,10 @@ const HomeUI = ({
   const [selectedType, setSelectedType] = useState('Any Type'); 
   const [selectedPrice, setSelectedPrice] = useState('Any Price');
 
-  // --- FEATURED SLIDER STATE ---
+  // --- SLIDER STATES ---
   const [featIndex, setFeatIndex] = useState(0);
+  const [hotelIndex, setHotelIndex] = useState(0);
+  const [latestIndex, setLatestIndex] = useState(0);
 
   // --- FILTER DATA ---
   const propertyTypes = ['Any Type', 'Apartment', 'Villa', 'Office', 'House', 'Land', 'Commercial', 'Hall'];
@@ -96,12 +98,18 @@ const HomeUI = ({
   };
 
   const slideFeatured = (direction: 'left' | 'right') => {
-    if (direction === 'left') {
-      setFeatIndex(prev => (prev === 0 ? 0 : prev - 3));
-    } else {
-      // Don't scroll past the end
-      setFeatIndex(prev => (prev + 3 >= featuredProperties.length ? 0 : prev + 3));
-    }
+    if (direction === 'left') setFeatIndex(prev => Math.max(0, prev - 3));
+    else setFeatIndex(prev => (prev + 3 >= featuredProperties.length ? 0 : prev + 3));
+  };
+
+  const slideHotels = (direction: 'left' | 'right') => {
+    if (direction === 'left') setHotelIndex(prev => Math.max(0, prev - 4));
+    else setHotelIndex(prev => (prev + 4 >= featuredHotels.length ? 0 : prev + 4));
+  };
+
+  const slideLatest = (direction: 'left' | 'right') => {
+    if (direction === 'left') setLatestIndex(prev => Math.max(0, prev - 6));
+    else setLatestIndex(prev => (prev + 6 >= latestProperties.length ? 0 : prev + 6));
   };
 
   const handleSearch = () => {
@@ -210,8 +218,10 @@ const HomeUI = ({
       return buyPrices;
   };
 
-  // Get the current 3 items to show for featured properties
+  // Get the current visible slices for all sliders
   const visibleFeatured = featuredProperties.slice(featIndex, featIndex + 3);
+  const visibleHotels = featuredHotels.slice(hotelIndex, hotelIndex + 4);
+  const visibleLatest = latestProperties.slice(latestIndex, latestIndex + 6);
 
   return (
     <>
@@ -556,14 +566,35 @@ const HomeUI = ({
       {/* ================= SECTION 3: TRENDING HOTELS ================= */}
       <section className="bg-white pb-12 reveal">
          <div className="max-w-[1600px] mx-auto px-6">
-            <h2 className="text-slate-900 text-4xl font-black leading-tight tracking-tight mb-10 relative inline-block">
-                Trending Hotels
-                <span className="gradient-underline"></span>
-            </h2>
+            <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
+                <div>
+                    <h2 className="text-slate-900 text-4xl font-black leading-tight tracking-tight relative inline-block">
+                        Trending Hotels
+                        <span className="gradient-underline"></span>
+                    </h2>
+                    <p className="text-slate-500 mt-2 font-medium">Top-rated luxury stays and resorts.</p>
+                </div>
+                <div className="flex items-center gap-3">
+                   <div className="flex items-center gap-2 mr-2">
+                     <button onClick={() => slideHotels('left')} disabled={hotelIndex === 0} className={`p-3 rounded-full border border-slate-200 transition-all ${hotelIndex === 0 ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'bg-white hover:bg-slate-100 text-slate-700 hover:border-slate-300 shadow-sm'}`}>
+                       <ChevronLeft size={20} />
+                     </button>
+                     <button onClick={() => slideHotels('right')} disabled={hotelIndex + 4 >= featuredHotels.length} className={`p-3 rounded-full border border-slate-200 transition-all ${hotelIndex + 4 >= featuredHotels.length ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'bg-white hover:bg-slate-100 text-slate-700 hover:border-slate-300 shadow-sm'}`}>
+                       <ChevronRight size={20} />
+                     </button>
+                   </div>
+                   <Link href="/hotels" className="px-6 py-3 bg-[#0065eb] hover:bg-blue-600 text-white rounded-full font-bold text-sm transition-all shadow-lg shadow-blue-500/30 flex items-center gap-2">
+                     View All <ArrowRight size={16} />
+                   </Link>
+                </div>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {featuredHotels.slice(0, 4).map((hotel) => (
+                {visibleHotels.map((hotel) => (
                    <HotelCard key={hotel.id} hotel={hotel} favorites={favorites} toggleFavorite={toggleFavorite} handleShare={handleShare} formatPrice={formatPrice} getLocationString={getLocationString} />
                 ))}
+                {visibleHotels.length === 0 && (
+                  <div className="col-span-full py-12 text-center text-gray-400 font-bold">No trending hotels available.</div>
+                )}
             </div>
          </div>
       </section>
@@ -571,9 +602,28 @@ const HomeUI = ({
       {/* ================= SECTION 4: RECENTLY ADDED ================= */}
       <section className="bg-slate-50 py-12 reveal">
         <div className="max-w-[1600px] mx-auto px-6">
-          <h2 className="text-slate-900 text-2xl font-black mb-8">Recently Added</h2>
+          <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
+              <div>
+                  <h2 className="text-slate-900 text-3xl font-black tracking-tight">Recently Added</h2>
+                  <p className="text-slate-500 mt-2 font-medium text-sm">The newest properties hitting the market.</p>
+              </div>
+              <div className="flex items-center gap-3">
+                 <div className="flex items-center gap-2 mr-2">
+                   <button onClick={() => slideLatest('left')} disabled={latestIndex === 0} className={`p-2.5 rounded-full border border-slate-200 transition-all ${latestIndex === 0 ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'bg-white hover:bg-slate-100 text-slate-700 hover:border-slate-300 shadow-sm'}`}>
+                     <ChevronLeft size={18} />
+                   </button>
+                   <button onClick={() => slideLatest('right')} disabled={latestIndex + 6 >= latestProperties.length} className={`p-2.5 rounded-full border border-slate-200 transition-all ${latestIndex + 6 >= latestProperties.length ? 'text-slate-300 cursor-not-allowed bg-slate-50' : 'bg-white hover:bg-slate-100 text-slate-700 hover:border-slate-300 shadow-sm'}`}>
+                     <ChevronRight size={18} />
+                   </button>
+                 </div>
+                 <Link href="/properties" className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-full font-bold text-sm transition-all shadow-lg flex items-center gap-2">
+                   View All <ArrowRight size={14} />
+                 </Link>
+              </div>
+          </div>
+          
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {latestProperties.map((property) => (
+            {visibleLatest.map((property) => (
               <Link href={property.slug ? `/properties/${property.slug}` : `/properties/${property.id}`} key={property.id} className="bg-white p-3 rounded-2xl shadow-sm hover:shadow-md transition-all group block border border-slate-100">
                 <div className="relative h-32 rounded-xl overflow-hidden mb-3 bg-slate-100">
                    <img src={property.images?.[0] || 'https://placehold.co/600x400?text=No+Image'} className="object-cover w-full h-full group-hover:scale-110 transition-transform duration-500" alt={property.title} />
@@ -818,8 +868,16 @@ const PropertyCard = ({ property, favorites, toggleFavorite, handleShare, format
     const isFavorite = favorites.includes(property.id);
     const propertyPath = `/properties/${property.slug || property.id}`;
     
-    // Use 'area' from types.ts, fallback to 'size' for legacy data
-    const displaySize = property.area || property.size || 0;
+    // ✅ DATA MISMATCH FIX: Safely pull from 'features' map if top-level is missing
+    const feats = property.features || {};
+    const displayBeds = property.bedrooms || feats.bedrooms || 0;
+    const displayBaths = property.bathrooms || feats.bathrooms || 0;
+    const displaySize = property.area || property.size || feats.size || feats.area || 0;
+    
+    // ✅ DATA MISMATCH FIX: Apply discounts dynamically like the mobile app
+    const finalPrice = property.hasDiscount && property.discountPrice && property.discountPrice < property.price 
+        ? property.discountPrice 
+        : property.price;
 
     let statusLabel = 'For Rent';
     let statusColor = 'bg-black';
@@ -847,7 +905,7 @@ const PropertyCard = ({ property, favorites, toggleFavorite, handleShare, format
                 ) : (
                     <div className="unverified-card"><svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg><span>Unverified</span></div>
                 )}
-                <div className="price-badge">{formatPrice(property.price)} {!property.isForSale && <span className="text-sm font-normal text-gray-500">/mo</span>}</div>
+                <div className="price-badge">{formatPrice(finalPrice)} {!property.isForSale && <span className="text-sm font-normal text-gray-500">/mo</span>}</div>
                 <div className="card-actions">
                     <div className={`action-btn ${isFavorite ? 'active' : ''}`} onClick={(e) => toggleFavorite(e, property.id)}>
                         <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -861,9 +919,9 @@ const PropertyCard = ({ property, favorites, toggleFavorite, handleShare, format
                 <h4 className="text-xl font-bold text-slate-900 group-hover:text-[#0065eb] transition-colors mb-2 line-clamp-1">{property.title}</h4>
                 <p className="text-gray-500 text-sm font-medium mb-5">{getLocationString(property.location)}</p>
                 <div className="flex gap-4 text-sm font-bold text-gray-700 mb-6">
-                    <span className="flex items-center gap-1"><span className="text-[#0065eb]">{property.bedrooms || 0}</span> Beds</span>
+                    <span className="flex items-center gap-1"><span className="text-[#0065eb]">{displayBeds}</span> Beds</span>
                     <span className="w-1 h-1 bg-gray-300 rounded-full self-center"></span>
-                    <span className="flex items-center gap-1"><span className="text-[#0065eb]">{property.bathrooms || 0}</span> Baths</span>
+                    <span className="flex items-center gap-1"><span className="text-[#0065eb]">{displayBaths}</span> Baths</span>
                     <span className="w-1 h-1 bg-gray-300 rounded-full self-center"></span>
                     <span className="flex items-center gap-1"><span className="text-[#0065eb]">{displaySize}</span> Sqft</span>
                 </div>
@@ -880,6 +938,11 @@ const HotelCard = ({ hotel, favorites, toggleFavorite, handleShare, formatPrice,
     const isVerified = hotel.planTier === 'pro' || hotel.planTier === 'premium' || hotel.isPro;
     const isFavorite = favorites.includes(hotel.id);
     const hotelPath = `/hotels/${hotel.id}`;
+    
+    // ✅ DATA MISMATCH FIX: Calculate actual price including discounts
+    const finalPrice = hotel.hasDiscount && hotel.discountPrice && hotel.discountPrice < hotel.pricePerNight
+        ? hotel.discountPrice
+        : (hotel.pricePerNight || 120);
     
     // Dynamic Rating Check
     const isTopRated = hotel.rating >= 4.5;
@@ -932,7 +995,7 @@ const HotelCard = ({ hotel, favorites, toggleFavorite, handleShare, formatPrice,
                 </div>
 
                 <div className="mt-5 flex items-center justify-between pointer-events-auto">
-                    <div className="text-slate-900 font-black text-lg">{formatPrice(hotel.pricePerNight || 120)}<span className="text-xs font-normal text-gray-400">/night</span></div>
+                    <div className="text-slate-900 font-black text-lg">{formatPrice(finalPrice)}<span className="text-xs font-normal text-gray-400">/night</span></div>
                     <Link href={hotelPath} className="bg-[#0065eb] text-white px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-black transition-colors shadow-lg shadow-blue-500/20 relative z-10">Book Now</Link>
                 </div>
             </div>
