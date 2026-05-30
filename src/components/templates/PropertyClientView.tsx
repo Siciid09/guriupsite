@@ -280,12 +280,24 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
 
               {/* VIEW ALL BUTTON (DESKTOP ONLY) */}
               <div className="hidden lg:flex absolute bottom-8 right-8 gap-3 z-20">
-                {property.videoUrl && (
-                  <button onClick={() => setShowVideoModal(true)} className="px-5 py-2.5 bg-[#0065eb]/90 backdrop-blur-md text-white rounded-full text-xs font-bold flex items-center gap-2 hover:bg-[#0065eb] transition-all shadow-xl shadow-blue-500/30"><Video size={14}/> Play Tour</button>
-                )}
                 <button onClick={() => setShowGalleryModal(true)} className="px-5 py-2.5 bg-black/40 backdrop-blur-md text-white rounded-full text-xs font-bold flex items-center gap-2 hover:bg-black/60 transition-all border border-white/10 shadow-xl"><Expand size={14}/> View Gallery</button>
               </div>
             </div>
+
+            {/* MEDIA TABS (Gallery / Video) */}
+            {property.videoUrl && (
+              <div className="flex items-center gap-2 -mb-1">
+                <button className="px-6 py-2 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest shadow-md cursor-default">
+                  Gallery
+                </button>
+                <button 
+                  onClick={() => setShowVideoModal(true)} 
+                  className="px-6 py-2 rounded-xl bg-white border-2 border-slate-100 hover:border-[#0065eb] hover:text-[#0065eb] text-slate-500 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2"
+                >
+                  <Video size={14} /> Video Tour
+                </button>
+              </div>
+            )}
 
             {/* MOBILE THUMBNAILS (Max 4 + 1) */}
             <div className="grid lg:hidden grid-cols-5 gap-2 mt-2 h-16 sm:h-20">
