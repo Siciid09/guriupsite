@@ -8,7 +8,7 @@ import {
   Star, MapPin, ChevronLeft, ChevronRight, Share2, Heart, 
   CheckCircle, ArrowRight, X, Expand, MessageCircle, Phone, 
   Calendar, Users, Minus, Plus, MessageSquare, Download, 
-  Briefcase, Building2, ShieldCheck 
+  Briefcase, Building2, ShieldCheck, Video
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { 
@@ -35,6 +35,7 @@ isVerified?: boolean; // Added this
 contact?: { phoneWhatsapp?: string; phoneCall?: string }; // Added this
 contactPhone?: string;
   planTier?: string;
+  videoUrl?: string; // ✅ Added Video URL support
 }
 
 interface Room {
@@ -78,6 +79,31 @@ export default function HotelDetailPage() {
   useEffect(() => {
     if (hotel) document.title = `${hotel.name} | GuriUp`;
   }, [hotel]);
+
+  // ✅ ANALYTICS: Track Views exactly like the App
+  const hasTrackedView = React.useRef(false);
+  useEffect(() => {
+    if (hotel && !hasTrackedView.current) {
+      hasTrackedView.current = true;
+      addDoc(collection(db, 'analytics_views'), {
+        type: 'view_hotel',
+        hotelId: hotel.id,
+        platform: 'web',
+        timestamp: serverTimestamp()
+      }).catch(console.error);
+    }
+  }, [hotel]);
+
+  // ✅ ANALYTICS: Track Clicks
+  const trackClick = (type: string) => {
+    if (!hotel) return;
+    addDoc(collection(db, 'analytics_views'), {
+      type,
+      hotelId: hotel.id,
+      platform: 'web',
+      timestamp: serverTimestamp()
+    }).catch(console.error);
+  };
   
   // Booking Logic State
   const [showBookingModal, setShowBookingModal] = useState(false);
@@ -324,15 +350,15 @@ export default function HotelDetailPage() {
 
             {/* Card 2: Contact Actions */}
             <div className="bg-white p-5 rounded-[2.5rem] shadow-sm border border-slate-100 grid grid-cols-3 gap-3">
-               <a href={`https://wa.me/${cleanTargetPhone}`} target="_blank" className="flex flex-col items-center justify-center gap-2 p-4 rounded-3xl bg-green-50 text-green-600 hover:bg-green-100 transition-colors cursor-pointer group">
+               <a onClick={() => trackClick('click_whatsapp')} href={`https://wa.me/${cleanTargetPhone}`} target="_blank" className="flex flex-col items-center justify-center gap-2 p-4 rounded-3xl bg-green-50 text-green-600 hover:bg-green-100 transition-colors cursor-pointer group">
                   <MessageCircle size={24} className="group-hover:scale-110 transition-transform"/>
                   <span className="text-[9px] font-black uppercase tracking-wide">WhatsApp</span>
                </a>
-               <a href={`tel:${targetPhone}`} className="flex flex-col items-center justify-center gap-2 p-4 rounded-3xl bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors cursor-pointer group">
+               <a onClick={() => trackClick('click_call')} href={`tel:${targetPhone}`} className="flex flex-col items-center justify-center gap-2 p-4 rounded-3xl bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors cursor-pointer group">
                   <Phone size={24} className="group-hover:scale-110 transition-transform"/>
                   <span className="text-[9px] font-black uppercase tracking-wide">Call</span>
                </a>
-               <button onClick={() => setIsChatOpen(true)} className="flex flex-col items-center justify-center gap-2 p-4 rounded-3xl bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors cursor-pointer group">
+               <button onClick={() => { trackClick('click_chat'); setIsChatOpen(true); }} className="flex flex-col items-center justify-center gap-2 p-4 rounded-3xl bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors cursor-pointer group">
                   <MessageSquare size={24} className="group-hover:scale-110 transition-transform"/>
                   <span className="text-[9px] font-black uppercase tracking-wide">Chat</span>
                </button>
@@ -360,9 +386,9 @@ export default function HotelDetailPage() {
           
           {/* --- LEFT: TABS (60%) --- */}
           <div className="w-full lg:w-[60%] bg-white rounded-[2.5rem] border border-slate-100 p-6 md:p-8 h-fit">
-             {/* Tab Header - FIX: ADDED GALLERY */}
+             {/* Tab Header - FIX: ADDED GALLERY & VIDEO */}
              <div className="flex items-center gap-4 mb-8 overflow-x-auto no-scrollbar border-b border-slate-100 pb-2">
-                {['About', 'Rooms', 'Reviews', 'Gallery'].map(tab => (
+                {['About', 'Rooms', 'Reviews', 'Gallery', 'Video'].map(tab => (
                    <button 
                      key={tab} 
                      onClick={() => setActiveTab(tab)}
@@ -433,6 +459,22 @@ export default function HotelDetailPage() {
                             <Image src={img || '/placeholder.jpg'} alt="" fill className="object-cover" />
                          </div>
                       ))}
+                   </div>
+                )}
+
+                {/* ✅ ADDED VIDEO TAB */}
+                {activeTab === 'Video' && (
+                   <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                      {hotel.videoUrl ? (
+                         <div className="w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-lg border border-slate-100">
+                            <video src={hotel.videoUrl} controls className="w-full h-full object-contain" playsInline />
+                         </div>
+                      ) : (
+                         <div className="w-full h-[300px] flex flex-col items-center justify-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 text-slate-400">
+                            <Video size={48} className="mb-4 opacity-20" />
+                            <p className="font-bold text-sm">No video tour available.</p>
+                         </div>
+                      )}
                    </div>
                 )}
              </div>

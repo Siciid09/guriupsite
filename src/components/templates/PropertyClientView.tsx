@@ -13,7 +13,7 @@ import {
   MapPin, MessageSquare, Calendar, ChevronLeft, ChevronRight, X, 
   ShieldCheck, Share2, Heart, Phone, Home, Ruler, 
   Wifi, Waves, Loader2, CheckCircle, Lock, Download, 
-  Briefcase, Building2, ArrowUp, ArrowDown, Expand, Star, ChevronUp, ChevronDown
+  Briefcase, Building2, ArrowUp, ArrowDown, Expand, Star, ChevronUp, ChevronDown, Video
 } from 'lucide-react';
 
 // --- TYPES ---
@@ -22,6 +22,7 @@ export interface Property {
   slug?: string;
   title: string;
   price: number;
+  videoUrl?: string; // ✅ Added Video URL support
   description: string;
   images: string[];
   agentId: string;
@@ -161,8 +162,35 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [restrictedFeature, setRestrictedFeature] = useState<string | null>(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [showVideoModal, setShowVideoModal] = useState(false); // ✅ Video State
   
   const [property] = useState<Property>(initialProperty);
+
+  // ✅ ANALYTICS: Track Views exactly like the App
+  const hasTrackedView = useRef(false);
+  useEffect(() => {
+    if (property && !hasTrackedView.current) {
+      hasTrackedView.current = true;
+      addDoc(collection(db, 'analytics_views'), {
+        type: 'view_property',
+        agentId: property.agentId,
+        listingId: property.id,
+        platform: 'web',
+        timestamp: serverTimestamp()
+      }).catch(console.error);
+    }
+  }, [property]);
+
+  // ✅ ANALYTICS: Track Clicks
+  const trackClick = (type: string) => {
+    addDoc(collection(db, 'analytics_views'), {
+      type,
+      agentId: property.agentId,
+      listingId: property.id,
+      platform: 'web',
+      timestamp: serverTimestamp()
+    }).catch(console.error);
+  };
   const [agent] = useState<Agent | null>(initialAgent);
   const [related, setRelated] = useState<Property[]>([]);
 
@@ -251,7 +279,12 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
               </div>
 
               {/* VIEW ALL BUTTON (DESKTOP ONLY) */}
-              <button onClick={() => setShowGalleryModal(true)} className="hidden lg:flex absolute bottom-8 right-8 px-5 py-2.5 bg-black/40 backdrop-blur-md text-white rounded-full text-xs font-bold items-center gap-2 hover:bg-black/60 transition-all border border-white/10 shadow-xl"><Expand size={14}/> View Gallery</button>
+              <div className="hidden lg:flex absolute bottom-8 right-8 gap-3 z-20">
+                {property.videoUrl && (
+                  <button onClick={() => setShowVideoModal(true)} className="px-5 py-2.5 bg-[#0065eb]/90 backdrop-blur-md text-white rounded-full text-xs font-bold flex items-center gap-2 hover:bg-[#0065eb] transition-all shadow-xl shadow-blue-500/30"><Video size={14}/> Play Tour</button>
+                )}
+                <button onClick={() => setShowGalleryModal(true)} className="px-5 py-2.5 bg-black/40 backdrop-blur-md text-white rounded-full text-xs font-bold flex items-center gap-2 hover:bg-black/60 transition-all border border-white/10 shadow-xl"><Expand size={14}/> View Gallery</button>
+              </div>
             </div>
 
             {/* MOBILE THUMBNAILS (Max 4 + 1) */}
@@ -309,9 +342,9 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
                 </Link>
 
                 <div className="grid grid-cols-3 gap-2 mb-3">
-                    <button onClick={() => window.open(`https://wa.me/${(isVerified ? (property.contactPhone || agent?.phone) : '+252653227084')?.replace(/[^0-9]/g, '')}`, '_blank')} className="flex items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-[10px] md:text-xs uppercase tracking-widest transition-all hover:-translate-y-1 shadow-lg bg-[#25D366] hover:bg-[#20bd5a] text-white shadow-green-500/20"><MessageSquare size={16} /> WA</button>
-                    <button onClick={() => window.open(`tel:${isVerified ? (property.contactPhone || agent?.phone) : '+252653227084'}`)} className="flex items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-[10px] md:text-xs uppercase tracking-widest transition-all hover:-translate-y-1 shadow-lg bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/20"><Phone size={16} /> Call</button>
-                    <button onClick={() => setIsChatOpen(true)} className="flex items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-[10px] md:text-xs uppercase tracking-widest transition-all hover:-translate-y-1 shadow-lg bg-blue-50 text-[#0065eb] hover:bg-blue-100"><MessageSquare size={16} /> Chat</button>
+                    <button onClick={() => { trackClick('click_whatsapp'); window.open(`https://wa.me/${(isVerified ? (property.contactPhone || agent?.phone) : '+252653227084')?.replace(/[^0-9]/g, '')}`, '_blank'); }} className="flex items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-[10px] md:text-xs uppercase tracking-widest transition-all hover:-translate-y-1 shadow-lg bg-[#25D366] hover:bg-[#20bd5a] text-white shadow-green-500/20"><MessageSquare size={16} /> WA</button>
+                    <button onClick={() => { trackClick('click_call'); window.open(`tel:${isVerified ? (property.contactPhone || agent?.phone) : '+252653227084'}`); }} className="flex items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-[10px] md:text-xs uppercase tracking-widest transition-all hover:-translate-y-1 shadow-lg bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/20"><Phone size={16} /> Call</button>
+                    <button onClick={() => { trackClick('click_chat'); setIsChatOpen(true); }} className="flex items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-[10px] md:text-xs uppercase tracking-widest transition-all hover:-translate-y-1 shadow-lg bg-blue-50 text-[#0065eb] hover:bg-blue-100"><MessageSquare size={16} /> Chat</button>
                 </div>
                 {/* REQUEST TOUR WITH SHADOW */}
                 <button onClick={() => setIsBookingOpen(true)} className="w-full py-5 bg-[#0065eb] hover:bg-[#0052c1] text-white rounded-2xl font-black text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-xl shadow-blue-500/40"><Calendar size={18} /> Request a Tour</button>
@@ -421,6 +454,16 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
            </div>
         </div>
       </main>
+
+      {/* VIDEO PLAYER MODAL */}
+      {showVideoModal && property.videoUrl && (
+        <div className="fixed inset-0 z-[9999] bg-black/95 flex flex-col items-center justify-center animate-in fade-in duration-300">
+           <button onClick={() => setShowVideoModal(false)} className="absolute top-6 right-6 p-4 bg-white/10 rounded-full text-white hover:bg-white hover:text-black transition-all z-50 border border-white/10"><X size={24} /></button>
+           <div className="w-full max-w-5xl aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-white/10">
+              <video src={property.videoUrl} controls autoPlay className="w-full h-full object-contain" playsInline />
+           </div>
+        </div>
+      )}
 
       {/* FULL SCREEN GALLERY MODAL */}
       {showGalleryModal && (
