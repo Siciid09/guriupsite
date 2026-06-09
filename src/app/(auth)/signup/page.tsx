@@ -11,8 +11,6 @@ import {
   signOut,
   signInWithPopup,
   GoogleAuthProvider,
-  linkWithCredential,
-  EmailAuthProvider,
   User as FirebaseUser
 } from 'firebase/auth';
 import { 
@@ -30,7 +28,7 @@ import { auth, db, storage } from '../../lib/firebase';
 import { 
   User, Building2, Briefcase, Mail, Lock, Phone, ArrowRight, ArrowLeft, 
   Building, MapPin, MessageCircle, Loader2, AlertCircle, Eye, EyeOff, 
-  ShieldCheck, Layers, Globe, UploadCloud, Camera
+  ShieldCheck, Layers, UploadCloud, Camera
 } from 'lucide-react';
 
 type Role = 'user' | 'reagent' | 'hoadmin' | null;
@@ -41,8 +39,8 @@ type Role = 'user' | 'reagent' | 'hoadmin' | null;
 export default function SignupPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
-        <Loader2 className="animate-spin text-[#0065eb]" size={40}/>
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <Loader2 className="animate-spin text-white" size={40}/>
       </div>
     }>
       <SignupContent />
@@ -163,7 +161,6 @@ function SignupContent() {
       const userDoc = await getDoc(doc(db, 'users', user.uid));
 
       if (userDoc.exists()) {
-        // 🚫 SCAM/BYPASS PREVENTION: If they already have an account, stop them!
         await signOut(auth);
         setError("Account already exists. Please go to the Log In page.");
       } else {
@@ -190,7 +187,6 @@ function SignupContent() {
     setError(null);
 
     try {
-      // ✅ FIX: Don't require a password if they are using Google
       if (!formData.fullName || !formData.email || !formData.phone || (!tempGoogleUser && !formData.password)) {
         throw new Error("Please fill in all required details.");
       }
@@ -208,7 +204,6 @@ function SignupContent() {
         throw new Error("This phone number is already registered.");
       }
 
-      // ✅ FIX: Let Google users use their Google profile picture
       if (role === 'reagent' && !agentProfile.file && !tempGoogleUser?.photoURL) {
         throw new Error("Please upload a Profile Photo.");
       }
@@ -216,7 +211,6 @@ function SignupContent() {
       let user: FirebaseUser;
       if (tempGoogleUser) {
         user = tempGoogleUser;
-        // 🔒 SECURITY: Google users are already authenticated. No need to link a fake password credential.
       } else {
         const cred = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
         user = cred.user;
@@ -288,12 +282,10 @@ function SignupContent() {
       } 
       
       if (!tempGoogleUser) {
-        // 📧 Standard Email: Sign out to force verification, then show screen
         await signOut(auth);
         setEmailSentTo(formData.email);
         setVerificationSent(true);
       } else {
-        // 🚀 Google Auth: Already verified! DO NOT sign out. Route directly!
         if (role === 'hoadmin') router.push('/dashboard/hotel');
         else if (role === 'reagent') router.push('/dashboard/agent');
         else router.push('/dashboard/user');
@@ -306,18 +298,26 @@ function SignupContent() {
     }
   };
 
+  // ======================================================================
+  // VERIFICATION VIEW (GLASSMORPHISM)
+  // ======================================================================
   if (verificationSent) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
-        <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl max-w-md w-full text-center">
-          <div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+      <div className="min-h-screen relative flex items-center justify-center p-6 bg-black overflow-hidden">
+        <div className="absolute inset-0 z-0">
+          <Image src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?q=80&w=2075&auto=format&fit=crop" alt="Background" fill className="object-cover scale-105 blur-sm opacity-50" priority />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-md"></div>
+        </div>
+        
+        <div className="bg-white/10 backdrop-blur-2xl border border-white/20 p-10 rounded-[2.5rem] shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] max-w-md w-full text-center relative z-10 animate-in zoom-in duration-500">
+          <div className="w-24 h-24 bg-emerald-500/20 border border-emerald-500/50 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-6 shadow-[0_0_30px_rgba(16,185,129,0.3)]">
             <ShieldCheck size={48} />
           </div>
-          <h2 className="text-3xl font-black text-slate-900 mb-2">Verify Account</h2>
-          <p className="text-slate-500 mb-8 font-medium">
-            A link was sent to <span className="text-slate-900 font-bold">{emailSentTo}</span>.
+          <h2 className="text-3xl font-black text-white mb-2 drop-shadow-md">Verify Account</h2>
+          <p className="text-white/70 mb-8 font-medium">
+            A link was sent to <span className="text-white font-bold">{emailSentTo}</span>.
           </p>
-          <button onClick={() => router.push('/login')} className="w-full bg-[#0065eb] text-white py-4 rounded-xl font-bold">
+          <button onClick={() => router.push('/login')} className="w-full bg-white hover:bg-slate-100 text-black py-4 rounded-2xl font-bold transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)]">
             Proceed to Login
           </button>
         </div>
@@ -325,75 +325,103 @@ function SignupContent() {
     );
   }
 
+  // ======================================================================
+  // MAIN RENDER (ROLE SELECTION & FORM)
+  // ======================================================================
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-center py-10 px-6">
-      <div className="w-full max-w-6xl mx-auto">
+    <div className="min-h-screen relative flex items-center justify-center p-4 sm:p-8 overflow-y-auto bg-black scrollbar-hide">
+      
+      {/* FULL BACKGROUND IMAGE */}
+      <div className="absolute inset-0 z-0 fixed">
+        <Image 
+          src="https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?q=80&w=2053&auto=format&fit=crop" 
+          alt="GuriUp Premium Real Estate" 
+          fill
+          className="object-cover scale-105 animate-in zoom-in duration-1000"
+          priority
+        />
+        <div className="absolute inset-0 bg-black/50 bg-gradient-to-t from-black/90 via-black/40 to-black/80 backdrop-blur-[6px]"></div>
+      </div>
+
+      <div className="w-full relative z-10 flex flex-col items-center py-10">
         
+        {/* ROLE SELECTION VIEW */}
         {!role && (
-          <div className="text-center mb-16 animate-in fade-in duration-700">
-            <h1 className="text-4xl md:text-6xl font-black text-slate-900 mb-4 tracking-tight">
-              Join the <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#0065eb] to-indigo-600">Future</span> of Real Estate
-            </h1>
-            <p className="text-lg text-slate-500 font-medium">Select your account type to continue.</p>
-          </div>
-        )}
-
-        {!role && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            <RoleCard icon={<User size={32} />} title="I'm a Guest" desc="Browse homes and book hotels." theme="blue" onClick={() => updateRole('user')} />
-            <RoleCard icon={<Briefcase size={32} />} title="I'm an Agent" desc="List properties and manage leads." theme="indigo" onClick={() => updateRole('reagent')} />
-            <RoleCard icon={<Building2 size={32} />} title="I'm a Hotel" desc="Manage rooms and bookings." theme="orange" onClick={() => updateRole('hoadmin')} />
-          </div>
-        )}
-
-        {role && (
-          <div className="max-w-5xl mx-auto bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col md:flex-row border border-slate-100 animate-in zoom-in-95 duration-300">
-            
-            <div className="w-full md:w-5/12 bg-slate-900 p-10 flex flex-col justify-between relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-[#0065eb]/80 to-indigo-900/90 z-10"></div>
-              <Image src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=1000" alt="City" fill className="object-cover opacity-40 mix-blend-overlay" />
-              
-              <div className="relative z-20">
-                 <button onClick={() => updateRole(null)} className="flex items-center gap-2 text-white/70 hover:text-white transition-colors text-sm font-bold mb-10 group">
-                    <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" /> Change Role
-                 </button>
-                 <div className="space-y-2">
-                   <span className="px-3 py-1 rounded-full bg-white/20 text-white text-xs font-bold uppercase tracking-wider backdrop-blur-sm border border-white/20 mb-2 inline-block">
-                      {role === 'reagent' ? 'Agent' : role === 'hoadmin' ? 'Hotel Manager' : 'User'}
-                   </span>
-                   <h3 className="text-4xl font-black text-white leading-tight">Create your profile.</h3>
-                 </div>
-              </div>
+          <div className="w-full max-w-5xl mx-auto px-4">
+            <div className="text-center mb-16 animate-in fade-in slide-in-from-bottom-4 duration-700">
+              <h1 className="text-5xl md:text-7xl font-black text-white mb-6 tracking-tight drop-shadow-xl">
+                Join <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-300 drop-shadow-none">GuriUp</span>
+              </h1>
+              <p className="text-lg md:text-xl text-white/70 font-medium max-w-2xl mx-auto">Select your account type to access the future of real estate.</p>
             </div>
 
-            <div className="w-full md:w-7/12 p-8 md:p-12">
-              <form onSubmit={handleRegister} className="max-w-md mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto animate-in zoom-in-95 duration-700 delay-150 fill-mode-both">
+              <RoleCard icon={<User size={32} />} title="I'm a Guest" desc="Browse homes and book exclusive hotels." onClick={() => updateRole('user')} />
+              <RoleCard icon={<Briefcase size={32} />} title="I'm an Agent" desc="List properties, manage leads, and grow." onClick={() => updateRole('reagent')} />
+              <RoleCard icon={<Building2 size={32} />} title="I'm a Hotel" desc="Manage premium rooms and bookings." onClick={() => updateRole('hoadmin')} />
+            </div>
+
+            <div className="text-center mt-12 mb-6 animate-in fade-in duration-1000 delay-300">
+              <p className="text-white/60 font-medium text-sm">
+                Already have an account? <Link href="/login" className="text-white font-bold hover:underline ml-1">Log In</Link>
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* SIGNUP FORM VIEW (CENTERED GLASS CARD) */}
+        {role && (
+          <div className="w-full max-w-[480px] animate-in fade-in slide-in-from-bottom-8 duration-500">
+            <div className="bg-white/10 backdrop-blur-2xl border border-white/20 p-8 sm:p-10 rounded-[2.5rem] shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] overflow-hidden relative">
+              
+              {/* Subtle Top Glare */}
+              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent"></div>
+
+              <div className="mb-8">
+                 <button onClick={() => updateRole(null)} className="text-xs font-bold text-white/50 hover:text-white mb-6 flex items-center gap-1.5 transition-colors group">
+                    <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" /> Change Role
+                 </button>
+                 <div className="inline-block px-3 py-1 rounded-full bg-white/10 border border-white/20 text-white text-[10px] font-bold uppercase tracking-widest mb-3 backdrop-blur-sm">
+                    {role === 'reagent' ? 'Agent Account' : role === 'hoadmin' ? 'Hotel Manager' : 'Guest Account'}
+                 </div>
+                 <h2 className="text-3xl font-black text-white tracking-tight drop-shadow-md">
+                   {step === 1 ? 'Create Profile' : 'Agency Profile'}
+                 </h2>
+              </div>
+
+              <form onSubmit={handleRegister} className="space-y-5">
                 
+                {/* STEP 1: PERSONAL INFO */}
                 {step === 1 && (
-                  <div className="animate-in fade-in slide-in-from-right-8 duration-500">
-                      <h2 className="text-2xl font-bold text-slate-900 mb-6">Personal Details</h2>
+                  <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                       
                       {!tempGoogleUser && (
-                      <div className="mb-2">
-                          <button type="button" onClick={handleGoogleSignIn} className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 p-3.5 rounded-xl text-slate-700 font-bold text-sm hover:bg-slate-50 transition-all">
-                            <Image src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width={20} height={20} alt="G" /> Continue with Google
+                        <div className="mb-6">
+                          <button type="button" onClick={handleGoogleSignIn} className="w-full bg-black/30 border border-white/10 text-white hover:bg-white/10 hover:border-white/30 py-3.5 rounded-2xl font-semibold flex items-center justify-center gap-3 transition-all active:scale-[0.98] backdrop-blur-md">
+                            <svg className="w-5 h-5" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                            Continue with Google
                           </button>
-                          <div className="relative my-4"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div><div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-3 text-slate-400 font-bold">Or via Email</span></div></div>
+                          <div className="relative my-6"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/10"></div></div><div className="relative flex justify-center text-xs uppercase tracking-widest"><span className="bg-transparent px-3 text-white/40 font-bold backdrop-blur-md">Or Email</span></div></div>
                         </div>
                       )}
 
                       {tempGoogleUser && (
-                         <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-xl flex items-center gap-3">
+                         <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-2xl flex items-center gap-3 backdrop-blur-md">
                            <div className="bg-white p-1.5 rounded-full shadow-sm">
                              <Image src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width={18} height={18} alt="G" />
                            </div>
-                           <p className="text-sm font-bold text-blue-800">Google linked! Finish the form below.</p>
+                           <p className="text-sm font-semibold text-blue-200">Google linked! Finish below.</p>
                          </div>
                       )}
 
-                      {error && <div className="mb-6 p-4 bg-red-50 text-red-600 text-sm font-bold rounded-xl flex items-start gap-2 border border-red-100"><AlertCircle size={18} className="shrink-0 mt-0.5"/><span>{error}</span></div>}
+                      {error && (
+                        <div className="bg-red-500/10 border border-red-500/50 p-4 rounded-2xl flex items-start gap-3 mb-6 animate-in zoom-in-95 backdrop-blur-md">
+                          <AlertCircle className="text-red-400 shrink-0 mt-0.5" size={20} />
+                          <p className="text-sm font-medium text-red-200">{error}</p>
+                        </div>
+                      )}
 
-                    <div className="space-y-3">
+                      <div className="space-y-4">
                           <InputGroup label="Full Name" icon={User} name="fullName" type="text" placeholder="Full Name" value={formData.fullName} onChange={handleChange} required />
                           <InputGroup 
                             label="Email" 
@@ -410,42 +438,45 @@ function SignupContent() {
                           />
                           <InputGroup label="Phone" icon={Phone} name="phone" type="tel" placeholder="Phone" value={formData.phone} onChange={handleChange} onBlur={handleBlur} error={fieldErrors.phone} required />
                           
-                          {/* 🔒 SECURITY: Only ask for a password if they are NOT using Google */}
                           {!tempGoogleUser && (
                             <PasswordInput label="Password" name="password" placeholder="Password" value={formData.password} onChange={handleChange} required />
                           )}
                       </div>
 
-                      <div className="pt-8">
+                      <div className="pt-6">
                         {role === 'reagent' ? (
                           <button type="button" onClick={() => {
-                              // ✅ FIX: Don't require a password if they are a Google user!
                               if (!formData.fullName || !formData.email || !formData.phone || (!tempGoogleUser && !formData.password)) {
                                 setError("Please complete all fields."); return;
                               }
                               setError(null); setStep(2);
                             }} 
-                            className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-sm hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-lg"
+                            className="w-full bg-white hover:bg-slate-100 text-black py-4 rounded-2xl font-bold text-[15px] transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(255,255,255,0.2)] active:scale-[0.98]"
                           >
                             Next: Agency Info <ArrowRight size={18} />
                           </button>
                         ) : (
-                          <button type="submit" disabled={loading} className="w-full bg-[#0065eb] text-white py-4 rounded-xl font-bold text-sm hover:bg-[#0052c1] transition-all flex items-center justify-center gap-2 disabled:opacity-70 shadow-lg">
-                            {loading ? <Loader2 className="animate-spin"/> : 'Complete Signup'}
+                          <button type="submit" disabled={loading} className="w-full bg-white hover:bg-slate-100 text-black py-4 rounded-2xl font-bold text-[15px] transition-all flex items-center justify-center gap-2 disabled:opacity-70 shadow-[0_0_20px_rgba(255,255,255,0.2)] active:scale-[0.98]">
+                            {loading ? <Loader2 className="animate-spin text-black"/> : 'Complete Signup'}
                           </button>
                         )}
                       </div>
-                   </div>
+                  </div>
                 )}
 
+                {/* STEP 2: AGENCY INFO */}
                 {step === 2 && role === 'reagent' && (
-                  <div className="animate-in fade-in slide-in-from-right-8 duration-500">
-                      <button type="button" onClick={() => setStep(1)} className="text-xs font-bold text-slate-400 hover:text-blue-600 mb-4 flex items-center gap-1"><ArrowLeft size={12}/> Personal Info</button>
-                      <h2 className="text-2xl font-bold text-slate-900 mb-6">Agency Profile</h2>
+                  <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                      <button type="button" onClick={() => setStep(1)} className="text-xs font-bold text-white/50 hover:text-white mb-6 flex items-center gap-1 transition-colors"><ArrowLeft size={12}/> Back to Personal Info</button>
                       
-                      {error && <div className="mb-6 p-4 bg-red-50 text-red-600 text-sm font-bold rounded-xl flex items-start gap-2 border border-red-100"><AlertCircle size={18} className="shrink-0 mt-0.5"/><span>{error}</span></div>}
+                      {error && (
+                        <div className="bg-red-500/10 border border-red-500/50 p-4 rounded-2xl flex items-start gap-3 mb-6 animate-in zoom-in-95 backdrop-blur-md">
+                          <AlertCircle className="text-red-400 shrink-0 mt-0.5" size={20} />
+                          <p className="text-sm font-medium text-red-200">{error}</p>
+                        </div>
+                      )}
 
-                      <div className="space-y-4">
+                      <div className="space-y-5">
                           <div className="flex gap-4">
                               <div className="flex-1">
                                 <ImageUploader 
@@ -464,38 +495,38 @@ function SignupContent() {
                               </div>
                           </div>
 
-                          <InputGroup label="Agency Name *" icon={Building} name="businessName" type="text" placeholder="Horn Properties" value={formData.businessName} onChange={handleChange} />
+                          <InputGroup label="Agency Name *" icon={Building} name="businessName" type="text" placeholder="Agency Name" value={formData.businessName} onChange={handleChange} required />
                           
                           <div className="grid grid-cols-2 gap-4">
-                            <InputGroup label="City *" icon={MapPin} name="city" type="text" placeholder="Hargeisa" value={formData.city} onChange={handleChange} />
-                            <InputGroup label="WhatsApp *" icon={MessageCircle} name="whatsappNumber" type="tel" placeholder="+252..." value={formData.whatsappNumber} onChange={handleChange} />
+                            <InputGroup label="City *" icon={MapPin} name="city" type="text" placeholder="Hargeisa" value={formData.city} onChange={handleChange} required />
+                            <InputGroup label="WhatsApp *" icon={MessageCircle} name="whatsappNumber" type="tel" placeholder="+252..." value={formData.whatsappNumber} onChange={handleChange} required />
                           </div>
                           
                           <SelectGroup label="Specialty *" icon={Layers} name="specialty" value={formData.specialty} onChange={handleChange} options={["Residential", "Commercial", "Land", "Luxury"]} />
                           
                           <div>
-                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">Bio</label>
-                            <textarea name="bio" value={formData.bio} onChange={handleChange} rows={3} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:border-[#0065eb]" placeholder="Agency description..."></textarea>
+                            <textarea name="bio" value={formData.bio} onChange={handleChange} rows={3} className="w-full p-4 bg-black/20 border border-white/10 rounded-2xl text-sm font-medium text-white placeholder-white/30 outline-none focus:border-white/50 focus:bg-white/10 transition-all backdrop-blur-md resize-none" placeholder="Brief description of your agency..."></textarea>
                           </div>
                       </div>
 
-                      <div className="pt-8">
-                        <button type="submit" disabled={loading} className="w-full bg-[#0065eb] text-white py-4 rounded-xl font-bold text-sm hover:bg-[#0052c1] transition-all flex items-center justify-center gap-2 disabled:opacity-70 shadow-lg">
-                          {loading ? <><Loader2 className="animate-spin"/> Saving...</> : 'Launch Profile'}
+                      <div className="pt-6">
+                        <button type="submit" disabled={loading} className="w-full bg-white hover:bg-slate-100 text-black py-4 rounded-2xl font-bold text-[15px] transition-all flex items-center justify-center gap-2 disabled:opacity-70 shadow-[0_0_20px_rgba(255,255,255,0.2)] active:scale-[0.98]">
+                          {loading ? <><Loader2 className="animate-spin text-black"/> Saving...</> : 'Launch Profile'}
                         </button>
                       </div>
                   </div>
                 )}
               </form>
+              
+              <div className="text-center mt-8">
+                <p className="text-white/60 font-medium text-sm">
+                  Already have an account? <Link href="/login" className="text-white font-bold hover:underline ml-1">Log In</Link>
+                </p>
+              </div>
+
             </div>
           </div>
         )}
-
-        <div className="text-center mt-12 mb-6">
-          <p className="text-slate-500 font-medium text-sm">
-            Already have an account? <Link href="/login" className="text-[#0065eb] font-bold hover:underline ml-1">Log In</Link>
-          </p>
-        </div>
 
       </div>
     </div>
@@ -503,32 +534,25 @@ function SignupContent() {
 }
 
 // ======================================================================
-// REUSABLE UI COMPONENTS
+// REUSABLE UI COMPONENTS (GLASSMORPHISM THEME)
 // ======================================================================
 
-const RoleCard = ({ icon, title, desc, theme, onClick }: any) => {
-  const themes: any = {
-    blue: { bg: 'bg-blue-50', text: 'text-blue-600', ring: 'hover:ring-blue-200' },
-    indigo: { bg: 'bg-indigo-50', text: 'text-indigo-600', ring: 'hover:ring-indigo-200' },
-    orange: { bg: 'bg-orange-50', text: 'text-orange-600', ring: 'hover:ring-orange-200' },
-  };
-  const t = themes[theme];
-  return (
-    <button onClick={onClick} className={`group bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all text-left flex flex-col items-start h-full hover:ring-2 ${t.ring} ring-offset-2 ring-transparent`}>
-      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-transform ${t.bg} ${t.text} group-hover:scale-110`}>{icon}</div>
-      <h3 className="text-xl font-black text-slate-900 mb-2">{title}</h3>
-      <p className="text-slate-500 text-sm font-medium leading-relaxed">{desc}</p>
-    </button>
-  );
-};
+const RoleCard = ({ icon, title, desc, onClick }: any) => (
+  <button onClick={onClick} className="group relative bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-[2rem] text-left flex flex-col items-start h-full hover:bg-white/10 hover:border-white/30 transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_15px_40px_rgba(0,0,0,0.6)] overflow-hidden">
+     <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+     <div className="w-16 h-16 rounded-2xl bg-white/10 border border-white/10 flex items-center justify-center mb-6 text-white group-hover:scale-110 group-hover:bg-white group-hover:text-black transition-all duration-500 shadow-inner">{icon}</div>
+     <h3 className="text-2xl font-black text-white mb-2">{title}</h3>
+     <p className="text-white/60 text-sm font-medium leading-relaxed">{desc}</p>
+  </button>
+);
 
 const InputGroup = ({ label, name, type, placeholder, value, onChange, onBlur, icon: Icon, disabled, required, error }: any) => (
   <div>
     <div className="relative group">
-      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb]"><Icon size={18} /></div>
-      <input type={type} name={name} placeholder={required ? `${placeholder} *` : placeholder} value={value} onChange={onChange} onBlur={onBlur} disabled={disabled} required={required} className={`w-full pl-10 pr-4 py-3.5 bg-slate-50 border ${error ? 'border-rose-500 focus:border-rose-500' : 'border-slate-200 focus:border-[#0065eb]'} rounded-xl text-sm font-bold text-slate-900 outline-none transition-all placeholder:text-slate-400 disabled:opacity-60 disabled:cursor-not-allowed`} />
+      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-white/40 group-focus-within:text-white transition-colors"><Icon size={20} /></div>
+      <input type={type} name={name} placeholder={required ? `${placeholder} *` : placeholder} value={value} onChange={onChange} onBlur={onBlur} disabled={disabled} required={required} className={`w-full pl-12 pr-4 py-3.5 bg-black/20 border ${error ? 'border-red-500/50 focus:border-red-400' : 'border-white/10 focus:border-white/50'} rounded-2xl text-sm font-medium text-white outline-none transition-all placeholder:text-white/30 disabled:opacity-50 disabled:cursor-not-allowed focus:bg-white/10 backdrop-blur-md`} />
     </div>
-    {error && <p className="text-[11px] font-bold text-rose-500 mt-1.5 ml-1">{error}</p>}
+    {error && <p className="text-[11px] font-bold text-red-400 mt-1.5 ml-2">{error}</p>}
   </div>
 );
 
@@ -537,21 +561,21 @@ const PasswordInput = ({ label, name, placeholder, value, onChange, required, er
   return (
     <div>
       <div className="relative group">
-        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb]"><Lock size={18} /></div>
-        <input type={show ? "text" : "password"} name={name} placeholder={required ? `${placeholder} *` : placeholder} value={value} onChange={onChange} required={required} className={`w-full pl-10 pr-10 py-3.5 bg-slate-50 border ${error ? 'border-rose-500 focus:border-rose-500' : 'border-slate-200 focus:border-[#0065eb]'} rounded-xl text-sm font-bold text-slate-900 outline-none placeholder:text-slate-400`} />
-        <button type="button" onClick={() => setShow(!show)} className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-[#0065eb]"><Eye size={18} /></button>
+        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-white/40 group-focus-within:text-white transition-colors"><Lock size={20} /></div>
+        <input type={show ? "text" : "password"} name={name} placeholder={required ? `${placeholder} *` : placeholder} value={value} onChange={onChange} required={required} className={`w-full pl-12 pr-12 py-3.5 bg-black/20 border ${error ? 'border-red-500/50 focus:border-red-400' : 'border-white/10 focus:border-white/50'} rounded-2xl text-sm font-medium text-white outline-none transition-all placeholder:text-white/30 focus:bg-white/10 backdrop-blur-md`} />
+        <button type="button" onClick={() => setShow(!show)} className="absolute inset-y-0 right-0 pr-4 flex items-center text-white/40 hover:text-white transition-colors"><Eye size={20} /></button>
       </div>
-      {error && <p className="text-[11px] font-bold text-rose-500 mt-1.5 ml-1">{error}</p>}
+      {error && <p className="text-[11px] font-bold text-red-400 mt-1.5 ml-2">{error}</p>}
     </div>
   );
 };
 
 const SelectGroup = ({ label, name, value, onChange, icon: Icon, options }: any) => (
   <div className="relative group">
-    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb]"><Icon size={18} /></div>
-    <select name={name} value={value} onChange={onChange} className="w-full pl-10 pr-10 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 outline-none focus:border-[#0065eb] appearance-none cursor-pointer">
-      <option value="" disabled>Select {label} *</option>
-      {options.map((opt: string) => (<option key={opt} value={opt}>{opt}</option>))}
+    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-white/40 group-focus-within:text-white transition-colors"><Icon size={20} /></div>
+    <select name={name} value={value} onChange={onChange} className="w-full pl-12 pr-10 py-3.5 bg-black/20 border border-white/10 rounded-2xl text-sm font-medium text-white outline-none focus:border-white/50 focus:bg-white/10 transition-all appearance-none cursor-pointer backdrop-blur-md">
+      <option value="" disabled className="bg-slate-900 text-white">Select {label} *</option>
+      {options.map((opt: string) => (<option key={opt} value={opt} className="bg-slate-900 text-white">{opt}</option>))}
     </select>
   </div>
 );
@@ -560,16 +584,16 @@ const ImageUploader = ({ label, isCircle, previewUrl, onChange }: { label: strin
   const id = `upload-${label.replace(/\s+/g, '')}`;
   return (
     <div className="mb-2">
-      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 text-center">{label}</label>
+      <label className="block text-[10px] font-bold text-white/50 uppercase tracking-widest mb-2 text-center">{label}</label>
       <input type="file" accept="image/*" onChange={onChange} className="hidden" id={id} />
-      <label htmlFor={id} className={`relative flex flex-col items-center justify-center cursor-pointer border-2 border-dashed transition-all ${isCircle ? 'w-24 h-24 rounded-full mx-auto' : 'w-full h-24 rounded-2xl'} ${previewUrl ? 'border-transparent shadow-md' : 'border-slate-300 bg-slate-50 hover:border-blue-500'} overflow-hidden group`}>
+      <label htmlFor={id} className={`relative flex flex-col items-center justify-center cursor-pointer border-2 border-dashed transition-all bg-black/20 backdrop-blur-md ${isCircle ? 'w-24 h-24 rounded-full mx-auto' : 'w-full h-24 rounded-2xl'} ${previewUrl ? 'border-transparent shadow-lg' : 'border-white/20 hover:border-white/50 hover:bg-white/5'} overflow-hidden group`}>
         {previewUrl ? (
           <>
             <Image src={previewUrl} alt="Preview" fill className="object-cover" />
-            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"><Camera className="text-white" size={20} /></div>
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"><Camera className="text-white" size={24} /></div>
           </>
         ) : (
-          <div className="text-slate-400 group-hover:text-blue-500 flex flex-col items-center"><UploadCloud size={20} className="mb-1" /></div>
+          <div className="text-white/40 group-hover:text-white flex flex-col items-center transition-colors"><UploadCloud size={24} className="mb-1" /></div>
         )}
       </label>
     </div>

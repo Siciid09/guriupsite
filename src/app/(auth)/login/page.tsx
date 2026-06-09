@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth, db } from '../../lib/firebase'; // Adjust path as needed
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { Mail, Lock, Loader2, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
@@ -127,78 +127,75 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex bg-white pb-8">
-      {/* LEFT SIDE */}
-      <div className="hidden lg:block relative w-0 lg:w-1/2 bg-slate-900 overflow-hidden">
+    <div className="min-h-screen relative flex items-center justify-center p-4 sm:p-8 overflow-hidden bg-black">
+      
+      {/* FULL BACKGROUND IMAGE */}
+      <div className="absolute inset-0 z-0">
         <Image 
-          src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=2070&auto=format&fit=crop" 
-          alt="Modern architecture" 
+          src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?q=80&w=2075&auto=format&fit=crop" 
+          alt="GuriUp Premium Real Estate" 
           fill
-          className="object-cover opacity-50"
+          className="object-cover scale-105 animate-in zoom-in duration-1000"
           priority
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/50 to-transparent"></div>
-        <div className="absolute bottom-[380px] left-0 p-12 text-white z-10">
-          <h2 className="text-4xl font-black tracking-tight mb-4">Welcome back to GuriUp.</h2>
-          <p className="text-slate-200 text-lg max-w-md leading-relaxed">
-            Sign in to manage your properties, connect with clients, and unlock exclusive real estate opportunities across the region.
-          </p>
-        </div>
+        {/* Sleek Dark Gradient Overlay */}
+        <div className="absolute inset-0 bg-black/50 bg-gradient-to-t from-black/90 via-black/40 to-black/80 backdrop-blur-[4px]"></div>
       </div>
 
-      {/* RIGHT SIDE */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 md:p-12 pt-24 lg:pt-12 animate-in fade-in slide-in-from-right-8 duration-500">
-        <div className="w-full max-w-md space-y-8">
+      {/* CENTERED GLASSMORPHISM CARD */}
+      <div className="w-full max-w-[460px] relative z-10 animate-in fade-in slide-in-from-bottom-8 duration-700">
+        <div className="bg-white/10 backdrop-blur-2xl border border-white/20 p-8 sm:p-10 rounded-[2.5rem] shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] overflow-hidden">
           
-          <div className="text-center lg:text-left">
-            <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight mb-3">Sign in</h1>
-            <p className="text-slate-500 font-medium">
-              New to GuriUp?{' '}
-              <Link href="/signup" className="text-blue-600 font-bold hover:underline transition-all">
-                Create an account
-              </Link>
+          {/* Subtle Top Glare */}
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent"></div>
+
+          {/* HEADER INFO */}
+          <div className="text-center mb-10">
+            <h1 className="text-4xl font-black text-white tracking-tight mb-2 drop-shadow-md">GuriUp</h1>
+            <p className="text-white/70 font-medium text-sm px-4">
+              Access your dashboard to manage properties and exclusive listings.
             </p>
           </div>
 
           {error && (
-            <div className="bg-rose-50 border-l-4 border-rose-500 p-4 rounded-xl flex items-start gap-3 animate-in zoom-in-95">
-              <AlertCircle className="text-rose-500 shrink-0 mt-0.5" size={20} />
-              <p className="text-sm font-bold text-rose-700">{error}</p>
+            <div className="bg-red-500/10 border border-red-500/50 p-4 rounded-2xl flex items-start gap-3 mb-6 animate-in zoom-in-95 backdrop-blur-md">
+              <AlertCircle className="text-red-400 shrink-0 mt-0.5" size={20} />
+              <p className="text-sm font-medium text-red-200">{error}</p>
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div className="space-y-2">
-              <label htmlFor="email" className="block text-sm font-black text-slate-700 uppercase tracking-wider">Email Address</label>
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div className="space-y-1.5">
+              <label htmlFor="email" className="block text-xs font-bold text-white/70 uppercase tracking-widest pl-1">Email</label>
               <div className="relative group">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={20} />
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-white transition-colors" size={20} />
                 <input
                   id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-slate-50 border-2 border-transparent rounded-2xl py-3.5 pl-12 pr-4 font-bold text-slate-900 placeholder:text-slate-400 outline-none focus:border-blue-500 focus:bg-white transition-all"
+                  className="w-full bg-black/20 border border-white/10 rounded-2xl py-3.5 pl-12 pr-4 font-medium text-white placeholder:text-white/30 outline-none focus:border-white/50 focus:bg-white/10 transition-all backdrop-blur-md"
                   placeholder="name@example.com"
                   required
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label htmlFor="password" className="block text-sm font-black text-slate-700 uppercase tracking-wider">Password</label>
-                <Link href="/forgot-password" className="text-xs font-bold text-blue-600 hover:underline">
-                  Forgot password?
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center pl-1 pr-1">
+                <label htmlFor="password" className="block text-xs font-bold text-white/70 uppercase tracking-widest">Password</label>
+                <Link href="/forgot-password" className="text-xs font-semibold text-white/70 hover:text-white hover:underline transition-colors">
+                  Forgot?
                 </Link>
               </div>
               <div className="relative group">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={20} />
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-white transition-colors" size={20} />
                 <input
                   id="password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-50 border-2 border-transparent rounded-2xl py-3.5 pl-12 pr-4 font-bold text-slate-900 placeholder:text-slate-400 outline-none focus:border-blue-500 focus:bg-white transition-all"
+                  className="w-full bg-black/20 border border-white/10 rounded-2xl py-3.5 pl-12 pr-4 font-medium text-white placeholder:text-white/30 outline-none focus:border-white/50 focus:bg-white/10 transition-all backdrop-blur-md"
                   placeholder="••••••••"
                   required
                 />
@@ -208,26 +205,38 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#0065eb] hover:bg-[#0052c1] text-white py-4 rounded-2xl font-black text-[15px] tracking-wide shadow-xl shadow-blue-500/20 hover:shadow-blue-500/40 active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full mt-2 bg-white hover:bg-slate-100 text-black py-4 rounded-2xl font-bold text-[15px] shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:shadow-[0_0_30px_rgba(255,255,255,0.4)] active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              {loading ? <Loader2 size={20} className="animate-spin" /> : 'Sign In to Dashboard'}
+              {loading ? <Loader2 size={20} className="animate-spin text-black" /> : 'Sign In'}
             </button>
           </form>
 
-          <div className="relative flex items-center py-4">
-            <div className="flex-grow border-t border-slate-200"></div>
-            <span className="flex-shrink mx-4 text-sm font-bold text-slate-400 uppercase tracking-widest">Or continue with</span>
-            <div className="flex-grow border-t border-slate-200"></div>
+          <div className="relative flex items-center py-6">
+            <div className="flex-grow border-t border-white/10"></div>
+            <span className="flex-shrink mx-4 text-xs font-bold text-white/40 uppercase tracking-widest">Or</span>
+            <div className="flex-grow border-t border-white/10"></div>
           </div>
 
           <button
             onClick={handleGoogleLogin}
             disabled={loading}
-            className="w-full bg-white border-2 border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 py-3.5 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all active:scale-[0.98] disabled:opacity-70"
+            className="w-full bg-black/30 border border-white/10 text-white hover:bg-white/10 hover:border-white/30 py-3.5 rounded-2xl font-semibold flex items-center justify-center gap-3 transition-all active:scale-[0.98] disabled:opacity-70 backdrop-blur-md"
           >
-            <svg className="w-5 h-5" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-            <span>Sign in with Google</span>
+            <svg className="w-5 h-5" viewBox="0 0 24 24">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+            </svg>
+            <span>Continue with Google</span>
           </button>
+
+          <p className="text-center text-white/60 mt-8 text-sm font-medium">
+            New to GuriUp?{' '}
+            <Link href="/signup" className="text-white font-bold hover:underline transition-all">
+              Create an account
+            </Link>
+          </p>
 
         </div>
       </div>
