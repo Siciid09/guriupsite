@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense, useRef } from 'react';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { auth, db } from '../../../lib/firebase'; // Matches your path
+import { auth, db } from '../../../lib/firebase'; 
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { 
   doc, collection, query, where, orderBy, onSnapshot, updateDoc, Timestamp, limit, getDoc,
@@ -19,9 +19,9 @@ import {
   Loader2, Plus, Edit3, ArrowLeftCircle, ChevronRight, MoreVertical
 } from 'lucide-react';
 
-// --- COMPONENTS ---
-import AgentAnalytics from './../../../../components/templates/agentstats'; // The full analytics file provided previously
+import AgentAnalytics from './../../../../components/templates/agentstats'; 
 import AgentPropertyManagement from '../../../../components/AgentPropertyManagement';
+import TenantManagement from '../../../../components/TenantManagement';
 
 // ============================================================================
 // TYPES
@@ -43,6 +43,9 @@ interface Property {
   images: string[];
   views: number;
   status: 'active' | 'draft' | 'sold';
+  isForSale?: boolean;
+  tenantName?: string;
+  tenantPhone?: string;
 }
 
 interface TourRequest {
@@ -63,7 +66,7 @@ interface Chat {
   updatedAt: Timestamp;
 }
 
-type TabType = 'overview' | 'properties' | 'inbox' | 'bookings' | 'analytics' | 'settings' | 'add-property';
+type TabType = 'overview' | 'properties' | 'tenants' | 'inbox' | 'bookings' | 'analytics' | 'settings';
 
 // ============================================================================
 // MAIN COMPONENT
@@ -81,7 +84,6 @@ function DashboardContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab') as TabType;
 
-  // --- STATE ---
   const [profile, setProfile] = useState<AgentProfile | null>(null);
   const [properties, setProperties] = useState<Property[]>([]);
   const [tours, setTours] = useState<TourRequest[]>([]);
@@ -90,22 +92,18 @@ function DashboardContent() {
   const [activeTab, setActiveTab] = useState<TabType>(tabParam || 'overview');
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
 
-  // --- REVENUE CALCS ---
   const isPro = ['pro', 'premium', 'agent_pro'].includes(profile?.planTier || 'free');
 
-  // --- INITIALIZE REAL-TIME ENGINE ---
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
       if (!user) return router.push('/login');
       
-      // 1. Fetch Profile (Check Agents collection first for Business Data)
       let d = null;
       const agentSnap = await getDoc(doc(db, 'agents', user.uid));
       
       if (agentSnap.exists()) {
         d = agentSnap.data();
       } else {
-        // Fallback to users collection if no agent profile exists yet
         const userSnap = await getDoc(doc(db, 'users', user.uid));
         if (userSnap.exists()) d = userSnap.data();
       }
@@ -121,15 +119,12 @@ function DashboardContent() {
         });
       }
 
-      // 2. Properties Listener
       const qProps = query(collection(db, 'property'), where('agentId', '==', user.uid));
       onSnapshot(qProps, (snap) => setProperties(snap.docs.map(d => ({ id: d.id, ...d.data() } as Property))));
 
-      // 3. Tours Listener
       const qTours = query(collection(db, 'tour_requests'), where('agentId', '==', user.uid), orderBy('timestamp', 'desc'));
       onSnapshot(qTours, (snap) => setTours(snap.docs.map(d => ({ id: d.id, ...d.data() } as TourRequest))));
 
-      // 4. Chats Listener
       const qChats = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid), orderBy('updatedAt', 'desc'));
       onSnapshot(qChats, (snap) => {
         setChats(snap.docs.map(d => {
@@ -163,9 +158,7 @@ function DashboardContent() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col lg:flex-row text-slate-900 font-sans relative pt-16">
       
-      {/* ================= DESKTOP SIDEBAR ================= */}
-      {/* Changed top-20 to top-0 and height to 100vh */}
-<aside className="hidden lg:flex w-72 bg-white border-r border-slate-200 flex-col sticky top-0 h-screen z-30 shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+      <aside className="hidden lg:flex w-72 bg-white border-r border-slate-200 flex-col sticky top-0 h-screen z-30 shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
         <div className="p-8 flex items-center gap-3 border-b border-slate-100">
           <div className="bg-[#0065eb] p-2.5 rounded-2xl shadow-lg shadow-blue-500/20 text-white"><Building size={24} /></div>
           <div>
@@ -184,6 +177,7 @@ function DashboardContent() {
           <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 mt-2">Core Hub</p>
           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'overview'} onClick={() => updateTab('overview')} />
           <SidebarItem icon={Building} label="Properties" active={activeTab === 'properties'} onClick={() => updateTab('properties')} count={properties.length} />
+          <SidebarItem icon={UserIcon} label="Tenants" active={activeTab === 'tenants'} onClick={() => updateTab('tenants')} isProLocked={!isPro} />
           <SidebarItem icon={CalendarIcon} label="Tour Requests" active={activeTab === 'bookings'} onClick={() => updateTab('bookings')} count={tours.filter(t=>t.status==='pending').length} />
           <SidebarItem icon={MessageSquare} label="Messages" active={activeTab === 'inbox'} onClick={() => updateTab('inbox')} count={chats.reduce((acc, c) => acc + c.unreadCount, 0)} />
           
@@ -196,31 +190,26 @@ function DashboardContent() {
         </nav>
       </aside>
 
-      {/* ================= MOBILE HEADER ================= */}
      <div className="lg:hidden sticky top-0 w-full bg-white/90 backdrop-blur-md border-b border-slate-200 z-40 px-6 py-4 flex justify-between items-center">
-   <div className="flex items-center gap-3">
-      <div className="bg-[#0065eb] p-2 rounded-xl text-white"><Building size={18} /></div>
-      {/* Updated this line to be dynamic */}
-      <div className="flex items-center gap-2">
-         <span className="font-black text-lg truncate max-w-[200px]">{profile?.name || 'Agent'}</span>
-         {profile?.planTier === 'free' ? (
-            <span className="bg-slate-100 text-slate-500 text-[9px] font-black uppercase px-2 py-0.5 rounded-md">Free</span>
-         ) : (
-            <span className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-md">Pro</span>
-         )}
-      </div>
-   </div>
-         <button className="relative w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-600">
-            <Bell size={20} />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
-         </button>
+       <div className="flex items-center gap-3">
+          <div className="bg-[#0065eb] p-2 rounded-xl text-white"><Building size={18} /></div>
+          <div className="flex items-center gap-2">
+             <span className="font-black text-lg truncate max-w-[200px]">{profile?.name || 'Agent'}</span>
+             {profile?.planTier === 'free' ? (
+                <span className="bg-slate-100 text-slate-500 text-[9px] font-black uppercase px-2 py-0.5 rounded-md">Free</span>
+             ) : (
+                <span className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-md">Pro</span>
+             )}
+          </div>
+       </div>
+       <button className="relative w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-600">
+          <Bell size={20} />
+          <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+       </button>
       </div>
 
-      {/* ================= MAIN CONTENT AREA ================= */}
-      {/* pt-24 provides the extra vertical spacing requested */}
-      {/* Fixed line with tighter spacing */}
-{/* Change pt-24 to a negative margin like -mt-12 or higher */}
-<main className="flex-1 flex flex-col min-w-0 p-4 -mt-12 pb-48 md:p-8 md:-mt-12 lg:p-12 lg:-mt-16 lg:pb-48 transition-all duration-300">    <AnimatePresence mode="wait">
+      <main className="flex-1 flex flex-col min-w-0 p-4 -mt-12 pb-48 md:p-8 md:-mt-12 lg:p-12 lg:-mt-16 lg:pb-48 transition-all duration-300">    
+        <AnimatePresence mode="wait">
           
           {/* --- TAB: OVERVIEW --- */}
           {activeTab === 'overview' && (
@@ -239,7 +228,36 @@ function DashboardContent() {
                   <StatCard title="Total Leads" value={chats.length} icon={MessageSquare} color="text-purple-600" bg="bg-purple-50" />
                </div>
 
-               <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+               <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                  {/* Active Tenants Widget */}
+                  <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 md:p-8">
+                    <div className="flex justify-between items-center mb-6">
+                       <h3 className="font-bold text-xl">Current Tenants</h3>
+                       <button onClick={() => updateTab('properties')} className="text-sm font-bold text-[#0065eb] hover:underline">Manage</button>
+                    </div>
+                    <div className="space-y-4">
+                       {properties.filter(p => !p.isForSale && p.tenantName).slice(0, 4).map(p => (
+                          <div key={p.id} className="flex items-center gap-4 group">
+                             <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 font-bold">
+                               {p.tenantName![0]}
+                             </div>
+                             <div className="flex-1 min-w-0">
+                                <h4 className="text-sm font-bold truncate text-slate-900">{p.tenantName}</h4>
+                                <p className="text-xs text-slate-500 truncate flex items-center gap-1">
+                                  {p.tenantPhone}
+                                </p>
+                             </div>
+                             <a href={`tel:${p.tenantPhone}`} className="w-8 h-8 bg-slate-50 rounded-full flex items-center justify-center text-[#0065eb] hover:bg-blue-50 transition-colors">
+                               <Phone size={14}/>
+                             </a>
+                          </div>
+                       ))}
+                       {properties.filter(p => !p.isForSale && p.tenantName).length === 0 && (
+                          <p className="text-slate-400 text-sm py-4 text-center">No tenants assigned yet.</p>
+                       )}
+                    </div>
+                  </div>
+
                   {/* Pending Tours */}
                   <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 md:p-8">
                     <div className="flex justify-between items-center mb-6">
@@ -290,6 +308,17 @@ function DashboardContent() {
           {activeTab === 'properties' && (
             <motion.div key="properties" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
                <AgentPropertyManagement 
+                  currentUserUid={profile?.uid || ''} 
+                  userPlan={profile?.planTier || 'free'} 
+                  onUpgrade={() => updateTab('settings')}
+               />
+            </motion.div>
+          )}
+
+          {/* --- TAB: TENANTS --- */}
+          {activeTab === 'tenants' && (
+            <motion.div key="tenants" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+               <TenantManagement 
                   currentUserUid={profile?.uid || ''} 
                   userPlan={profile?.planTier || 'free'} 
                   onUpgrade={() => updateTab('settings')}
@@ -350,7 +379,6 @@ function DashboardContent() {
           {/* --- TAB: INBOX --- */}
           {activeTab === 'inbox' && (
              <motion.div key="inbox" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden min-h-[600px] shadow-sm flex flex-col md:flex-row">
-                {/* Left: Chat List */}
                 <div className="w-full md:w-80 border-r border-slate-100 flex flex-col h-[600px] md:h-auto">
                    <div className="p-8 border-b border-slate-100">
                       <h2 className="text-2xl font-black">Inbox</h2>
@@ -370,7 +398,6 @@ function DashboardContent() {
                       ))}
                    </div>
                 </div>
-                {/* Right: Message View (Simplified for Page shell) */}
                 <div className="flex-1 bg-slate-50/50 flex flex-col items-center justify-center p-12 text-center">
                    <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center text-slate-300 mb-6"><MessageSquare size={40}/></div>
                    <h3 className="text-xl font-black text-slate-900">Select a Conversation</h3>
@@ -423,11 +450,10 @@ function DashboardContent() {
         </AnimatePresence>
       </main>
 
-      {/* ================= MOBILE BOTTOM NAVIGATION ================= */}
       <nav className="lg:hidden fixed bottom-0 left-0 w-full bg-white/95 backdrop-blur-md border-t border-slate-200 z-50 flex items-center justify-around px-2 pb-safe pt-2 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
          <BottomNavItem icon={LayoutDashboard} label="Home" active={activeTab === 'overview'} onClick={() => updateTab('overview')} />
          <BottomNavItem icon={Building} label="Listings" active={activeTab === 'properties'} onClick={() => updateTab('properties')} />
-         <BottomNavItem icon={CalendarIcon} label="Tours" active={activeTab === 'bookings'} onClick={() => updateTab('bookings')} badge={tours.filter(t=>t.status==='pending').length} />
+         <BottomNavItem icon={UserIcon} label="Tenants" active={activeTab === 'tenants'} onClick={() => updateTab('tenants')} />
          <BottomNavItem icon={MessageSquare} label="Chat" active={activeTab === 'inbox'} onClick={() => updateTab('inbox')} badge={chats.reduce((acc, c) => acc + c.unreadCount, 0)} />
          <BottomNavItem icon={Settings} label="More" active={['settings', 'analytics'].includes(activeTab)} onClick={() => updateTab('settings')} />
       </nav>

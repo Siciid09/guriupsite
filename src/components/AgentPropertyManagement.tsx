@@ -1,18 +1,6 @@
 'use client';
-// Add this near your other imports at the top
+
 import { GoogleMap, Marker, useLoadScript } from '@react-google-maps/api';
-
-// Define the map container size
-const mapContainerStyle = {
-  width: '100%',
-  height: '300px'
-};
-
-// Default center (e.g., Hargeisa)
-const defaultCenter = {
-  lat: 9.560, 
-  lng: 44.068
-};
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { 
@@ -20,31 +8,34 @@ import {
   updateDoc, deleteDoc, serverTimestamp, onSnapshot
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from './.././../src/app/lib/firebase'; // Adjust to your firebase config path
+import { db, storage } from './.././../src/app/lib/firebase'; 
 import { 
   Search, Plus, MapPin, Edit3, Trash2, X, Upload,
   BarChart2, MoreVertical, Archive, RefreshCw,
   Building, CheckCircle, ArrowUpRight, Lock, Image as ImageIcon,
-  Save, ArrowLeft, Eye, Star, TrendingUp, Clock
-  
+  Save, ArrowLeft, Eye, Star, TrendingUp, Clock, Phone
 } from 'lucide-react';
-// ✅ ADDED: Import the new Location Selector
 import LocationSelectorModal, { LocationResult } from '@/components/LocationSelectorModal';
+
+const mapContainerStyle = { width: '100%', height: '300px' };
+const defaultCenter = { lat: 9.560, lng: 44.068 };
 
 // --- TYPES ---
 interface Property {
-  id?: string; // Optional for new properties
+  id?: string;
   title: string;
   price: number;
-  views?: number;           // ✅ REAL data from Flutter
-  favoritedBy?: string[];   // ✅ REAL data from Flutter
-  clicks?: number;          // ✅ REAL data from Flutter// ✅ REAL data from Flutter App
+  views?: number;           
+  favoritedBy?: string[];   
+  clicks?: number;          
   status: string;
   images: string[];
-  // ✅ ADDED: country and address
   location: { country?: string; city: string; area: string; address?: string; gpsCoordinates?: string };
-  propertyType: string; // House, Apartment, Studio, Office, Land, Hall
+  propertyType: string; 
   isForSale: boolean;
+  tenantName?: string;
+  tenantPhone?: string;
+  tenantId?: string;
   isArchived: boolean;
   description: string;
   features: Record<string, any>;
@@ -55,7 +46,7 @@ interface Property {
 
 interface AgentPropertyManagementProps {
   currentUserUid: string;
-  userPlan: string; // 'free', 'pro', 'premium'
+  userPlan: string; 
   onUpgrade: () => void;
 }
 
@@ -69,34 +60,29 @@ export default function CompletePropertyManagement({
   onUpgrade 
 }: AgentPropertyManagementProps) {
   
-  // ✅ ADDED: Load Google Maps Script
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY as string,
   });
 
-  // --- CORE STATE ---
   const [viewMode, setViewMode] = useState<'list' | 'form'>('list');
   const [properties, setProperties] = useState<Property[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
-  // --- LIST STATE ---
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('All');
   const [sortBy, setSortBy] = useState('Newest');
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
 
-  // --- FORM STATE ---
   const [editingProp, setEditingProp] = useState<Property | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [formImages, setFormImages] = useState<File[]>([]);
   const [existingImages, setExistingImages] = useState<string[]>([]);
-  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false); // ✅ ADDED Modal State
-  const [statsProp, setStatsProp] = useState<Property | null>(null); // ✅ ADDED Stats Modal State
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false); 
+  const [statsProp, setStatsProp] = useState<Property | null>(null); 
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isPro = ['pro', 'premium', 'agent_pro'].includes(userPlan?.toLowerCase() || 'free');
 
-  // --- 1. REAL-TIME DATA LISTENER ---
   useEffect(() => {
     if (!currentUserUid) return;
     setIsLoading(true);
@@ -107,7 +93,6 @@ export default function CompletePropertyManagement({
     let rawProperties: Property[] = [];
     let analyticsMap: Record<string, { views: number, clicks: number }> = {};
 
-    // Helper to merge the properties with the analytics
     const updateMergedState = () => {
       const merged = rawProperties.map(p => ({
         ...p,
@@ -127,7 +112,6 @@ export default function CompletePropertyManagement({
       setIsLoading(false);
     };
 
-    // Listen to Properties
     const unsubProps = onSnapshot(qProps, (snap: any) => {
       rawProperties = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Property));
       updateMergedState();
@@ -136,7 +120,6 @@ export default function CompletePropertyManagement({
       setIsLoading(false);
     });
 
-    // Listen to Flutter Analytics
     const unsubAnalytics = onSnapshot(qAnalytics, (snap: any) => {
       analyticsMap = {};
       snap.docs.forEach((doc: any) => {
@@ -149,7 +132,7 @@ export default function CompletePropertyManagement({
         if (data.type === 'view_property') {
           analyticsMap[pid].views++;
         } else if (data.type && data.type.startsWith('click_')) {
-          analyticsMap[pid].clicks++; // Includes call, whatsapp, and chat clicks
+          analyticsMap[pid].clicks++; 
         }
       });
       updateMergedState();
@@ -161,12 +144,10 @@ export default function CompletePropertyManagement({
     };
   }, [currentUserUid]);
 
-  // --- 2. LIST ACTIONS ---
   const toggleStatus = async (prop: Property) => {
     const isAvailable = prop.status.toLowerCase() === 'available' || prop.status.toLowerCase() === 'active';
     const newStatus = isAvailable ? 'sold' : 'available';
     
-    // Add a confirmation dialog so it doesn't mark it sold by accidental click
     if (!window.confirm(`Are you sure you want to mark this property as ${newStatus.toUpperCase()}?`)) return;
     
     try {
@@ -194,7 +175,6 @@ export default function CompletePropertyManagement({
 
   const openForm = (prop?: Property) => {
     if (prop && !isPro) {
-      // Free User 24-hour Cooldown Check
       const lastEdit = prop.updatedAt?.toDate?.() || new Date(prop.updatedAt || prop.createdAt);
       const diffHours = (new Date().getTime() - lastEdit.getTime()) / (1000 * 60 * 60);
       if (diffHours < 24) {
@@ -205,7 +185,6 @@ export default function CompletePropertyManagement({
     
     setEditingProp(prop || {
       title: '', price: 0, status: 'available', images: [], 
-      // ✅ ADDED: Default country and address
       location: { country: 'Somalia', city: 'Hargeisa', area: '', address: '' }, 
       propertyType: 'House', isForSale: false, isArchived: false,
       description: '', features: {}, agentId: currentUserUid
@@ -215,7 +194,6 @@ export default function CompletePropertyManagement({
     setViewMode('form');
   };
 
-  // --- 3. FORM ACTIONS ---
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const filesArray = Array.from(e.target.files);
@@ -241,7 +219,6 @@ export default function CompletePropertyManagement({
 
     setIsSaving(true);
     try {
-      // 1. Upload new images to Firebase Storage
       const uploadedUrls = [];
       for (const file of formImages) {
         const storageRef = ref(storage, `property_images/${currentUserUid}_${Date.now()}_${file.name}`);
@@ -252,23 +229,18 @@ export default function CompletePropertyManagement({
 
       const finalImages = [...existingImages, ...uploadedUrls];
 
-      // 2. Prepare payload
       const payload = {
         ...editingProp,
         images: finalImages,
         updatedAt: serverTimestamp(),
-        // ✅ FIX: The Flutter Map requires 'planTier' to exist to show the pin!
         planTier: userPlan || 'free', 
         planTierAtUpload: userPlan || 'free',
       };
 
-      // 3. Save to Firestore
-      // 3. Save to Firestore
       if (editingProp.id) {
         await updateDoc(doc(db, 'property', editingProp.id), payload);
         setProperties(prev => prev.map(p => p.id === editingProp.id ? { ...p, ...payload } as Property : p));
       } else {
-        // Create a new object specifically for the new document
         const newDocPayload = {
           ...payload,
           createdAt: serverTimestamp(),
@@ -287,7 +259,6 @@ export default function CompletePropertyManagement({
     }
   };
 
-  // --- 4. LIST FILTERING ---
   const filteredProperties = properties.filter(p => {
     const search = searchQuery.toLowerCase();
     const title = (p.title || '').toLowerCase();
@@ -316,12 +287,8 @@ export default function CompletePropertyManagement({
 
   const canAdd = isPro || properties.length < FREE_LIMIT;
 
-  // =========================================================================
-  // VIEW: LIST
-  // =========================================================================
   const renderList = () => (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-2xl font-black text-slate-900">Property Management</h2>
@@ -338,7 +305,6 @@ export default function CompletePropertyManagement({
         </button>
       </div>
 
-      {/* Tabs & Filters */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-2">
         <div className="flex flex-col md:flex-row gap-4 justify-between items-center p-2">
           <div className="relative w-full md:w-80">
@@ -372,14 +338,12 @@ export default function CompletePropertyManagement({
         </div>
       </div>
 
-      {/* Grid */}
       {filteredProperties.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredProperties.map(prop => {
             const isSold = prop.status.toLowerCase() === 'sold';
             return (
               <div key={prop.id} className="bg-white rounded-3xl overflow-hidden shadow-sm border border-slate-100 group relative">
-                {/* Image */}
                 <div className="h-48 relative bg-slate-200 cursor-pointer" onClick={() => openForm(prop)}>
                   <Image src={prop.images?.[0] || 'https://placehold.co/600x400'} alt={prop.title} fill className={`object-cover transition-transform duration-500 group-hover:scale-110 ${isSold || prop.isArchived ? 'grayscale opacity-80' : ''}`} />
                   <div className="absolute top-3 left-3">
@@ -387,7 +351,6 @@ export default function CompletePropertyManagement({
                       {prop.isArchived ? 'Archived' : isSold ? 'Sold' : 'Active'}
                     </span>
                   </div>
-                  {/* Menu */}
                   <button onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === prop.id ? null : prop.id!); }} className="absolute top-3 right-3 w-8 h-8 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:bg-black/60 transition-colors">
                     <MoreVertical size={16} />
                   </button>
@@ -399,7 +362,6 @@ export default function CompletePropertyManagement({
                   )}
                 </div>
 
-                {/* Content */}
                 <div className="p-5">
                   <h3 className="font-bold text-slate-900 text-[15px] truncate mb-1 cursor-pointer hover:text-blue-600" onClick={() => openForm(prop)}>{prop.title}</h3>
                   <p className="text-xs text-slate-400 font-medium mb-4 flex items-center gap-1"><MapPin size={12}/> {prop.location?.area || 'N/A'}, {prop.location?.city}</p>
@@ -407,6 +369,21 @@ export default function CompletePropertyManagement({
                     <span className="font-black text-slate-900 text-lg">${(prop.price || 0).toLocaleString()}</span>
                     <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-md uppercase">{prop.isForSale ? 'Sale' : 'Rent'}</span>
                   </div>
+
+                  {/* Tenant Info (If Rented/Assigned) */}
+                  {!prop.isForSale && prop.tenantName && (
+                    <div className="mb-4 p-3 bg-blue-50/50 rounded-xl border border-blue-100 flex items-center justify-between">
+                      <div>
+                        <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-0.5">Assigned Tenant</p>
+                        <p className="text-sm font-bold text-slate-900 truncate max-w-[120px]">{prop.tenantName}</p>
+                      </div>
+                      {prop.tenantPhone && (
+                        <a href={`tel:${prop.tenantPhone}`} onClick={(e) => e.stopPropagation()} className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-blue-600 shadow-sm hover:scale-105 transition-transform">
+                          <Phone size={14} />
+                        </a>
+                      )}
+                    </div>
+                  )}
 
                   {/* Actions */}
                   <div className="flex flex-wrap pt-4 border-t border-slate-50 gap-2">
@@ -435,7 +412,6 @@ export default function CompletePropertyManagement({
         </div>
       )}
 
-      {/* ✅ REAL DYNAMIC STATS MODAL - SAFELY PLACED */}
       {statsProp && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[32px] w-full max-w-sm shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
@@ -475,13 +451,9 @@ export default function CompletePropertyManagement({
     </div>
   );
 
-  // =========================================================================
-  // VIEW: FORM (ADD / EDIT)
-  // =========================================================================
   const renderForm = () => {
     if (!editingProp) return null;
     
-    // Dynamic Form logic helpers based on type
     const isResidential = ['House', 'Apartment', 'Villa'].includes(editingProp.propertyType);
     const isCommercial = ['Office', 'Business', 'Mall'].includes(editingProp.propertyType);
 
@@ -500,7 +472,6 @@ export default function CompletePropertyManagement({
             </button>
           </div>
 
-          {/* 1. Basic Info */}
           <div className="space-y-4">
             <h3 className="font-bold text-slate-900 flex items-center gap-2"><Building size={18} className="text-blue-500"/> Basic Details</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -525,14 +496,33 @@ export default function CompletePropertyManagement({
                   {PROPERTY_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                 </select>
               </div>
+
+              {/* Read-Only Tenant Assignment Info */}
+              {!editingProp.isForSale && editingProp.tenantName && (
+                <div className="md:col-span-2 bg-emerald-50 border border-emerald-100 p-4 rounded-xl flex justify-between items-center mt-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-emerald-600 font-black shadow-sm">
+                      {editingProp.tenantName.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-0.5">Currently Assigned Tenant</p>
+                      <p className="font-bold text-slate-900">{editingProp.tenantName}</p>
+                    </div>
+                  </div>
+                  {editingProp.tenantPhone && (
+                    <div className="text-right">
+                      <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-0.5">Contact</p>
+                      <p className="text-sm font-bold text-slate-900">{editingProp.tenantPhone}</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
-          {/* 2. Location */}
           <div className="space-y-4">
             <h3 className="font-bold text-slate-900 flex items-center gap-2"><MapPin size={18} className="text-emerald-500"/> Location</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* ✅ ADDED: Location Selector Button */}
               <div className="md:col-span-1">
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">City & District *</label>
                 <button 
@@ -564,7 +554,6 @@ export default function CompletePropertyManagement({
                 />
               </div>
 
-              {/* ✅ ADDED: Manual Address/Landmark Input */}
               <div className="md:col-span-1">
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Street Address / Landmark (Optional)</label>
                 <input 
@@ -576,7 +565,6 @@ export default function CompletePropertyManagement({
                 />
               </div>
               
-              {/* ✅ EXACT MAP PICKER (Locked for free users) */}
               <div className="md:col-span-2 relative mt-4">
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Exact Location (Tap Map to Drop Pin)</label>
                 
@@ -638,11 +626,9 @@ export default function CompletePropertyManagement({
             </div>
           </div>
 
-          {/* 3. Media Upload */}
           <div className="space-y-4">
             <h3 className="font-bold text-slate-900 flex items-center gap-2"><ImageIcon size={18} className="text-purple-500"/> Media</h3>
             
-            {/* Grid for existing and new images */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {existingImages.map((img, i) => (
                 <div key={i} className="relative h-24 rounded-xl overflow-hidden group">
@@ -666,7 +652,6 @@ export default function CompletePropertyManagement({
             {!isPro && <p className="text-xs text-rose-500 font-bold">Free Plan Limit: 1 Image Max.</p>}
           </div>
 
-          {/* 4. Description & Dynamic Fields */}
           <div className="space-y-4">
             <h3 className="font-bold text-slate-900">Description & Details</h3>
             <textarea required value={editingProp.description} onChange={e => setEditingProp({...editingProp, description: e.target.value})} rows={5} maxLength={isPro ? 5000 : 100} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500 resize-none" placeholder="Describe the property..."></textarea>
@@ -676,7 +661,6 @@ export default function CompletePropertyManagement({
               </span>
             </div>
 
-            {/* Dynamic Numeric Fields */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4">
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Size (m²)</label>
@@ -707,7 +691,6 @@ export default function CompletePropertyManagement({
     );
   };
 
-  // --- RENDER CONTROLLER ---
   if (isLoading) return <div className="min-h-[60vh] flex items-center justify-center"><RefreshCw className="w-10 h-10 animate-spin text-blue-600" /></div>;
   
   return (
