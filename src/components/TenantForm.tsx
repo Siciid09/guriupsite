@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../../../lib/firebase'; // Adjust this path to your firebase config
+import { db } from '../app/lib/firebase'; // Adjust this path to your firebase config
 import { 
   ArrowLeft, User, CreditCard, Shield, Save, Loader2 
 } from 'lucide-react';
