@@ -1,11 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import { collection, addDoc, updateDoc, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
-import { db } from  '../app/lib/firebase'; // Adjust this path to your firebase config
+import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../../../lib/firebase'; // Adjust this path to your firebase config
 import { 
-  ArrowLeft, User, Phone, Mail, Building, MapPin, 
-  CreditCard, Calendar, Shield, Save, Loader2 
+  ArrowLeft, User, CreditCard, Shield, Save, Loader2 
 } from 'lucide-react';
 import { Tenant } from './TenantManagement';
 
@@ -18,13 +17,6 @@ interface TenantFormProps {
 export default function TenantForm({ currentUserUid, existingTenant, onClose }: TenantFormProps) {
   const [isSaving, setIsSaving] = useState(false);
 
-  // Helper to safely format Firestore Timestamps to YYYY-MM-DD for HTML date inputs
-  const formatDateForInput = (timestamp: any) => {
-    if (!timestamp) return '';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toISOString().split('T')[0];
-  };
-
   const [formData, setFormData] = useState({
     name: existingTenant?.name || '',
     phone: existingTenant?.phone || '',
@@ -32,11 +24,6 @@ export default function TenantForm({ currentUserUid, existingTenant, onClose }: 
     gender: existingTenant?.gender || 'Male',
     idType: existingTenant?.idType || 'National ID',
     idNumber: existingTenant?.idNumber || '',
-    unitNumber: existingTenant?.unitNumber || '',
-    rentAmount: existingTenant?.rentAmount || '',
-    depositAmount: existingTenant?.depositAmount || '',
-    leaseStart: formatDateForInput(existingTenant?.leaseStart),
-    leaseEnd: formatDateForInput(existingTenant?.leaseEnd),
     status: existingTenant?.status || 'active',
     notes: existingTenant?.notes || '',
     guarantor: {
@@ -59,11 +46,15 @@ export default function TenantForm({ currentUserUid, existingTenant, onClose }: 
         gender: formData.gender,
         idType: formData.idType,
         idNumber: formData.idNumber,
-        unitNumber: formData.unitNumber,
-        rentAmount: Number(formData.rentAmount) || 0,
-        depositAmount: Number(formData.depositAmount) || 0,
-        leaseStart: formData.leaseStart ? Timestamp.fromDate(new Date(formData.leaseStart)) : null,
-        leaseEnd: formData.leaseEnd ? Timestamp.fromDate(new Date(formData.leaseEnd)) : null,
+        
+        // Passing default empty/0 values for the removed lease fields
+        // This ensures the Tenant interface and other screens don't break
+        unitNumber: existingTenant?.unitNumber || '',
+        rentAmount: existingTenant?.rentAmount || 0,
+        depositAmount: existingTenant?.depositAmount || 0,
+        leaseStart: existingTenant?.leaseStart || null,
+        leaseEnd: existingTenant?.leaseEnd || null,
+        
         status: formData.status,
         guarantor: formData.guarantor,
         notes: formData.notes,
@@ -105,7 +96,7 @@ export default function TenantForm({ currentUserUid, existingTenant, onClose }: 
             <h2 className="text-2xl font-black text-slate-900 tracking-tight">
               {existingTenant ? 'Edit Tenant Profile' : 'Onboard New Tenant'}
             </h2>
-            <p className="text-sm font-medium text-slate-500 mt-1">Fill in the details for lease management.</p>
+            <p className="text-sm font-medium text-slate-500 mt-1">Create a profile for client management.</p>
           </div>
           <button 
             type="submit" 
@@ -146,10 +137,10 @@ export default function TenantForm({ currentUserUid, existingTenant, onClose }: 
           </div>
         </div>
 
-        {/* 2. Identification */}
+        {/* 2. Identification (Now Optional) */}
         <div className="space-y-4">
           <h3 className="font-black text-slate-900 flex items-center gap-2 text-lg">
-            <CreditCard size={20} className="text-emerald-500"/> Identification
+            <CreditCard size={20} className="text-emerald-500"/> Identification <span className="text-slate-400 text-sm font-bold ml-1">(Optional)</span>
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -161,42 +152,14 @@ export default function TenantForm({ currentUserUid, existingTenant, onClose }: 
               </select>
             </div>
             <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">ID Number *</label>
-              <input required type="text" value={formData.idNumber} onChange={e => setFormData({...formData, idNumber: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Doc/ID number" />
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">ID Number</label>
+              {/* Removed "required" tag */}
+              <input type="text" value={formData.idNumber} onChange={e => setFormData({...formData, idNumber: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Doc/ID number" />
             </div>
           </div>
         </div>
 
-        {/* 3. Lease Details */}
-        <div className="space-y-4">
-          <h3 className="font-black text-slate-900 flex items-center gap-2 text-lg">
-            <Building size={20} className="text-purple-500"/> Lease Details
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Unit / Room Number *</label>
-              <input required type="text" value={formData.unitNumber} onChange={e => setFormData({...formData, unitNumber: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. Apt 4B" />
-            </div>
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Monthly Rent ($) *</label>
-              <input required type="number" value={formData.rentAmount} onChange={e => setFormData({...formData, rentAmount: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500" placeholder="0" />
-            </div>
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Security Deposit ($)</label>
-              <input type="number" value={formData.depositAmount} onChange={e => setFormData({...formData, depositAmount: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500" placeholder="0" />
-            </div>
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Lease Start Date *</label>
-              <input required type="date" value={formData.leaseStart} onChange={e => setFormData({...formData, leaseStart: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Lease End Date *</label>
-              <input required type="date" value={formData.leaseEnd} onChange={e => setFormData({...formData, leaseEnd: e.target.value})} className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-          </div>
-        </div>
-
-        {/* 4. Guarantor Details */}
+        {/* 3. Guarantor Details */}
         <div className="space-y-4">
           <h3 className="font-black text-slate-900 flex items-center gap-2 text-lg">
             <Shield size={20} className="text-orange-500"/> Guarantor Details
@@ -215,15 +178,15 @@ export default function TenantForm({ currentUserUid, existingTenant, onClose }: 
               <input required type="text" value={formData.guarantor.relation} onChange={e => setFormData({...formData, guarantor: {...formData.guarantor, relation: e.target.value}})} className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. Brother, Parent" />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Guarantor ID Number</label>
-              <input type="text" value={formData.guarantor.idNumber} onChange={e => setFormData({...formData, guarantor: {...formData.guarantor, idNumber: e.target.value}})} className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Guarantor ID (Optional)" />
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Guarantor ID Number (Optional)</label>
+              <input type="text" value={formData.guarantor.idNumber} onChange={e => setFormData({...formData, guarantor: {...formData.guarantor, idNumber: e.target.value}})} className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Guarantor ID" />
             </div>
           </div>
         </div>
 
-        {/* 5. Additional Information */}
+        {/* 4. Additional Information */}
         <div className="space-y-4">
-          <h3 className="font-black text-slate-900 text-lg">Additional Notes</h3>
+          <h3 className="font-black text-slate-900 text-lg">Additional Notes (Optional)</h3>
           <textarea 
             value={formData.notes} 
             onChange={e => setFormData({...formData, notes: e.target.value})} 

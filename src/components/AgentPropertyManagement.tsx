@@ -13,7 +13,8 @@ import {
   Search, Plus, MapPin, Edit3, Trash2, X, Upload,
   BarChart2, MoreVertical, Archive, RefreshCw,
   Building, CheckCircle, ArrowUpRight, Lock, Image as ImageIcon,
-  Save, ArrowLeft, Eye, Star, TrendingUp, Clock, Phone
+  Save, ArrowLeft, Eye, Star, TrendingUp, Clock, Phone,
+  Users, Video, Tag, Percent
 } from 'lucide-react';
 import LocationSelectorModal, { LocationResult } from '@/components/LocationSelectorModal';
 
@@ -30,6 +31,7 @@ interface Property {
   clicks?: number;          
   status: string;
   images: string[];
+  videoUrl?: string;
   location: { country?: string; city: string; area: string; address?: string; gpsCoordinates?: string };
   propertyType: string; 
   isForSale: boolean;
@@ -37,6 +39,8 @@ interface Property {
   tenantPhone?: string;
   tenantId?: string;
   isArchived: boolean;
+  hasDiscount?: boolean;
+  discountPrice?: number;
   description: string;
   features: Record<string, any>;
   createdAt?: any;
@@ -66,6 +70,7 @@ export default function CompletePropertyManagement({
 
   const [viewMode, setViewMode] = useState<'list' | 'form'>('list');
   const [properties, setProperties] = useState<Property[]>([]);
+  const [tenants, setTenants] = useState<any[]>([]); // To populate tenant dropdown
   const [isLoading, setIsLoading] = useState(true);
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -87,8 +92,12 @@ export default function CompletePropertyManagement({
     if (!currentUserUid) return;
     setIsLoading(true);
 
+    // Fetch Properties
     const qProps = query(collection(db, 'property'), where('agentId', '==', currentUserUid));
+    // Fetch Analytics
     const qAnalytics = query(collection(db, 'analytics_views'), where('agentId', '==', currentUserUid));
+    // Fetch Tenants
+    const qTenants = query(collection(db, 'tenants'), where('agentId', '==', currentUserUid));
 
     let rawProperties: Property[] = [];
     let analyticsMap: Record<string, { views: number, clicks: number }> = {};
@@ -138,9 +147,14 @@ export default function CompletePropertyManagement({
       updateMergedState();
     });
 
+    const unsubTenants = onSnapshot(qTenants, (snap: any) => {
+      setTenants(snap.docs.map((d: any) => ({ id: d.id, ...d.data() })));
+    });
+
     return () => {
       unsubProps();
       unsubAnalytics();
+      unsubTenants();
     };
   }, [currentUserUid]);
 
@@ -187,7 +201,18 @@ export default function CompletePropertyManagement({
       title: '', price: 0, status: 'available', images: [], 
       location: { country: 'Somalia', city: 'Hargeisa', area: '', address: '' }, 
       propertyType: 'House', isForSale: false, isArchived: false,
-      description: '', features: {}, agentId: currentUserUid
+      hasDiscount: false, discountPrice: 0, videoUrl: '',
+      description: '', agentId: currentUserUid,
+      features: {
+        size: 0, bedrooms: 0, bathrooms: 0, floorLevel: 0, rooms: 0,
+        isFurnished: false, hasBalcony: false, hasGarden: false, hasPool: false,
+        isSingleFloor: false, hasPorch: false, hasKitchenette: false, hasGate: false,
+        waterAvailable: false, hasParking: false, kitchenIncluded: false, openPlan: false,
+        hasLaundry: false, hasMeetingRoom: false, hasInternet: false, hasFence: false,
+        hasShopfront: false, hasStorage: false, hasRestroom: false, hasAirConditioning: false,
+        hasFoodCourt: false, hasSecurity: false, hasElevators: false, hasStage: false,
+        roadAccess: 'Paved'
+      }
     });
     setFormImages([]);
     setExistingImages(prop?.images || []);
@@ -257,6 +282,29 @@ export default function CompletePropertyManagement({
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const toggleFeature = (key: string) => {
+    if (!editingProp || !isPro) return;
+    setEditingProp({
+      ...editingProp,
+      features: { ...editingProp.features, [key]: !editingProp.features[key] }
+    });
+  };
+
+  const FeatureChip = ({ label, featureKey }: { label: string, featureKey: string }) => {
+    const isSelected = editingProp?.features?.[featureKey] || false;
+    return (
+      <button
+        type="button"
+        onClick={() => toggleFeature(featureKey)}
+        className={`px-4 py-2 rounded-xl text-sm font-bold border transition-colors ${
+          isSelected ? 'bg-blue-50 border-blue-200 text-[#0065eb]' : 'bg-slate-50 border-transparent text-slate-500 hover:bg-slate-100'
+        }`}
+      >
+        {label}
+      </button>
+    );
   };
 
   const filteredProperties = properties.filter(p => {
@@ -370,7 +418,6 @@ export default function CompletePropertyManagement({
                     <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-md uppercase">{prop.isForSale ? 'Sale' : 'Rent'}</span>
                   </div>
 
-                  {/* Tenant Info (If Rented/Assigned) */}
                   {!prop.isForSale && prop.tenantName && (
                     <div className="mb-4 p-3 bg-blue-50/50 rounded-xl border border-blue-100 flex items-center justify-between">
                       <div>
@@ -385,7 +432,6 @@ export default function CompletePropertyManagement({
                     </div>
                   )}
 
-                  {/* Actions */}
                   <div className="flex flex-wrap pt-4 border-t border-slate-50 gap-2">
                     <button onClick={() => openForm(prop)} className="flex-1 min-w-[80px] flex justify-center items-center gap-1.5 p-2 bg-blue-50/50 text-blue-600 rounded-xl hover:bg-blue-50 transition-colors">
                       <Edit3 size={14}/> <span className="text-xs font-bold">Edit</span>
@@ -454,8 +500,11 @@ export default function CompletePropertyManagement({
   const renderForm = () => {
     if (!editingProp) return null;
     
-    const isResidential = ['House', 'Apartment', 'Villa'].includes(editingProp.propertyType);
-    const isCommercial = ['Office', 'Business', 'Mall'].includes(editingProp.propertyType);
+    const isResidential = ['House', 'Apartment', 'Villa', 'Bungalow'].includes(editingProp.propertyType);
+    const isStudio = editingProp.propertyType === 'Studio';
+    const isCommercial = ['Office', 'Business', 'Mall', 'Building'].includes(editingProp.propertyType);
+    const isLand = editingProp.propertyType === 'Land';
+    const isHall = editingProp.propertyType === 'Hall';
 
     return (
       <div className="max-w-4xl mx-auto space-y-6 animate-in slide-in-from-right-8 duration-300">
@@ -467,9 +516,20 @@ export default function CompletePropertyManagement({
         <form onSubmit={saveProperty} className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8 space-y-8">
           <div className="flex justify-between items-center border-b border-slate-50 pb-6">
             <h2 className="text-2xl font-black text-slate-900">{editingProp.id ? 'Edit Property' : 'Add New Property'}</h2>
-            <button type="submit" disabled={isSaving} className="bg-[#0065eb] disabled:opacity-50 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg shadow-blue-500/20 hover:bg-[#0052c1] flex items-center gap-2">
-              {isSaving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />} Save Property
-            </button>
+            <div className="flex items-center gap-3">
+              {editingProp.id && (
+                <button 
+                  type="button" 
+                  onClick={() => setEditingProp({...editingProp, isArchived: !editingProp.isArchived})} 
+                  className={`px-4 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors ${editingProp.isArchived ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                >
+                  <Archive size={16} /> {editingProp.isArchived ? 'Unarchive' : 'Archive'}
+                </button>
+              )}
+              <button type="submit" disabled={isSaving} className="bg-[#0065eb] disabled:opacity-50 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg shadow-blue-500/20 hover:bg-[#0052c1] flex items-center gap-2">
+                {isSaving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />} Save Property
+              </button>
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -496,27 +556,6 @@ export default function CompletePropertyManagement({
                   {PROPERTY_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                 </select>
               </div>
-
-              {/* Read-Only Tenant Assignment Info */}
-              {!editingProp.isForSale && editingProp.tenantName && (
-                <div className="md:col-span-2 bg-emerald-50 border border-emerald-100 p-4 rounded-xl flex justify-between items-center mt-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-emerald-600 font-black shadow-sm">
-                      {editingProp.tenantName.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-0.5">Currently Assigned Tenant</p>
-                      <p className="font-bold text-slate-900">{editingProp.tenantName}</p>
-                    </div>
-                  </div>
-                  {editingProp.tenantPhone && (
-                    <div className="text-right">
-                      <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-0.5">Contact</p>
-                      <p className="text-sm font-bold text-slate-900">{editingProp.tenantPhone}</p>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           </div>
 
@@ -626,35 +665,96 @@ export default function CompletePropertyManagement({
             </div>
           </div>
 
+          {!editingProp.isForSale && (
+            <div className="space-y-4">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2"><Users size={18} className="text-indigo-500"/> Tenant Assignment</h3>
+              <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-3">Assign to Existing Tenant</label>
+                {isPro ? (
+                  <div className="flex flex-col md:flex-row gap-4">
+                    <div className="flex-1 relative">
+                      <Users className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                      <select 
+                        value={editingProp.tenantId || ''} 
+                        onChange={e => {
+                          const tId = e.target.value;
+                          const selectedTenant = tenants.find(t => t.id === tId);
+                          setEditingProp({
+                            ...editingProp, 
+                            tenantId: tId || undefined, 
+                            tenantName: selectedTenant?.name, 
+                            tenantPhone: selectedTenant?.phone
+                          });
+                        }}
+                        className="w-full bg-white border border-slate-200 rounded-xl pl-12 pr-4 py-3.5 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-[#0065eb] appearance-none"
+                      >
+                        <option value="">-- No Tenant Assigned --</option>
+                        {tenants.map(t => (
+                          <option key={t.id} value={t.id}>{t.name} ({t.phone})</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button type="button" onClick={() => alert("Please navigate to the 'Tenants' tab on your dashboard to create a new tenant profile.")} className="px-6 py-3.5 bg-indigo-50 text-indigo-600 font-bold text-sm rounded-xl hover:bg-indigo-100 transition-colors whitespace-nowrap">
+                      + Add New Tenant
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between bg-white border border-slate-200 rounded-xl p-4">
+                    <div className="flex items-center gap-3 text-slate-400">
+                      <Lock size={18}/>
+                      <span className="font-bold text-sm">Upgrade to Pro to manage tenants</span>
+                    </div>
+                    <button type="button" onClick={onUpgrade} className="px-4 py-2 bg-[#0065eb] text-white rounded-lg text-xs font-bold shadow-md hover:scale-105 transition-transform">Upgrade</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-4">
             <h3 className="font-bold text-slate-900 flex items-center gap-2"><ImageIcon size={18} className="text-purple-500"/> Media</h3>
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {existingImages.map((img, i) => (
-                <div key={i} className="relative h-24 rounded-xl overflow-hidden group">
+                <div key={i} className="relative h-24 rounded-xl overflow-hidden group border border-slate-200">
                   <Image src={img} alt="Property" fill className="object-cover" />
-                  <button type="button" onClick={() => setExistingImages(prev => prev.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"><X size={14}/></button>
+                  <button type="button" onClick={() => setExistingImages(prev => prev.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 bg-black/60 backdrop-blur-sm text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-500"><X size={14}/></button>
                 </div>
               ))}
               {formImages.map((file, i) => (
-                <div key={i} className="relative h-24 rounded-xl overflow-hidden group">
+                <div key={i} className="relative h-24 rounded-xl overflow-hidden group border border-slate-200">
                   <Image src={URL.createObjectURL(file)} alt="New" fill className="object-cover" />
-                  <button type="button" onClick={() => setFormImages(prev => prev.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"><X size={14}/></button>
+                  <button type="button" onClick={() => setFormImages(prev => prev.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 bg-black/60 backdrop-blur-sm text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-500"><X size={14}/></button>
                 </div>
               ))}
               
-              <button type="button" onClick={() => fileInputRef.current?.click()} className="h-24 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center text-slate-400 hover:text-blue-500 hover:border-blue-500 hover:bg-blue-50 transition-colors">
-                <Upload size={20} className="mb-1" />
-                <span className="text-xs font-bold">Upload</span>
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="h-24 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center text-slate-400 hover:text-[#0065eb] hover:border-[#0065eb] hover:bg-blue-50 transition-colors">
+                <Upload size={20} className="mb-2" />
+                <span className="text-xs font-bold">Upload Photos</span>
               </button>
               <input type="file" hidden multiple accept="image/*" ref={fileInputRef} onChange={handleImageUpload} />
             </div>
             {!isPro && <p className="text-xs text-rose-500 font-bold">Free Plan Limit: 1 Image Max.</p>}
+
+            <div className="mt-4">
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Video Tour URL</label>
+              {isPro ? (
+                <div className="relative">
+                  <Video className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input type="text" value={editingProp.videoUrl || ''} onChange={e => setEditingProp({...editingProp, videoUrl: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl pl-10 pr-4 py-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500" placeholder="YouTube, TikTok, or MP4 link" />
+                </div>
+              ) : (
+                <div className="relative opacity-60">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input type="text" disabled className="w-full bg-slate-100 border-none rounded-xl pl-10 pr-4 py-3 text-sm font-medium outline-none cursor-not-allowed" placeholder="Upgrade to PRO to embed video tours" />
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="space-y-4">
             <h3 className="font-bold text-slate-900">Description & Details</h3>
-            <textarea required value={editingProp.description} onChange={e => setEditingProp({...editingProp, description: e.target.value})} rows={5} maxLength={isPro ? 5000 : 100} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500 resize-none" placeholder="Describe the property..."></textarea>
+            <textarea required value={editingProp.description} onChange={e => setEditingProp({...editingProp, description: e.target.value})} rows={5} maxLength={isPro ? 5000 : 100} className="w-full bg-slate-50 border-none rounded-xl p-4 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500 resize-none leading-relaxed" placeholder="Describe the property..."></textarea>
             <div className="flex justify-end">
               <span className={`text-xs font-bold ${!isPro && editingProp.description.length >= 100 ? 'text-rose-500' : 'text-slate-400'}`}>
                 {editingProp.description.length} / {isPro ? 'Unlimited' : '100 (Free Plan)'}
@@ -666,7 +766,8 @@ export default function CompletePropertyManagement({
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Size (m²)</label>
                 <input type="number" value={editingProp.features.size || ''} onChange={e => setEditingProp({...editingProp, features: {...editingProp.features, size: Number(e.target.value)}})} className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none" placeholder="0" />
               </div>
-              {isResidential && (
+              
+              {isResidential || isStudio ? (
                 <>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Bedrooms</label>
@@ -676,16 +777,153 @@ export default function CompletePropertyManagement({
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Bathrooms</label>
                     <input type="number" value={editingProp.features.bathrooms || ''} onChange={e => setEditingProp({...editingProp, features: {...editingProp.features, bathrooms: Number(e.target.value)}})} className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none" placeholder="0" />
                   </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Rooms/Units</label>
+                    <input type="number" value={editingProp.features.rooms || ''} onChange={e => setEditingProp({...editingProp, features: {...editingProp.features, rooms: Number(e.target.value)}})} className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none" placeholder="0" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Floor Level</label>
+                    <input type="number" value={editingProp.features.floorLevel || ''} onChange={e => setEditingProp({...editingProp, features: {...editingProp.features, floorLevel: Number(e.target.value)}})} className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none" placeholder="Ground = 0" />
+                  </div>
+                </>
+              ) : null}
+
+              {isCommercial && (
+                <>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Total Floors</label>
+                    <input type="number" value={editingProp.features.floors || ''} onChange={e => setEditingProp({...editingProp, features: {...editingProp.features, floors: Number(e.target.value)}})} className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none" placeholder="0" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Shop Count</label>
+                    <input type="number" value={editingProp.features.shopCount || ''} onChange={e => setEditingProp({...editingProp, features: {...editingProp.features, shopCount: Number(e.target.value)}})} className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none" placeholder="0" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Workspace (m²)</label>
+                    <input type="number" value={editingProp.features.workspaceArea || ''} onChange={e => setEditingProp({...editingProp, features: {...editingProp.features, workspaceArea: Number(e.target.value)}})} className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none" placeholder="0" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Floor Level</label>
+                    <input type="number" value={editingProp.features.floorLevel || ''} onChange={e => setEditingProp({...editingProp, features: {...editingProp.features, floorLevel: Number(e.target.value)}})} className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none" placeholder="Ground = 0" />
+                  </div>
                 </>
               )}
-              {isCommercial && (
+
+              {isHall && (
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Floors</label>
-                  <input type="number" value={editingProp.features.floors || ''} onChange={e => setEditingProp({...editingProp, features: {...editingProp.features, floors: Number(e.target.value)}})} className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none" placeholder="0" />
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Seating Capacity</label>
+                  <input type="number" value={editingProp.features.seatingCapacity || ''} onChange={e => setEditingProp({...editingProp, features: {...editingProp.features, seatingCapacity: Number(e.target.value)}})} className="w-full bg-slate-50 rounded-xl p-3 text-sm font-bold outline-none" placeholder="0" />
+                </div>
+              )}
+
+              {(isCommercial || isLand) && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Road Access</label>
+                  <select value={editingProp.features.roadAccess || 'Paved'} onChange={e => setEditingProp({...editingProp, features: {...editingProp.features, roadAccess: e.target.value}})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold outline-none cursor-pointer">
+                    <option value="Paved">Paved</option>
+                    <option value="Gravel">Gravel</option>
+                    <option value="Dirt">Dirt</option>
+                  </select>
                 </div>
               )}
             </div>
           </div>
+
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2"><Tag size={18} className="text-teal-500"/> Features & Amenities</h3>
+              {!isPro && <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-1 rounded-md font-black uppercase flex items-center gap-1"><Lock size={10}/> Pro Feature</span>}
+            </div>
+            
+            <div className={`flex flex-wrap gap-2 p-6 rounded-2xl border ${isPro ? 'bg-white border-slate-100' : 'bg-slate-50 border-slate-200 opacity-60 pointer-events-none'}`}>
+              {isResidential && (
+                <>
+                  <FeatureChip label="Furnished" featureKey="isFurnished" />
+                  <FeatureChip label="Balcony" featureKey="hasBalcony" />
+                  <FeatureChip label="Garden" featureKey="hasGarden" />
+                  <FeatureChip label="Pool" featureKey="hasPool" />
+                  <FeatureChip label="Single Floor" featureKey="isSingleFloor" />
+                  <FeatureChip label="Porch" featureKey="hasPorch" />
+                  <FeatureChip label="Kitchenette" featureKey="hasKitchenette" />
+                  <FeatureChip label="Gate" featureKey="hasGate" />
+                  <FeatureChip label="Water Available" featureKey="waterAvailable" />
+                  <FeatureChip label="Parking" featureKey="hasParking" />
+                </>
+              )}
+              {isStudio && (
+                <>
+                  <FeatureChip label="Furnished" featureKey="isFurnished" />
+                  <FeatureChip label="Kitchen Included" featureKey="kitchenIncluded" />
+                  <FeatureChip label="Open Plan" featureKey="openPlan" />
+                  <FeatureChip label="Balcony" featureKey="hasBalcony" />
+                  <FeatureChip label="AC" featureKey="hasAirConditioning" />
+                  <FeatureChip label="WiFi" featureKey="hasInternet" />
+                  <FeatureChip label="Water Available" featureKey="waterAvailable" />
+                  <FeatureChip label="Security Gate" featureKey="hasGate" />
+                  <FeatureChip label="Elevator" featureKey="hasElevators" />
+                  <FeatureChip label="Laundry" featureKey="hasLaundry" />
+                  <FeatureChip label="Parking" featureKey="hasParking" />
+                </>
+              )}
+              {isCommercial && (
+                <>
+                  <FeatureChip label="Meeting Room" featureKey="hasMeetingRoom" />
+                  <FeatureChip label="Internet" featureKey="hasInternet" />
+                  <FeatureChip label="Parking" featureKey="hasParking" />
+                  <FeatureChip label="Fence" featureKey="hasFence" />
+                  <FeatureChip label="Shopfront" featureKey="hasShopfront" />
+                  <FeatureChip label="Storage" featureKey="hasStorage" />
+                  <FeatureChip label="Restroom" featureKey="hasRestroom" />
+                  <FeatureChip label="AC" featureKey="hasAirConditioning" />
+                  <FeatureChip label="Food Court" featureKey="hasFoodCourt" />
+                  <FeatureChip label="Security" featureKey="hasSecurity" />
+                  <FeatureChip label="Elevators" featureKey="hasElevators" />
+                </>
+              )}
+              {isLand && (
+                <>
+                  <FeatureChip label="Fence" featureKey="hasFence" />
+                  <FeatureChip label="Water Available" featureKey="waterAvailable" />
+                </>
+              )}
+              {isHall && (
+                <>
+                  <FeatureChip label="Stage" featureKey="hasStage" />
+                  <FeatureChip label="AC" featureKey="hasAirConditioning" />
+                  <FeatureChip label="Parking" featureKey="hasParking" />
+                  <FeatureChip label="Restroom" featureKey="hasRestroom" />
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <h3 className="font-bold text-slate-900 flex items-center gap-2"><Percent size={18} className="text-rose-500"/> Pricing & Promotion</h3>
+            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-bold text-sm text-slate-900">Enable Discount Pricing</p>
+                  <p className="text-xs text-slate-500 font-medium">Show a crossed-out original price to attract buyers.</p>
+                </div>
+                {isPro ? (
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={editingProp.hasDiscount || false} onChange={e => setEditingProp({...editingProp, hasDiscount: e.target.checked})} />
+                    <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-500"></div>
+                  </label>
+                ) : (
+                  <Lock size={16} className="text-slate-400" />
+                )}
+              </div>
+              
+              {editingProp.hasDiscount && isPro && (
+                <div className="pt-4 border-t border-slate-200 animate-in fade-in">
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Discounted Amount ($)</label>
+                  <input type="number" value={editingProp.discountPrice || ''} onChange={e => setEditingProp({...editingProp, discountPrice: Number(e.target.value)})} className="w-full md:w-1/2 bg-white border border-slate-200 rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-500" placeholder="e.g. 450" />
+                </div>
+              )}
+            </div>
+          </div>
+
         </form>
       </div>
     );
