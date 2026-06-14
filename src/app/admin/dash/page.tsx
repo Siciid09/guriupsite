@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { 
   Users, Building, Home, Briefcase, Search, ShieldCheck, 
   Ban, Loader2, Star, TrendingUp, Phone, MessageCircle, 
-  Globe, Info, X, LayoutDashboard, Database, Activity, MapPin
+  Globe, Info, X, LayoutDashboard, Database, Activity, MapPin, Video
 } from 'lucide-react';
 import { db } from '@/app/lib/firebase'; // Adjust path if needed
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
@@ -346,12 +346,21 @@ export default function AdminDashboard() {
             onChange={(e) => setSearchTerm(e.target.value)} 
           />
         </div>
-        <button 
-          onClick={() => fetchListData(activeTab)} 
-          className="bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-bold hover:bg-black hover:shadow-lg transition-all flex items-center gap-2 w-full sm:w-auto justify-center"
-        >
-          <Activity size={16}/> Refresh Data
-        </button>
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+          <button 
+            onClick={() => router.push('/admin/add-video')} 
+            className="bg-[#0065eb] text-white px-6 py-3 rounded-2xl text-sm font-bold hover:bg-[#0052c1] shadow-lg shadow-blue-500/25 transition-all flex items-center gap-2 w-full sm:w-auto justify-center"
+          >
+            <Video size={16}/> Add Video
+          </button>
+          
+          <button 
+            onClick={() => fetchListData(activeTab)} 
+            className="bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-bold hover:bg-black hover:shadow-lg transition-all flex items-center gap-2 w-full sm:w-auto justify-center"
+          >
+            <Activity size={16}/> Refresh Data
+          </button>
+        </div>
       </header>
 
       {/* --- MAIN LIST CONTENT --- */}
