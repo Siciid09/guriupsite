@@ -1,5 +1,5 @@
 import React from 'react';
-import EcosystemCard from '@/components/EcosystemCard'; // Your glassmorphism component
+import EcosystemCard from '../../../components/EcosystemCard.tsx'; // Your glassmorphism component
 import type { Metadata } from 'next';
 
 // 1. THIS IS THE CORRECT WAY FOR SEO IN ONE PAGE (Next.js App Router)
