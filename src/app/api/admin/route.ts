@@ -157,6 +157,21 @@ export async function PATCH(request: Request) {
     // Use Admin SDK update
     await docRef.update(updateData);
 
+    // ✅ ADDED: Save to subscription_history collection for the Flutter app
+    if (action === 'promote_plan') {
+      const isFree = payload.plan === 'free';
+      await adminDb.collection('subscription_history').add({
+        userId: resourceId,
+        planTier: payload.plan || 'pro',
+        status: isFree ? 'expired' : 'active',
+        startDate: new Date(),
+        expiryDate: payload.expiryDate ? new Date(payload.expiryDate) : null,
+        amountPaid: 0.00,
+        paymentMethod: 'Admin Override',
+        createdAt: new Date()
+      });
+    }
+
     // 3. --- SMART CASCADE SYNC (FLUTTER APP COMPATIBILITY) ---
     // If we update an AGENT -> Update all their PROPERTIES
     if (resourceType === 'agent' || resourceType === 'user') {
