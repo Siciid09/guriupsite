@@ -210,6 +210,24 @@ export async function PATCH(request: Request) {
         }
     }
 
+    // If we update a HOTEL directly -> Reverse-sync the owner's user profile
+    if (resourceType === 'hotel') {
+        const isPro = updateData.planTier && updateData.planTier !== 'free';
+        
+        // 1. Get the hotel document to find the owner
+        const hotelDoc = await docRef.get();
+        // Fallback check for ownerId just in case of legacy hotel records
+        const ownerId = hotelDoc.data()?.hotelAdminId || hotelDoc.data()?.ownerId; 
+        
+        // 2. Upgrade the owner's user profile
+        if (ownerId) {
+            await adminDb.collection('users').doc(ownerId).update({
+                planTier: updateData.planTier || 'free',
+                isVerified: isPro
+            });
+        }
+    }
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("Admin PATCH Error:", error);

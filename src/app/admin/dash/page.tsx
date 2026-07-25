@@ -108,11 +108,18 @@ export default function AdminDashboard() {
   const [statsLoading, setStatsLoading] = useState(false);
   
   // Chat State
-  const [chatConfig, setChatConfig] = useState({ isOpen: false, recipientId: '', recipientName: '' });
+const [chatConfig, setChatConfig] = useState({ isOpen: false, recipientId: '', recipientName: '' });
 
-  // Pro Plan Modal State
-  const [planModal, setPlanModal] = useState<{isOpen: boolean, item: any}>({isOpen: false, item: null});
-  const [expiryDate, setExpiryDate] = useState('');
+// Pro Plan Modal State
+const [planModal, setPlanModal] = useState<{isOpen: boolean, item: any}>({isOpen: false, item: null});
+const [expiryDate, setExpiryDate] = useState('');
+
+const resourceTypeMap: Record<TabType, string> = {
+  users: 'user',
+  agents: 'agent',
+  hotels: 'hotel',
+  properties: 'property',
+};
 
   // ------------------------------------------
   // SECURITY GUARD: SADMIN CHECK
@@ -441,7 +448,7 @@ export default function AdminDashboard() {
                     <button 
                       onClick={() => {
                         if (item.planTier === 'pro') {
-                          handleAction(item.id, activeTab.slice(0,-1), 'promote_plan', {plan: 'free'}); // Revoke instantly
+                          handleAction(item.id, resourceTypeMap[activeTab], 'promote_plan', {plan: 'free'}); // Revoke instantly
                         } else {
                           setPlanModal({isOpen: true, item}); // Open Expiry Date Modal
                         }
@@ -453,7 +460,7 @@ export default function AdminDashboard() {
                       {item.planTier === 'pro' ? 'Revoke Pro' : 'Grant Pro'}
                     </button>
                     <button 
-                      onClick={() => handleAction(item.id, activeTab.slice(0,-1), item.status === 'banned' ? 'unban' : 'ban')} 
+                      onClick={() => handleAction(item.id, resourceTypeMap[activeTab], item.status === 'banned' ? 'unban' : 'ban')} 
                       className={`${item.status === 'banned' ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-red-50 text-red-600 hover:bg-red-100'} py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all`}
                     >
                       {item.status === 'banned' ? 'Unban' : 'Ban Entity'}
@@ -602,7 +609,7 @@ export default function AdminDashboard() {
               <button 
                 onClick={() => {
                   if (!expiryDate) return;
-                  handleAction(planModal.item.id, activeTab.slice(0,-1), 'promote_plan', {plan: 'pro', expiryDate});
+                  handleAction(planModal.item.id, resourceTypeMap[activeTab], 'promote_plan', {plan: 'pro', expiryDate});
                   setPlanModal({isOpen: false, item: null});
                   setExpiryDate('');
                 }} 
