@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import Image from 'next/image';
 import { auth, storage } from '@/app/lib/firebase';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
   Utensils, ChefHat, Plus, Edit3, Trash2, X, Clock, 
   CheckCircle, Loader2, Image as ImageIcon, Store,
@@ -17,10 +16,17 @@ interface Restaurant {
   name: string;
   description: string;
   cuisineType: string;
+  restaurantType?: string;
   priceLevel: string;
   images: string[];
-  openHour: number;
-  closeHour: number;
+  openHour: number | null;
+  closeHour: number | null;
+  standardHours?: string;
+  internalLocation?: string;
+  roomExtension?: string;
+  offersRoomService?: boolean;
+  requiresBooking?: boolean;
+  tableCapacity?: number | null;
   status: string;
 }
 
@@ -30,10 +36,12 @@ interface MenuItem {
   restaurantId: string;
   name: string;
   description: string;
-  price: number;
+  price: number | null;
   category: string;
   imageUrl: string;
   isAvailable: boolean;
+  prepTimeMinutes?: number | null;
+  dietaryTags?: string[];
 }
 
 interface Order {
@@ -74,20 +82,26 @@ export default function RestaurantManagement({ hotelId }: { hotelId: string }) {
       const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
       const headers = { 'Authorization': `Bearer ${idToken}` };
 
-      // 1. Fetch Restaurants
-      const res1 = await fetch(`/api/restaurants?hotelId=${hotelId}`, { headers });
-      const rests = await res1.json();
-      setRestaurants(Array.isArray(rests) ? rests : []);
+      const [res1, res2, res3] = await Promise.all([
+        fetch(`/api/restaurants?hotelId=${hotelId}`, { headers }).catch(() => null),
+        fetch(`/api/restaurants?entity=menu_item&hotelId=${hotelId}`, { headers }).catch(() => null),
+        fetch(`/api/bookings?type=food_orders&hotelId=${hotelId}`, { headers }).catch(() => null)
+      ]);
 
-      // 2. Fetch Menu Items
-      const res2 = await fetch(`/api/restaurants?entity=menu_item&hotelId=${hotelId}`, { headers });
-      const menus = await res2.json();
-      setMenuItems(Array.isArray(menus) ? menus : []);
-
-      // 3. Fetch Live Orders
-      const res3 = await fetch(`/api/bookings?type=food_orders&hotelId=${hotelId}`, { headers });
-      const ords = await res3.json();
-      setOrders(Array.isArray(ords) ? ords : []);
+      if (res1 && res1.ok) {
+        const rests = await res1.json();
+        setRestaurants(Array.isArray(rests) ? rests : []);
+      }
+      
+      if (res2 && res2.ok) {
+        const menus = await res2.json();
+        setMenuItems(Array.isArray(menus) ? menus : []);
+      }
+      
+      if (res3 && res3.ok) {
+        const ords = await res3.json();
+        setOrders(Array.isArray(ords) ? ords : []);
+      }
 
     } catch (error) {
       console.error("Error fetching dining data:", error);
@@ -98,10 +112,9 @@ export default function RestaurantManagement({ hotelId }: { hotelId: string }) {
 
   useEffect(() => {
     fetchData();
-    // Setup simple polling for Kitchen Display System if on orders tab
     let interval: NodeJS.Timeout;
     if (activeTab === 'live_orders') {
-      interval = setInterval(fetchData, 15000); // Check for new orders every 15s
+      interval = setInterval(fetchData, 15000); 
     }
     return () => clearInterval(interval);
   }, [hotelId, activeTab]);
@@ -122,7 +135,7 @@ export default function RestaurantManagement({ hotelId }: { hotelId: string }) {
       }
 
       const payload = { ...editingRest, hotelId, images: imageUrls, entity: 'restaurant' };
-      const method = editingRest.id ? 'PATCH' : 'POST';
+      const method = editingRest.id || editingRest._id ? 'PATCH' : 'POST';
 
       const res = await fetch('/api/restaurants', {
         method,
@@ -156,7 +169,7 @@ export default function RestaurantManagement({ hotelId }: { hotelId: string }) {
       }
 
       const payload = { ...editingMenu, hotelId, imageUrl, entity: 'menu_item' };
-      const method = editingMenu.id ? 'PATCH' : 'POST';
+      const method = editingMenu.id || editingMenu._id ? 'PATCH' : 'POST';
 
       const res = await fetch('/api/restaurants', {
         method,
@@ -204,13 +217,22 @@ export default function RestaurantManagement({ hotelId }: { hotelId: string }) {
   };
 
   const openRestModal = (rest?: Restaurant) => {
-    setEditingRest(rest || { name: '', description: '', cuisineType: 'Multicuisine', priceLevel: '$$', images: [], openHour: 6, closeHour: 23, status: 'active' });
+    setEditingRest(rest || { 
+      name: '', description: '', cuisineType: 'Multicuisine', priceLevel: '$$', 
+      images: [], openHour: 6, closeHour: 23, status: 'active',
+      standardHours: '08:00 AM - 11:00 PM', internalLocation: '', roomExtension: '',
+      offersRoomService: false, requiresBooking: false, tableCapacity: 0 
+    });
     setUploadFile(null);
     setIsRestModalOpen(true);
   };
 
   const openMenuModal = (item?: MenuItem) => {
-    setEditingMenu(item || { restaurantId: restaurants[0]?.id || restaurants[0]?._id || '', name: '', description: '', price: 0, category: 'Main Course', imageUrl: '', isAvailable: true });
+    setEditingMenu(item || { 
+      restaurantId: restaurants[0]?.id || restaurants[0]?._id || '', 
+      name: '', description: '', price: null, category: 'Mains', imageUrl: '', 
+      isAvailable: true, prepTimeMinutes: null, dietaryTags: []
+    });
     setUploadFile(null);
     setIsMenuModalOpen(true);
   };
@@ -253,8 +275,8 @@ export default function RestaurantManagement({ hotelId }: { hotelId: string }) {
               {restaurants.map(rest => (
                 <div key={rest.id || rest._id} className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden group">
                   <div className="h-40 relative bg-slate-200">
-                    <Image src={rest.images?.[0] || 'https://placehold.co/600x400'} alt="" fill className="object-cover group-hover:scale-105 transition-transform duration-700" />
-                    <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-lg text-[10px] font-black uppercase text-green-600 shadow-sm flex items-center gap-1"><CheckCircle size={12}/> Active</div>
+                    <img src={rest.images?.[0] || 'https://placehold.co/600x400'} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                    <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-lg text-[10px] font-black uppercase text-green-600 shadow-sm flex items-center gap-1"><CheckCircle size={12}/> {rest.status}</div>
                   </div>
                   <div className="p-6">
                     <h3 className="text-xl font-black text-slate-900 mb-1">{rest.name}</h3>
@@ -290,7 +312,7 @@ export default function RestaurantManagement({ hotelId }: { hotelId: string }) {
               return (
                 <div key={item.id || item._id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4 group hover:border-blue-200 transition-all">
                   <div className="w-20 h-20 bg-slate-100 rounded-xl relative overflow-hidden shrink-0">
-                    <Image src={item.imageUrl || 'https://placehold.co/200x200'} alt="" fill className="object-cover" />
+                    <img src={item.imageUrl || 'https://placehold.co/200x200'} alt="" className="w-full h-full object-cover" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
@@ -313,7 +335,7 @@ export default function RestaurantManagement({ hotelId }: { hotelId: string }) {
         </div>
       )}
 
-      {/* ================= TAB 3: LIVE KITCHEN DISPLAY (KDS) ================= */}
+      {/* ================= TAB 3: LIVE KITCHEN DISPLAY ================= */}
       {activeTab === 'live_orders' && (
         <div className="space-y-6 animate-in slide-in-from-bottom-4">
           <div className="flex justify-between items-center bg-orange-50 border border-orange-200 p-4 rounded-[1.5rem]">
@@ -348,7 +370,8 @@ export default function RestaurantManagement({ hotelId }: { hotelId: string }) {
                   </div>
                   <div className="text-right">
                     <p className="text-2xl font-black text-[#0065eb]">${order.totalAmount}</p>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1"><Clock size={10} className="inline"/> {new Date(order.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                    {/* Time rendering protected against invalid dates causing hydration mismatch */}
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1"><Clock size={10} className="inline"/> {order.createdAt ? new Date(order.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Just now'}</p>
                   </div>
                 </div>
 
@@ -390,33 +413,53 @@ export default function RestaurantManagement({ hotelId }: { hotelId: string }) {
         </div>
       )}
 
-      {/* ================= MODALS ================= */}
-
-      {/* Restaurant Modal */}
+      {/* ================= RESTAURANT MODAL ================= */}
       {isRestModalOpen && editingRest && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsRestModalOpen(false)}></div>
           <div className="bg-white rounded-[2.5rem] w-full max-w-lg relative z-10 shadow-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-[2.5rem] z-20">
-              <h2 className="text-xl font-black">{editingRest.id ? 'Edit Restaurant' : 'New Restaurant'}</h2>
+              <h2 className="text-xl font-black">{(editingRest.id || editingRest._id) ? 'Edit Restaurant' : 'New Restaurant'}</h2>
               <button onClick={() => setIsRestModalOpen(false)} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200"><X size={20}/></button>
             </div>
             <form onSubmit={saveRestaurant} className="p-6 overflow-y-auto custom-scrollbar space-y-4">
               <div><label className="text-[10px] font-black uppercase text-slate-400">Name</label><input required type="text" value={editingRest.name} onChange={e=>setEditingRest({...editingRest, name: e.target.value})} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" /></div>
               <div><label className="text-[10px] font-black uppercase text-slate-400">Description</label><textarea required value={editingRest.description} onChange={e=>setEditingRest({...editingRest, description: e.target.value})} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" rows={3} /></div>
+              
               <div className="grid grid-cols-2 gap-4">
                 <div><label className="text-[10px] font-black uppercase text-slate-400">Cuisine</label><input required type="text" value={editingRest.cuisineType} onChange={e=>setEditingRest({...editingRest, cuisineType: e.target.value})} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" /></div>
                 <div><label className="text-[10px] font-black uppercase text-slate-400">Price ($ - $$$$)</label><select value={editingRest.priceLevel} onChange={e=>setEditingRest({...editingRest, priceLevel: e.target.value})} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]"><option>$</option><option>$$</option><option>$$$</option><option>$$$$</option></select></div>
               </div>
+
+              {/* 🛡️ Strict NaN protection on all number fields */}
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-[10px] font-black uppercase text-slate-400">Open Hour (0-23)</label><input type="number" min="0" max="23" value={editingRest.openHour} onChange={e=>setEditingRest({...editingRest, openHour: parseInt(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" /></div>
-                <div><label className="text-[10px] font-black uppercase text-slate-400">Close Hour (0-23)</label><input type="number" min="0" max="23" value={editingRest.closeHour} onChange={e=>setEditingRest({...editingRest, closeHour: parseInt(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" /></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Open Hour (0-23)</label><input type="number" min="0" max="23" value={editingRest.openHour ?? ''} onChange={e=>setEditingRest({...editingRest, openHour: parseInt(e.target.value) || 0})} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" /></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Close Hour (0-23)</label><input type="number" min="0" max="23" value={editingRest.closeHour ?? ''} onChange={e=>setEditingRest({...editingRest, closeHour: parseInt(e.target.value) || 0})} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" /></div>
               </div>
+
+              {/* Added Context Fields from Mobile Specs */}
+              <div><label className="text-[10px] font-black uppercase text-slate-400">Standard Hours Text</label><input type="text" placeholder="e.g. 08:00 AM - 11:00 PM" value={editingRest.standardHours ?? ''} onChange={e=>setEditingRest({...editingRest, standardHours: e.target.value})} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" /></div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                 <div><label className="text-[10px] font-black uppercase text-slate-400">Internal Location</label><input type="text" placeholder="e.g. Ground Floor" value={editingRest.internalLocation ?? ''} onChange={e=>setEditingRest({...editingRest, internalLocation: e.target.value})} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" /></div>
+                 <div><label className="text-[10px] font-black uppercase text-slate-400">Phone Extension</label><input type="text" placeholder="e.g. 999" value={editingRest.roomExtension ?? ''} onChange={e=>setEditingRest({...editingRest, roomExtension: e.target.value})} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" /></div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                 <label className="flex items-center gap-3 cursor-pointer p-4 bg-slate-50 rounded-xl border border-slate-100"><input type="checkbox" checked={editingRest.offersRoomService ?? false} onChange={e=>setEditingRest({...editingRest, offersRoomService: e.target.checked})} className="w-4 h-4 rounded text-[#0065eb] focus:ring-[#0065eb]" /><span className="font-bold text-xs">Room Service</span></label>
+                 <label className="flex items-center gap-3 cursor-pointer p-4 bg-slate-50 rounded-xl border border-slate-100"><input type="checkbox" checked={editingRest.requiresBooking ?? false} onChange={e=>setEditingRest({...editingRest, requiresBooking: e.target.checked})} className="w-4 h-4 rounded text-[#0065eb] focus:ring-[#0065eb]" /><span className="font-bold text-xs">Requires Booking</span></label>
+              </div>
+
+              {editingRest.requiresBooking && (
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Table Capacity</label><input type="number" min="0" value={editingRest.tableCapacity ?? ''} onChange={e=>setEditingRest({...editingRest, tableCapacity: parseInt(e.target.value) || 0})} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" /></div>
+              )}
+
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Cover Image</label>
                 <div className="flex gap-4 items-center">
                   <div className="w-20 h-20 bg-slate-100 rounded-xl relative overflow-hidden border border-slate-200">
-                    {(uploadFile || editingRest.images?.[0]) ? <Image src={uploadFile ? URL.createObjectURL(uploadFile) : editingRest.images[0]} alt="" fill className="object-cover" /> : <ImageIcon className="absolute inset-0 m-auto text-slate-300" />}
+                    {/* Bypassing next/image for external Firebase URLs to avoid 403 errors */}
+                    {(uploadFile || editingRest.images?.[0]) ? <img src={uploadFile ? URL.createObjectURL(uploadFile) : editingRest.images[0]} alt="" className="w-full h-full object-cover" /> : <ImageIcon className="absolute inset-0 m-auto text-slate-300" />}
                   </div>
                   <button type="button" onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-black">Upload New</button>
                   <input type="file" hidden accept="image/*" ref={fileInputRef} onChange={e => e.target.files && setUploadFile(e.target.files[0])} />
@@ -428,13 +471,13 @@ export default function RestaurantManagement({ hotelId }: { hotelId: string }) {
         </div>
       )}
 
-      {/* Menu Item Modal */}
+      {/* ================= MENU ITEM MODAL ================= */}
       {isMenuModalOpen && editingMenu && (
         <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsMenuModalOpen(false)}></div>
           <div className="bg-white rounded-[2.5rem] w-full max-w-lg relative z-10 shadow-2xl animate-in zoom-in-95 flex flex-col max-h-[90vh]">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-[2.5rem] z-20">
-              <h2 className="text-xl font-black">{editingMenu.id ? 'Edit Item' : 'New Menu Item'}</h2>
+              <h2 className="text-xl font-black">{(editingMenu.id || editingMenu._id) ? 'Edit Item' : 'New Menu Item'}</h2>
               <button onClick={() => setIsMenuModalOpen(false)} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200"><X size={20}/></button>
             </div>
             <form onSubmit={saveMenuItem} className="p-6 overflow-y-auto custom-scrollbar space-y-4">
@@ -445,10 +488,16 @@ export default function RestaurantManagement({ hotelId }: { hotelId: string }) {
                 </select>
               </div>
               <div><label className="text-[10px] font-black uppercase text-slate-400">Item Name</label><input required type="text" value={editingMenu.name} onChange={e=>setEditingMenu({...editingMenu, name: e.target.value})} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" /></div>
+              
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-[10px] font-black uppercase text-slate-400">Price ($)</label><input required type="number" step="0.01" value={editingMenu.price} onChange={e=>setEditingMenu({...editingMenu, price: parseFloat(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" /></div>
+                {/* 🛡️ Strict NaN protection */}
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Price ($)</label><input required type="number" step="0.01" value={editingMenu.price ?? ''} onChange={e=>setEditingMenu({...editingMenu, price: parseFloat(e.target.value) || 0})} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" /></div>
                 <div><label className="text-[10px] font-black uppercase text-slate-400">Category</label><input required type="text" value={editingMenu.category} onChange={e=>setEditingMenu({...editingMenu, category: e.target.value})} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" placeholder="e.g. Mains, Drinks" /></div>
               </div>
+              
+              {/* Added Context Fields from Mobile Specs */}
+              <div><label className="text-[10px] font-black uppercase text-slate-400">Prep Time (Mins)</label><input type="number" value={editingMenu.prepTimeMinutes ?? ''} onChange={e=>setEditingMenu({...editingMenu, prepTimeMinutes: parseInt(e.target.value) || 0})} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" placeholder="e.g. 15" /></div>
+
               <div><label className="text-[10px] font-black uppercase text-slate-400">Description</label><textarea value={editingMenu.description} onChange={e=>setEditingMenu({...editingMenu, description: e.target.value})} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" rows={2} /></div>
               
               <label className="flex items-center gap-3 cursor-pointer p-4 bg-slate-50 rounded-xl border border-slate-100">
@@ -460,7 +509,8 @@ export default function RestaurantManagement({ hotelId }: { hotelId: string }) {
                 <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Item Photo</label>
                 <div className="flex gap-4 items-center">
                   <div className="w-20 h-20 bg-slate-100 rounded-xl relative overflow-hidden border border-slate-200">
-                    {(uploadFile || editingMenu.imageUrl) ? <Image src={uploadFile ? URL.createObjectURL(uploadFile) : editingMenu.imageUrl} alt="" fill className="object-cover" /> : <ImageIcon className="absolute inset-0 m-auto text-slate-300" />}
+                    {/* Bypassing next/image for external Firebase URLs to avoid 403 errors */}
+                    {(uploadFile || editingMenu.imageUrl) ? <img src={uploadFile ? URL.createObjectURL(uploadFile) : editingMenu.imageUrl} alt="" className="w-full h-full object-cover" /> : <ImageIcon className="absolute inset-0 m-auto text-slate-300" />}
                   </div>
                   <button type="button" onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-black">Upload Photo</button>
                   <input type="file" hidden accept="image/*" ref={fileInputRef} onChange={e => e.target.files && setUploadFile(e.target.files[0])} />

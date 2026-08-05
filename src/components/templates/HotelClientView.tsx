@@ -51,12 +51,15 @@ interface Hotel {
 }
 
 interface Room {
-  _id?: string;
   id: string;
-  roomTypeName: string;
+  _id?: string;
+  roomName?: string;
+  roomTypeName?: string;
   pricePerNight?: number;
   price?: number;
-  capacity: number;
+  basePrice?: number;
+  maxOccupancy?: number | string;
+  capacity?: number;
   images?: string[];
   features?: Record<string, any>;
 }
@@ -131,7 +134,7 @@ export default function HotelDetailPage() {
   useEffect(() => {
     if (hotel && !hasTrackedView.current) {
       hasTrackedView.current = true;
-      const hotelId = hotel._id || hotel.id;
+      const hotelId = hotel.id || hotel._id;
       fetch('/api/analytics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -143,7 +146,7 @@ export default function HotelDetailPage() {
   // ✅ ANALYTICS: Track Clicks via API
   const trackClick = (type: string) => {
     if (!hotel) return;
-    const hotelId = hotel._id || hotel.id;
+    const hotelId = hotel.id || hotel._id;
     fetch('/api/analytics', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -190,7 +193,9 @@ export default function HotelDetailPage() {
 
         if (hotelData) {
           setHotel(hotelData);
-          const hotelId = hotelData._id || hotelData.id;
+          
+          // 🛡️ CRITICAL FIX: Prioritize .id (Supabase) over ._id (Legacy Firebase)
+          const hotelId = hotelData.id || hotelData._id;
 
           // Fetch related entities in parallel from Supabase APIs
           const [roomsRes, reviewsRes, restaurantsRes, similarRes] = await Promise.all([
@@ -217,7 +222,7 @@ export default function HotelDetailPage() {
           if (similarRes.ok) {
             const simData = await similarRes.json();
             const simList = Array.isArray(simData) ? simData : [];
-            setSimilarHotels(simList.filter((h: any) => (h._id || h.id) !== hotelId));
+            setSimilarHotels(simList.filter((h: any) => (h.id || h._id) !== hotelId));
           }
         }
       } catch (e) {
@@ -258,7 +263,7 @@ export default function HotelDetailPage() {
     }
 
     setIsSubmitting(true);
-    const hotelId = hotel._id || hotel.id;
+    const hotelId = hotel.id || hotel._id;
 
     try {
       const idToken = user ? await user.getIdToken() : '';
@@ -284,9 +289,11 @@ export default function HotelDetailPage() {
       setIsSubmitting(false);
     }
 
-    const selectedRoom = rooms.find(r => (r._id || r.id) === bookingData.roomId);
-    const roomName = selectedRoom ? selectedRoom.roomTypeName : 'Standard Room';
-    const roomPrice = selectedRoom?.pricePerNight || selectedRoom?.price || hotel.pricePerNight;
+    const selectedRoom = rooms.find(r => (r.id || r._id) === bookingData.roomId);
+    
+    // 🛡️ CRITICAL FIX: Safe fallback bindings for room properties
+    const roomName = selectedRoom ? (selectedRoom.roomName || selectedRoom.roomTypeName) : 'Standard Room';
+    const roomPrice = selectedRoom?.basePrice || selectedRoom?.pricePerNight || selectedRoom?.price || hotel.pricePerNight;
     const totalPrice = roomPrice * bookingData.roomCount;
 
     const message = `Hello, I would like to book a stay at *${hotel.name}*.\n\n` +
@@ -465,19 +472,22 @@ export default function HotelDetailPage() {
                 </div>
               )}
 
+              {/* 🛡️ CRITICAL FIX: Safe fallback bindings for room rendering */}
               {activeTab === 'Rooms' && (
                 <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
                   {rooms.length > 0 ? rooms.map(room => {
-                    const roomId = room._id || room.id;
-                    const rPrice = room.pricePerNight || room.price || 0;
+                    const roomId = room.id || room._id;
+                    const rPrice = room.basePrice || room.pricePerNight || room.price || 0;
+                    const rName = room.roomName || room.roomTypeName || 'Standard Room';
+                    const rCap = room.maxOccupancy || room.capacity || 2;
                     return (
-                      <div key={roomId} onClick={() => { setBookingData(prev => ({...prev, roomId})); setShowBookingModal(true); }} className="group border border-slate-100 rounded-2xl p-3 hover:border-[#0065eb] transition-all cursor-pointer flex gap-3">
+                      <div key={roomId} onClick={() => { setBookingData(prev => ({...prev, roomId: roomId as string})); setShowBookingModal(true); }} className="group border border-slate-100 rounded-2xl p-3 hover:border-[#0065eb] transition-all cursor-pointer flex gap-3">
                         <div className="w-20 h-20 bg-slate-200 rounded-xl overflow-hidden relative shrink-0">
                           <Image src={room.images?.[0] || hotel.images?.[0] || '/placeholder.jpg'} alt="" fill className="object-cover" />
                         </div>
                         <div className="flex-1 flex flex-col justify-center">
-                          <h4 className="font-bold text-slate-900 text-sm">{room.roomTypeName}</h4>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase">Max {room.capacity} Guests</p>
+                          <h4 className="font-bold text-slate-900 text-sm">{rName}</h4>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">Max {rCap} Guests</p>
                           <div className="mt-1 flex justify-between items-center">
                             <span className="text-[#0065eb] font-black">${rPrice}</span>
                             <span className="text-[10px] bg-slate-900 text-white px-2 py-1 rounded-lg group-hover:bg-[#0065eb] transition-colors">Select</span>
@@ -489,11 +499,10 @@ export default function HotelDetailPage() {
                 </div>
               )}
 
-              {/* ✅ SUPER MODERN RESTAURANTS TAB */}
               {activeTab === 'Restaurants' && (
                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
                   {restaurants.length > 0 ? restaurants.map(rest => {
-                    const restId = rest._id || rest.id;
+                    const restId = rest.id || rest._id;
                     const restImages = rest.images || [];
                     const heroImg = restImages[0] || hotel.images?.[0] || '/placeholder.jpg';
                     const currentHour = new Date().getHours();
@@ -560,7 +569,7 @@ export default function HotelDetailPage() {
               {activeTab === 'Reviews' && (
                 <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300 max-h-[400px] overflow-y-auto custom-scrollbar">
                   {reviews.length > 0 ? reviews.map(review => {
-                    const revId = review._id || review.id;
+                    const revId = review.id || review._id;
                     return (
                       <div key={revId} className="bg-slate-50 p-4 rounded-2xl">
                         <div className="flex justify-between items-start mb-2">
@@ -682,7 +691,7 @@ export default function HotelDetailPage() {
             </div>
             <div className="flex-1 grid grid-cols-1 gap-4 overflow-y-auto custom-scrollbar">
               {similarHotels.map(sim => {
-                const simId = sim._id || sim.id;
+                const simId = sim.id || sim._id;
                 return (
                   <Link key={simId} href={`/hotels/${sim.slug || simId}`} className="flex items-center gap-4 p-3 hover:bg-slate-50 rounded-3xl transition-colors group border border-transparent hover:border-slate-100">
                     <div className="w-16 h-16 rounded-2xl bg-slate-200 overflow-hidden relative shrink-0">
@@ -733,11 +742,13 @@ export default function HotelDetailPage() {
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2 block">Select Room</label>
                 <div className="grid grid-cols-1 gap-2">
                   {rooms.map(room => {
-                    const roomId = room._id || room.id;
-                    const rPrice = room.pricePerNight || room.price || 0;
+                    const roomId = room.id || room._id;
+                    const rPrice = room.basePrice || room.pricePerNight || room.price || 0;
+                    const rName = room.roomName || room.roomTypeName || 'Standard Room';
+                    const rCap = room.maxOccupancy || room.capacity || 2;
                     return (
                       <div key={roomId} onClick={() => handleBookingChange('roomId', roomId)} className={`p-4 rounded-xl border-2 cursor-pointer flex justify-between items-center transition-all ${bookingData.roomId === roomId ? 'border-[#0065eb] bg-blue-50' : 'border-slate-100 hover:border-slate-200'}`}>
-                        <div><p className="font-bold text-sm text-slate-900">{room.roomTypeName}</p><p className="text-xs text-slate-500">Max {room.capacity} Guests</p></div>
+                        <div><p className="font-bold text-sm text-slate-900">{rName}</p><p className="text-xs text-slate-500">Max {rCap} Guests</p></div>
                         <span className="font-black text-sm text-[#0065eb]">${rPrice}</span>
                       </div>
                     );

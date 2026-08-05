@@ -15,7 +15,7 @@ import {
   LayoutDashboard, Calendar as CalendarIcon, CalendarDays, MessageSquare, BedDouble, 
   Settings, Users, TrendingUp, DollarSign, CheckCircle, XCircle, 
   Plus, Edit3, Lock, MapPin, Building2, Phone, Globe, Wifi, Shield,
-  FileText, UserPlus, BellRing, LogOut, ArrowRightCircle, ArrowLeftCircle, AlertCircle, Loader2, Utensils
+  FileText, UserPlus, BellRing, LogOut, ArrowRightCircle, ArrowLeftCircle, AlertCircle, Loader2, Utensils, Trash2, Eye, EyeOff
 } from 'lucide-react';
 
 // --- IMPORT YOUR COMPLETED FORMS ---
@@ -173,6 +173,35 @@ function DashboardContent() {
   const updateTab = (tab: TabType) => {
     setActiveTab(tab);
     router.push(`?tab=${tab}`, { scroll: false });
+  };
+
+  const deleteRoom = async (roomId: string) => {
+    if (!confirm("Are you sure you want to permanently delete this room?")) return;
+    try {
+      const idToken = await currentUser?.getIdToken();
+      await fetch(`/api/rooms?id=${roomId}&hotelId=${hotel?.id || hotel?._id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${idToken}` }
+      });
+      setRooms(prev => prev.filter(r => (r.id || r._id) !== roomId));
+    } catch (e) {
+      alert("Failed to delete room");
+    }
+  };
+
+  const toggleRoomStatus = async (roomId: string, currentStatus: string) => {
+    try {
+      const newStatus = currentStatus === 'draft' ? 'Available' : 'draft';
+      const idToken = await currentUser?.getIdToken();
+      await fetch('/api/rooms', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+        body: JSON.stringify({ id: roomId, hotelId: hotel?.id || hotel?._id, status: newStatus })
+      });
+      setRooms(prev => prev.map(r => (r.id || r._id) === roomId ? { ...r, status: newStatus } : r));
+    } catch (e) {
+      alert("Failed to update status");
+    }
   };
 
   const updateBookingStatus = async (id: string, newStatus: string) => {
@@ -454,7 +483,7 @@ function DashboardContent() {
                               )}
                               <div className={`absolute top-4 right-4 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest backdrop-blur-md ${room.status === 'draft' ? 'bg-slate-900/80 text-white' : 'bg-emerald-500/90 text-white shadow-lg'}`}>
                                  {room.status === 'draft' ? 'Hidden' : 'Live'}
-                              </div>
+                              </div> 
                            </div>
                            <div className="p-6 flex-1 flex flex-col">
                               <h4 className="font-bold text-xl mb-1">{room.roomName || room.roomTypeName || 'Unnamed Room'}</h4>
@@ -465,9 +494,17 @@ function DashboardContent() {
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Price / Night</p>
                                     <span className="font-black text-2xl text-[#0065eb]">${room.pricePerNight || room.basePrice || 0}</span>
                                  </div>
-                                 <button onClick={() => { setSelectedRoomId(room._id || room.id || ''); updateTab('edit-room'); }} className="p-3 bg-slate-50 text-slate-600 rounded-xl hover:bg-[#0065eb] hover:text-white transition-colors">
-                                    <Edit3 size={18}/>
-                                 </button>
+                                 <div className="flex gap-2">
+                                    <button onClick={() => toggleRoomStatus(room._id || room.id || '', room.status)} className="p-3 bg-slate-50 text-slate-600 rounded-xl hover:bg-slate-900 hover:text-white transition-colors" title={room.status === 'draft' ? "Make Live" : "Hide Room"}>
+                                       {room.status === 'draft' ? <Eye size={18}/> : <EyeOff size={18}/>}
+                                    </button>
+                                    <button onClick={() => { setSelectedRoomId(room._id || room.id || ''); updateTab('edit-room'); }} className="p-3 bg-slate-50 text-slate-600 rounded-xl hover:bg-[#0065eb] hover:text-white transition-colors" title="Edit Room">
+                                       <Edit3 size={18}/>
+                                    </button>
+                                    <button onClick={() => deleteRoom(room._id || room.id || '')} className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-500 hover:text-white transition-colors" title="Delete Room">
+                                       <Trash2 size={18}/>
+                                    </button>
+                                 </div>
                               </div>
                            </div>
                         </div>
