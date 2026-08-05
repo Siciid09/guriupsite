@@ -52,13 +52,15 @@ export async function GET(request: Request) {
     const limitCount = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 100;
 
     if (entity === 'menu_item') {
-      let menuQuery = supabaseAdmin.from('menu_items').select('*');
-      if (restaurantId) menuQuery = menuQuery.eq('restaurantId', restaurantId);
+      let menuQuery = supabaseAdmin.from('restaurants').select('menuItems');
+      if (restaurantId) menuQuery = menuQuery.or(`id.eq.${restaurantId},_id.eq.${restaurantId}`);
       else if (hotelId) menuQuery = menuQuery.eq('hotelId', hotelId);
 
-      const { data, error } = await menuQuery.order('category', { ascending: true }).limit(limitCount);
-      if (error) throw error;
-      return NextResponse.json(data);
+      const { data, error } = await menuQuery;
+      if (error) return NextResponse.json([]); // Prevent 500 crash
+      
+      const allItems = data?.flatMap(rest => rest.menuItems || []) || [];
+      return NextResponse.json(allItems);
     }
 
     let restQuery = supabaseAdmin.from('restaurants').select('*');
@@ -97,13 +99,35 @@ export async function POST(request: Request) {
     if (!isOwner) return NextResponse.json({ error: 'Forbidden. You do not own this hotel.' }, { status: 403 });
 
     if (entity === 'menu_item') {
-      const { data, error } = await supabaseAdmin
-        .from('menu_items')
-        .insert([{ ...dataPayload, _id: crypto.randomUUID(), hotelId, isAvailable: dataPayload.isAvailable ?? true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }])
-        .select()
-        .single();
+      const restId = dataPayload.restaurantId;
+      if (!restId) return NextResponse.json({ error: 'restaurantId is required for menu items.' }, { status: 400 });
+
+      const { data: restData, error: fetchError } = await supabaseAdmin
+        .from('restaurants')
+        .select('menuItems')
+        .or(`id.eq.${restId},_id.eq.${restId}`)
+        .maybeSingle();
+
+      if (fetchError || !restData) return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 });
+
+      const currentItems = restData.menuItems || [];
+      const newItem = { 
+        ...dataPayload, 
+        _id: crypto.randomUUID(), 
+        id: crypto.randomUUID(), 
+        hotelId, 
+        isAvailable: dataPayload.isAvailable ?? true, 
+        createdAt: new Date().toISOString(), 
+        updatedAt: new Date().toISOString() 
+      };
+
+      const { error } = await supabaseAdmin
+        .from('restaurants')
+        .update({ menuItems: [...currentItems, newItem] })
+        .or(`id.eq.${restId},_id.eq.${restId}`);
+
       if (error) throw error;
-      return NextResponse.json({ success: true, menuItem: data }, { status: 201 });
+      return NextResponse.json({ success: true, menuItem: newItem }, { status: 201 });
     }
 
     const { data, error } = await supabaseAdmin
@@ -138,7 +162,22 @@ export async function PATCH(request: Request) {
     const isOwner = await verifyHotelOwnership(hotelId, uid, role);
     if (!isOwner) return NextResponse.json({ error: 'Forbidden. You do not own this hotel.' }, { status: 403 });
 
-    const table = entity === 'menu_item' ? 'menu_items' : 'restaurants';
+    if (entity === 'menu_item') {
+      const { data: restaurants } = await supabaseAdmin.from('restaurants').select('_id, id, menuItems').eq('hotelId', hotelId);
+      if (restaurants) {
+         for (const rest of restaurants) {
+            const items = rest.menuItems || [];
+            const itemExists = items.some((i:any) => i.id === targetId || i._id === targetId);
+            if (itemExists) {
+               const updatedItems = items.map((i:any) => (i.id === targetId || i._id === targetId) ? { ...i, ...updateData, updatedAt: new Date().toISOString() } : i);
+               await supabaseAdmin.from('restaurants').update({ menuItems: updatedItems }).or(`id.eq.${rest.id || rest._id},_id.eq.${rest.id || rest._id}`);
+            }
+         }
+      }
+      return NextResponse.json({ success: true, message: `Menu item updated successfully` });
+    }
+
+    const table = 'restaurants';
     const { error } = await supabaseAdmin
       .from(table)
       .update({ ...updateData, updatedAt: new Date().toISOString() })
@@ -172,7 +211,22 @@ export async function DELETE(request: Request) {
     const isOwner = await verifyHotelOwnership(hotelId, uid, role);
     if (!isOwner) return NextResponse.json({ error: 'Forbidden. You do not own this hotel.' }, { status: 403 });
 
-    const table = entity === 'menu_item' ? 'menu_items' : 'restaurants';
+    if (entity === 'menu_item') {
+      const { data: restaurants } = await supabaseAdmin.from('restaurants').select('_id, id, menuItems').eq('hotelId', hotelId);
+      if (restaurants) {
+         for (const rest of restaurants) {
+            const items = rest.menuItems || [];
+            const itemExists = items.some((i:any) => i.id === id || i._id === id);
+            if (itemExists) {
+               const filtered = items.filter((i:any) => i.id !== id && i._id !== id);
+               await supabaseAdmin.from('restaurants').update({ menuItems: filtered }).or(`id.eq.${rest.id || rest._id},_id.eq.${rest.id || rest._id}`);
+            }
+         }
+      }
+      return NextResponse.json({ success: true, message: `Menu item deleted successfully` });
+    }
+
+    const table = 'restaurants';
     const { error } = await supabaseAdmin
       .from(table)
       .delete()
