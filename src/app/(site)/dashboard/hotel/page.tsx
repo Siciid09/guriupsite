@@ -126,6 +126,12 @@ function DashboardContent() {
       
       const userRes = await fetch('/api/users/me', { headers: { Authorization: `Bearer ${idToken}` } });
       const { user: userData } = await userRes.json();
+
+      // 🛡️ SECURITY: Block standard users and real estate agents from the Hotel Dashboard
+      if (userData?.role !== 'hoadmin' && userData?.role !== 'admin' && userData?.role !== 'sadmin') {
+         return router.push('/'); // Redirect unauthorized users to home
+      }
+
       const managedHotelId = userData?.managedHotelId;
 
       // 1. Fetch Hotel STRICTLY using the Foreign Key
@@ -158,7 +164,19 @@ function DashboardContent() {
 
         // Chats Listener (Keep Firebase Realtime for Messages)
         const qChats = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid), orderBy('updatedAt', 'desc'));
-        const unsubChats = onSnapshot(qChats, (cSnap) => setChats(cSnap.docs.map(d => ({ id: d.id, ...d.data() } as Chat))));
+        const unsubChats = onSnapshot(qChats, (cSnap) => {
+           setChats(cSnap.docs.map(d => {
+             const data = d.data();
+             // 🛡️ FIX: Deep fallback check for user names and messages
+             return {
+               id: d.id,
+               lastMessage: data.lastMessage || 'Sent a message',
+               participantName: data.otherUserName || data.userName || data.senderName || data.recipientName || 'Guest User',
+               unreadCount: data.unreadCount?.[user.uid] || 0,
+               updatedAt: data.updatedAt || data.lastMessageTime
+             } as Chat;
+           }));
+        });
 
         setLoading(false);
         return () => unsubChats();
@@ -564,8 +582,9 @@ function DashboardContent() {
                                     </div>
                                 </div>
                                 <div className="sm:text-right flex sm:flex-col items-center sm:items-end justify-between sm:justify-center w-full sm:w-auto border-t sm:border-none border-slate-100 pt-3 sm:pt-0">
+                                    {/* 🛡️ FIX: Safely parse standard string dates OR Firebase Timestamps */}
                                     <p className="text-xs font-bold text-slate-400 sm:mb-1">
-                                      {chat.updatedAt ? format(chat.updatedAt.toDate(), 'MMM d, h:mm a') : 'Just now'}
+                                      {chat.updatedAt ? (chat.updatedAt?.toDate ? format(chat.updatedAt.toDate(), 'MMM d, h:mm a') : format(new Date(chat.updatedAt as any), 'MMM d, h:mm a')) : 'Just now'}
                                     </p>
                                     {chat.unreadCount > 0 && <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">{chat.unreadCount} new</span>}
                                 </div>

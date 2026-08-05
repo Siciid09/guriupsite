@@ -213,11 +213,11 @@ function DashboardContent() {
 
   const fetchUserBookings = async (token: string, queryParam: string) => {
     try {
-        // 🛡️ FIX: Pass the specific ID so the backend doesn't throw a 400 Bad Request
         const res = await fetch(`/api/bookings?${queryParam}`, { headers: { Authorization: `Bearer ${token}` } });
         if (res.ok) {
-          const { data } = await res.json();
-          setBookings(data || []);
+          const bJson = await res.json();
+          // 🛡️ FIX: Safely parse direct arrays from Supabase API
+          setBookings(Array.isArray(bJson) ? bJson : (bJson.bookings || bJson.data || []));
         }
     } catch (e) {
         console.error("Error fetching bookings:", e);
@@ -248,7 +248,17 @@ function DashboardContent() {
   const subscribeToChats = (uid: string) => {
     const q = query(collection(db, 'chats'), where('participants', 'array-contains', uid), orderBy('updatedAt', 'desc'));
     return onSnapshot(q, (snap) => {
-        const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as Chat));
+        const list = snap.docs.map(d => {
+          const data = d.data();
+          // 🛡️ FIX: Safely map chat data to prevent empty names and unread counts
+          return {
+            id: d.id,
+            lastMessage: data.lastMessage || 'Sent a message',
+            participantName: data.otherUserName || data.recipientName || data.hotelName || 'Support / Agent', 
+            unreadCount: data.unreadCount?.[uid] || 0,
+            updatedAt: data.updatedAt || data.lastMessageTime
+          } as Chat;
+        });
         setChats(list);
     });
   };
@@ -498,11 +508,14 @@ function DashboardContent() {
                                 <Building2 size={32} />
                              </div>
                              <div>
-                                <h3 className="font-black text-xl text-slate-900">{booking.hotelName}</h3>
+                                <h3 className="font-black text-xl text-slate-900">{booking.hotelName || 'My Stay'}</h3>
                                 <div className="flex items-center gap-2 mt-1">
-                                   <span className="text-xs font-black text-blue-600 uppercase tracking-wider">{booking.roomName}</span>
+                                   <span className="text-xs font-black text-blue-600 uppercase tracking-wider">{booking.roomName || 'Room'}</span>
                                    <span className="text-slate-300">•</span>
-                                   <span className="text-xs font-bold text-slate-400">{booking.checkInDate?.toDate().toDateString()}</span>
+                                   {/* 🛡️ FIX: Safely parse standard string dates from the Supabase API */}
+                                   <span className="text-xs font-bold text-slate-400">
+                                      {booking.checkInDate ? new Date(booking.checkInDate).toDateString() : (booking as any).checkIn ? new Date((booking as any).checkIn).toDateString() : 'Upcoming'}
+                                   </span>
                                 </div>
                              </div>
                           </div>
@@ -563,7 +576,10 @@ function DashboardContent() {
                                           </div>
                                       </div>
                                       <div className="text-right">
-                                          <p className="text-xs font-bold text-slate-400 mb-1">{new Date(chat.updatedAt?.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                                          {/* 🛡️ FIX: Safely parse Firebase Timestamp OR fallback string */}
+                                          <p className="text-xs font-bold text-slate-400 mb-1">
+                                            {chat.updatedAt ? (chat.updatedAt?.toDate ? chat.updatedAt.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : new Date(chat.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})) : 'Now'}
+                                          </p>
                                           {chat.unreadCount > 0 && <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{chat.unreadCount} new</span>}
                                       </div>
                                   </div>

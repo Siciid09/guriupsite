@@ -132,10 +132,11 @@ function DashboardContent() {
       onSnapshot(qChats, (snap) => {
         setChats(snap.docs.map(d => {
            const data = d.data();
+           // 🛡️ FIX: Deep fallback check for user names and messages
            return {
              id: d.id,
-             lastMessage: data.lastMessage,
-             participantName: data.otherUserName || 'Client',
+             lastMessage: data.lastMessage || 'Sent a message',
+             participantName: data.otherUserName || data.userName || data.senderName || data.recipientName || 'Client',
              unreadCount: data.unreadCount?.[user.uid] || 0,
              updatedAt: data.updatedAt || data.lastMessageTime
            } as Chat;
@@ -419,8 +420,9 @@ function DashboardContent() {
                          <div key={chat.id} onClick={() => setActiveChatId(chat.id)} className={`p-6 border-b border-slate-50 cursor-pointer transition-colors ${activeChatId === chat.id ? 'bg-blue-50' : 'hover:bg-slate-50'}`}>
                             <div className="flex justify-between items-start mb-1">
                                <h4 className="font-bold text-slate-900">{chat.participantName}</h4>
+                               {/* 🛡️ FIX: Safely parse standard string dates OR Firebase Timestamps (TS Ignored) */}
                                <span className="text-[10px] font-bold text-slate-400">
-                                 {chat.updatedAt ? format(chat.updatedAt.toDate(), 'h:mm a') : 'Now'}
+                                 {chat.updatedAt ? (chat.updatedAt?.toDate ? format(chat.updatedAt.toDate(), 'h:mm a') : format(new Date(chat.updatedAt as any), 'h:mm a')) : 'Now'}
                                </span>
                             </div>
                             <p className="text-xs text-slate-500 truncate">{chat.lastMessage}</p>
