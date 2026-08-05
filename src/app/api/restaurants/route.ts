@@ -53,7 +53,8 @@ export async function GET(request: Request) {
 
     if (entity === 'menu_item') {
       let menuQuery = supabaseAdmin.from('restaurants').select('menuItems');
-      if (restaurantId) menuQuery = menuQuery.or(`id.eq.${restaurantId},_id.eq.${restaurantId}`);
+      // 🛡️ FIX: Strictly use _id to prevent missing column crash
+      if (restaurantId) menuQuery = menuQuery.eq('_id', restaurantId);
       else if (hotelId) menuQuery = menuQuery.eq('hotelId', hotelId);
 
       const { data, error } = await menuQuery;
@@ -105,12 +106,13 @@ export async function POST(request: Request) {
       const { data: restData, error: fetchError } = await supabaseAdmin
         .from('restaurants')
         .select('menuItems')
-        .or(`id.eq.${restId},_id.eq.${restId}`)
+        .eq('_id', restId) // 🛡️ FIX: Strictly use _id
         .maybeSingle();
 
       if (fetchError || !restData) return NextResponse.json({ error: 'Restaurant not found' }, { status: 404 });
 
-      const currentItems = restData.menuItems || [];
+      // 🛡️ FIX: Safely parse JSONB array to prevent iteration crashes
+      const currentItems = Array.isArray(restData.menuItems) ? restData.menuItems : [];
       const newItem = { 
         ...dataPayload, 
         _id: crypto.randomUUID(), 
@@ -124,7 +126,7 @@ export async function POST(request: Request) {
       const { error } = await supabaseAdmin
         .from('restaurants')
         .update({ menuItems: [...currentItems, newItem] })
-        .or(`id.eq.${restId},_id.eq.${restId}`);
+        .eq('_id', restId); // 🛡️ FIX: Strictly use _id
 
       if (error) throw error;
       return NextResponse.json({ success: true, menuItem: newItem }, { status: 201 });
@@ -163,14 +165,14 @@ export async function PATCH(request: Request) {
     if (!isOwner) return NextResponse.json({ error: 'Forbidden. You do not own this hotel.' }, { status: 403 });
 
     if (entity === 'menu_item') {
-      const { data: restaurants } = await supabaseAdmin.from('restaurants').select('_id, id, menuItems').eq('hotelId', hotelId);
+      const { data: restaurants } = await supabaseAdmin.from('restaurants').select('_id, menuItems').eq('hotelId', hotelId); // 🛡️ FIX: Removed 'id' from select
       if (restaurants) {
          for (const rest of restaurants) {
-            const items = rest.menuItems || [];
+            const items = Array.isArray(rest.menuItems) ? rest.menuItems : [];
             const itemExists = items.some((i:any) => i.id === targetId || i._id === targetId);
             if (itemExists) {
                const updatedItems = items.map((i:any) => (i.id === targetId || i._id === targetId) ? { ...i, ...updateData, updatedAt: new Date().toISOString() } : i);
-               await supabaseAdmin.from('restaurants').update({ menuItems: updatedItems }).or(`id.eq.${rest.id || rest._id},_id.eq.${rest.id || rest._id}`);
+               await supabaseAdmin.from('restaurants').update({ menuItems: updatedItems }).eq('_id', rest._id);
             }
          }
       }
@@ -181,7 +183,7 @@ export async function PATCH(request: Request) {
     const { error } = await supabaseAdmin
       .from(table)
       .update({ ...updateData, updatedAt: new Date().toISOString() })
-      .or(`id.eq.${targetId},_id.eq.${targetId}`)
+      .eq('_id', targetId) // 🛡️ FIX: Strictly use _id
       .eq('hotelId', hotelId);
 
     if (error) throw error;
@@ -212,14 +214,14 @@ export async function DELETE(request: Request) {
     if (!isOwner) return NextResponse.json({ error: 'Forbidden. You do not own this hotel.' }, { status: 403 });
 
     if (entity === 'menu_item') {
-      const { data: restaurants } = await supabaseAdmin.from('restaurants').select('_id, id, menuItems').eq('hotelId', hotelId);
+      const { data: restaurants } = await supabaseAdmin.from('restaurants').select('_id, menuItems').eq('hotelId', hotelId); // 🛡️ FIX: Removed 'id' from select
       if (restaurants) {
          for (const rest of restaurants) {
-            const items = rest.menuItems || [];
+            const items = Array.isArray(rest.menuItems) ? rest.menuItems : [];
             const itemExists = items.some((i:any) => i.id === id || i._id === id);
             if (itemExists) {
                const filtered = items.filter((i:any) => i.id !== id && i._id !== id);
-               await supabaseAdmin.from('restaurants').update({ menuItems: filtered }).or(`id.eq.${rest.id || rest._id},_id.eq.${rest.id || rest._id}`);
+               await supabaseAdmin.from('restaurants').update({ menuItems: filtered }).eq('_id', rest._id);
             }
          }
       }
@@ -230,7 +232,7 @@ export async function DELETE(request: Request) {
     const { error } = await supabaseAdmin
       .from(table)
       .delete()
-      .or(`id.eq.${id},_id.eq.${id}`)
+      .eq('_id', id) // 🛡️ FIX: Strictly use _id
       .eq('hotelId', hotelId);
 
     if (error) throw error;
