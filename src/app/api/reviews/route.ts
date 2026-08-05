@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/app/lib/supabase';
 import { adminAuth } from '@/app/lib/firebase-admin';
 
+export const dynamic = 'force-dynamic';
+
 // --- HELPER: Verify Token ---
 async function verifyAuth(request: Request) {
   const authHeader = request.headers.get('Authorization');
@@ -21,15 +23,16 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const hotelId = searchParams.get('hotelId');
     
+    // 🛡️ FIX: Fetch from hotel_reviews using exact DB column "hotel_id"
     let query = supabaseAdmin.from('hotel_reviews').select('*');
     if (hotelId && hotelId !== 'undefined') {
-      query = query.eq('hotel_id', hotelId); // Matches exact DB column
+      query = query.eq('hotel_id', hotelId); 
     }
     
     const { data, error } = await query.order('createdAt', { ascending: false });
     
-    // Fallback to standard reviews table if hotel_reviews fails
     if (error) {
+       // Fallback to reviews table using targetId if hotel_reviews fails
        const fallback = await supabaseAdmin.from('reviews').select('*').eq('targetId', hotelId || '').order('createdAt', { ascending: false });
        return NextResponse.json(fallback.data || []);
     }
@@ -43,7 +46,6 @@ export async function GET(request: Request) {
 // POST: Create Review (Requires Auth)
 export async function POST(request: Request) {
   try {
-    // 🛡️ TS NULL CHECK
     if (!supabaseAdmin) return NextResponse.json({ error: 'Server error: Admin client missing.' }, { status: 500 });
 
     const decodedToken = await verifyAuth(request);
@@ -56,13 +58,12 @@ export async function POST(request: Request) {
     const finalTargetId = targetId || hotelId;
 
     if (!finalTargetId || !rating) {
-      return NextResponse.json({ error: 'Missing required fields: targetId/hotelId and rating.' }, { status: 400 });
+      return NextResponse.json({ error: 'Missing required fields.' }, { status: 400 });
     }
 
-    let tableName = 'reviews'; 
-    const payload: any = {
-      _id: crypto.randomUUID(), // Fixes primary key database crash
-      id: crypto.randomUUID(),
+    // 🛡️ FIX: Remove "id" completely. Only use "_id" to match database schema.
+    const basePayload: any = {
+      _id: crypto.randomUUID(), 
       userId: decodedToken.uid,
       userName: decodedToken.name || 'Verified User',
       rating: Number(rating),
@@ -71,30 +72,17 @@ export async function POST(request: Request) {
     };
 
     if (finalTargetType === 'hotel') {
-      tableName = 'hotel_reviews';
-      payload.hotel_id = finalTargetId; // Matches exact DB column
-    } else if (finalTargetType === 'agent') {
-      tableName = 'agent_reviews';
-      payload.agentId = finalTargetId;
+      // 🛡️ FIX: Write to hotel_reviews using "hotel_id"
+      basePayload.hotel_id = finalTargetId;
+      const { error } = await supabaseAdmin.from('hotel_reviews').insert([basePayload]);
+      if (error) throw error;
     } else {
-      payload.targetId = finalTargetId;
-      payload.targetType = finalTargetType;
-    }
-
-    // 🛡️ TUNNEL FIX: Use supabaseAdmin to bypass strict RLS on review insertion
-    const { error } = await supabaseAdmin.from(tableName).insert([payload]);
-
-    if (error) {
-      // Fallback for schema discrepancies
-      if (tableName === 'agent_reviews' || tableName === 'hotel_reviews') {
-         const fallbackPayload = { ...payload, targetId: finalTargetId, targetType: finalTargetType };
-         delete fallbackPayload.agentId;
-         delete fallbackPayload.hotel_id; // Deletes the snake_case key for the fallback table
-         const { error: fallbackError } = await supabaseAdmin.from('reviews').insert([fallbackPayload]);
-         if (fallbackError) throw fallbackError;
-      } else {
-         throw error;
-      }
+      // 🛡️ FIX: Write to general reviews/agents using "targetId"
+      basePayload.targetId = finalTargetId;
+      basePayload.targetType = finalTargetType;
+      basePayload.status = 'approved'; 
+      const { error } = await supabaseAdmin.from('reviews').insert([basePayload]);
+      if (error) throw error;
     }
 
     return NextResponse.json({ message: 'Review posted successfully!' }, { status: 201 });
@@ -124,7 +112,8 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Forbidden. Moderation requires elevated privileges.' }, { status: 403 });
     }
 
-    const { error } = await supabaseAdmin.from(tableType).delete().eq('id', reviewId);
+    // 🛡️ FIX: Use _id instead of id since that's what the DB schema uses
+    const { error } = await supabaseAdmin.from(tableType).delete().eq('_id', reviewId);
     if (error) throw error;
 
     return NextResponse.json({ success: true, message: 'Review deleted successfully.' });
