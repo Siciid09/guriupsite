@@ -7,7 +7,67 @@ import { db } from '@/app/lib/firebase';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import LocationSelectorModal, { LocationResult } from '@/components/LocationSelectorModal';
-import { ChevronLeft, ChevronRight, ArrowRight, ChevronDown, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowRight, ChevronDown, X, RotateCcw } from 'lucide-react';
+
+// --- CARD AUTO & MANUAL IMAGE SLIDESHOW COMPONENT ---
+const CardImageSlider = ({ images = [], alt = '' }: { images: string[]; alt: string }) => {
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const safeImages = images && images.length > 0 ? images : ['https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1000'];
+
+  useEffect(() => {
+    if (safeImages.length <= 1) return;
+    const timer = setInterval(() => {
+      setCurrentIdx((prev) => (prev + 1) % safeImages.length);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [safeImages.length, currentIdx]);
+
+  const handlePrev = (e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    setCurrentIdx((prev) => (prev === 0 ? safeImages.length - 1 : prev - 1));
+  };
+
+  const handleNext = (e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    setCurrentIdx((prev) => (prev + 1) % safeImages.length);
+  };
+
+  return (
+    <div className="relative w-full h-full group/slider overflow-hidden">
+      <img
+        src={safeImages[currentIdx]}
+        alt={alt}
+        className="w-full h-full object-cover transition-all duration-500 group-hover:scale-105"
+      />
+      {safeImages.length > 1 && (
+        <>
+          <button
+            onClick={handlePrev}
+            className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 bg-black/60 hover:bg-black text-white rounded-full flex items-center justify-center opacity-0 group-hover/slider:opacity-100 transition-opacity z-20 shadow-md"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <button
+            onClick={handleNext}
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 bg-black/60 hover:bg-black text-white rounded-full flex items-center justify-center opacity-0 group-hover/slider:opacity-100 transition-opacity z-20 shadow-md"
+          >
+            <ChevronRight size={16} />
+          </button>
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1 z-20 pointer-events-none">
+            {safeImages.slice(0, 5).map((_, idx) => (
+              <span
+                key={idx}
+                className={`h-1.5 rounded-full transition-all ${
+                  idx === currentIdx ? 'w-4 bg-white' : 'w-1.5 bg-white/50'
+                }`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
 
 // --- TYPES (Updated to match your API/Firestore Types) ---
 interface LocationData {
@@ -95,6 +155,13 @@ const HomeUI = ({
   const handleTabSwitch = (tab: 'buy' | 'rent' | 'hotel') => {
     setFilterTab(tab);
     setSelectedType(tab === 'hotel' ? 'Any Room' : 'Any Type');
+    setSelectedPrice('Any Price');
+    setOpenDropdown(null);
+  };
+
+  const handleResetFilters = () => {
+    setSelectedLocation(null);
+    setSelectedType(filterTab === 'hotel' ? 'Any Room' : 'Any Type');
     setSelectedPrice('Any Price');
     setOpenDropdown(null);
   };
@@ -361,19 +428,29 @@ const HomeUI = ({
               </p>
 
               {/* === MODERN FILTER CAPSULE === */}
-              <div ref={filterRef} className="bg-white rounded-[2rem] p-3 shadow-2xl w-full max-w-3xl mb-7 relative z-20">
+              <div ref={filterRef} className="bg-white rounded-[2rem] p-3 shadow-2xl w-full max-w-3xl mb-7 relative z-50">
                 
-                {/* 1. FILTER TABS */}
-                <div className="flex gap-2 mb-3 pl-3 pt-2">
-                  {['buy', 'rent', 'hotel'].map(tab => (
-                    <button 
-                      key={tab}
-                      onClick={() => handleTabSwitch(tab as any)}
-                      className={`px-5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all ${filterTab === tab ? 'bg-black text-white' : 'text-gray-400 hover:text-black'}`}
-                    >
-                      {tab}
-                    </button>
-                  ))}
+                {/* 1. FILTER TABS & RESET BUTTON */}
+                <div className="flex justify-between items-center mb-3 pr-3 pl-3 pt-2">
+                  <div className="flex gap-2">
+                    {['buy', 'rent', 'hotel'].map(tab => (
+                      <button 
+                        key={tab}
+                        onClick={() => handleTabSwitch(tab as any)}
+                        className={`px-5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all ${filterTab === tab ? 'bg-black text-white' : 'text-gray-400 hover:text-black'}`}
+                      >
+                        {tab}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* RESET FILTER BUTTON */}
+                  <button 
+                    onClick={handleResetFilters}
+                    className="text-[11px] font-bold text-slate-400 hover:text-red-500 transition-colors flex items-center gap-1"
+                  >
+                    <RotateCcw size={12} /> Reset
+                  </button>
                 </div>
 
                 {/* 2. INPUTS ROW */}
@@ -422,7 +499,7 @@ const HomeUI = ({
                       </div>
                       {/* Type Menu */}
                       {openDropdown === 'type' && (
-                        <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-[60] max-h-60 overflow-y-auto">
+                        <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-2xl border border-slate-100 overflow-hidden z-[9999] max-h-60 overflow-y-auto">
                            {getCurrentTypeList().map((type) => (
                                 <div key={type} onClick={() => selectOption(setSelectedType, type)} className="px-4 py-3 hover:bg-gray-50 cursor-pointer text-xs font-bold text-slate-700">{type}</div>
                            ))}
@@ -444,7 +521,7 @@ const HomeUI = ({
                       </div>
                       {/* Price Menu */}
                       {openDropdown === 'price' && (
-                        <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-[60] max-h-60 overflow-y-auto">
+                        <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-2xl border border-slate-100 overflow-hidden z-[9999] max-h-60 overflow-y-auto">
                            {getCurrentPriceList().map((price) => (
                                 <div key={price} onClick={() => selectOption(setSelectedPrice, price)} className="px-4 py-3 hover:bg-gray-50 cursor-pointer text-xs font-bold text-slate-700">{price}</div>
                            ))}
@@ -907,7 +984,7 @@ const PropertyCard = ({ property, favorites, toggleFavorite, handleShare, format
         <div className="modern-card group">
             <Link href={propertyPath} className="absolute inset-0 z-0"></Link>
             <div className="modern-img-wrapper">
-                <img src={property.images?.[0] || "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1000"} alt={property.title} />
+                <CardImageSlider images={property.images} alt={property.title} />
                 <div className={`status-badge ${statusColor}`}>{statusLabel}</div>
                 {isVerified ? (
                     <div className="verified-card"><svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg><span>Verified</span></div>
@@ -961,7 +1038,7 @@ const HotelCard = ({ hotel, favorites, toggleFavorite, handleShare, formatPrice,
         <div className="hotel-card group relative">
             <Link href={hotelPath} className="absolute inset-0 z-0"></Link>
             <div className="h-64 overflow-hidden relative">
-                <img src={hotel.images?.[0] || `https://images.unsplash.com/photo-1566073771259-6a8506099945?q=80&w=600&auto=format&fit=crop`} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={hotel.name} />
+                <CardImageSlider images={hotel.images} alt={hotel.name} />
                 
                 {/* Dynamically show Top Rated only if rating is good */}
                 {isTopRated && (
