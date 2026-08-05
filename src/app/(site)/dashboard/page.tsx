@@ -153,30 +153,43 @@ function DashboardContent() {
       setCurrentUser(user);
 
       try {
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDocSnap = await getDoc(userDocRef);
+        const idToken = await user.getIdToken();
         
-        if (userDocSnap.exists()) {
-          const data = userDocSnap.data() as UserData;
+        // Fetch User Profile from Supabase API
+        const userRes = await fetch('/api/users/me', { headers: { Authorization: `Bearer ${idToken}` } });
+        if (userRes.ok) {
+          const { user: data } = await userRes.json();
           setUserData(data);
           setEditForm({ name: data.name || '', phone: data.phoneNumber || '' });
           
-          // --- THE GATEKEEPER CHECK ---
+          // --- THE GATEKEEPER CHECK & BOOKING QUERY PARAMS ---
           let missingProfile = false;
+          let bookingQuery = `userId=${user.uid}`; // Default for normal users
+
           if (data.role === 'hoadmin') {
-             const hotelQ = query(collection(db, 'hotels'), where('hotelAdminId', '==', user.uid));
-             const hotelSnap = await getDocs(hotelQ);
-             if (hotelSnap.empty) missingProfile = true;
+             const hotelRes = await fetch('/api/hotels?adminId=' + user.uid);
+             const hotelJson = await hotelRes.json();
+             const hotels = hotelJson.hotels || []; 
+             
+             if (hotels.length === 0) {
+                 missingProfile = true;
+             } else {
+                 bookingQuery = `hotelId=${hotels[0].id || hotels[0]._id}`;
+             }
           } else if (data.role === 'reagent') {
-             const agentDoc = await getDoc(doc(db, 'agents', user.uid));
-             if (!agentDoc.exists()) missingProfile = true;
+             const agentRes = await fetch('/api/agents?id=' + user.uid);
+             if (!agentRes.ok) missingProfile = true;
+             else bookingQuery = `agentId=${user.uid}`;
           }
+          
           setNeedsSetup(missingProfile);
           setCheckingSetup(false);
 
-          fetchUserBookings(user.uid);
+          // Pass the specific query to the fetch function
+          fetchUserBookings(idToken, bookingQuery);
           fetchUserFavorites(data.favorites || []);
           
+          // Keep Chats on Firebase
           const unsubNotify = subscribeToNotifications(user.uid);
           const unsubChats = subscribeToChats(user.uid);
 
@@ -198,12 +211,14 @@ function DashboardContent() {
     return () => unsubscribeAuth();
   }, [router]);
 
-  const fetchUserBookings = async (uid: string) => {
+  const fetchUserBookings = async (token: string, queryParam: string) => {
     try {
-        const q = query(collection(db, 'bookings'), where('userId', '==', uid), orderBy('createdAt', 'desc'));
-        const snap = await getDocs(q);
-        const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as Booking));
-        setBookings(list);
+        // 🛡️ FIX: Pass the specific ID so the backend doesn't throw a 400 Bad Request
+        const res = await fetch(`/api/bookings?${queryParam}`, { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) {
+          const { data } = await res.json();
+          setBookings(data || []);
+        }
     } catch (e) {
         console.error("Error fetching bookings:", e);
     }
@@ -212,11 +227,11 @@ function DashboardContent() {
   const fetchUserFavorites = async (favIds: string[]) => {
     if (!favIds || favIds.length === 0) return;
     try {
-        const safeIds = favIds.slice(0, 10);
-        const q = query(collection(db, 'property'), where('__name__', 'in', safeIds));
-        const snap = await getDocs(q);
-        const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as Property));
-        setFavorites(list);
+        const res = await fetch(`/api/properties?ids=${favIds.join(',')}`);
+        if (res.ok) {
+          const { data } = await res.json();
+          setFavorites(data || []);
+        }
     } catch (e) {
         console.error("Error fetching favorites:", e);
     }
@@ -241,10 +256,24 @@ function DashboardContent() {
   const handleUpdateProfile = async () => {
     if (!currentUser || !userData) return;
     try {
-      await updateDoc(doc(db, 'users', currentUser.uid), {
-        name: editForm.name,
-        phoneNumber: editForm.phone
+      const idToken = await currentUser.getIdToken();
+      
+      // Update Supabase Users Table securely via API
+      const res = await fetch('/api/users', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          uid: currentUser.uid,
+          name: editForm.name,
+          phone: editForm.phone
+        })
       });
+      
+      if (!res.ok) throw new Error('Failed to update Supabase profile');
+
       await updateProfile(currentUser, { displayName: editForm.name });
       setUserData({ ...userData, name: editForm.name, phoneNumber: editForm.phone });
       setIsEditing(false);
@@ -665,38 +694,33 @@ const AgentSetupForm = ({ user, userData, onComplete }: any) => {
          const agencyData = {
             agencyName: formData.businessName,
             agentVerified: false,
-            analytics: { clicks: 0, leads: 0, views: 0 },
-            averageRating: 0,
             bio: formData.bio,
-            coverPhoto: "",
             email: user.email,
-            featured: false,
-            isFeatured: false,
-            isVerified: false,
-            joinDate: serverTimestamp(),
-            languages: ["Somali", "English"],
-            lastUpdated: serverTimestamp(),
-            licenseNumber: 'PENDING',
-            migratedAt: serverTimestamp(),
             name: formData.businessName,
             phone: userData?.phoneNumber || "",
             planTier: 'free',
             profileImageUrl: finalUrl,
-            propertiesSold: 0,
             slug: safeSlug, 
             specialties: [formData.specialty],
             status: "active",
-            totalListings: 0,
             userid: user.uid,
-            verifiedAt: null,
             city: formData.city,
             ownerName: userData?.name || "Agent",
             whatsappNumber: formData.whatsappNumber,
             type: "reagent"
          };
 
-         await setDoc(doc(db, 'agents', user.uid), agencyData);
-         await updateDoc(doc(db, 'users', user.uid), { isAgent: true, role: 'reagent', photoUrl: finalUrl });
+         const idToken = await user.getIdToken();
+         const res = await fetch('/api/agents', {
+            method: 'POST',
+            headers: {
+               'Content-Type': 'application/json',
+               'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify(agencyData)
+         });
+
+         if (!res.ok) throw new Error("Failed to create agent profile.");
          
          onComplete();
       } catch (err: any) {

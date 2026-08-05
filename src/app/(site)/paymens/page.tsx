@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { auth, db } from '@/app/lib/firebase';
+import { auth } from '@/app/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '@/app/lib/supabase';
 import { 
   CheckCircle, 
   MessageCircle, 
@@ -49,31 +49,44 @@ function PaymentPageContent() {
     location: ''
   });
 
-  // --- 1. LOAD USER DATA ---
+  // --- 1. LOAD USER DATA FROM SUPABASE ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setCurrentUser(user);
         try {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            const role = data.role || 'user';
+          let { data: userData } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', user.uid)
+            .maybeSingle();
+
+          if (!userData) {
+            const { data: altUserData } = await supabase
+              .from('users')
+              .select('*')
+              .eq('_id', user.uid)
+              .maybeSingle();
+            userData = altUserData;
+          }
+
+          if (userData) {
+            const role = userData.role || 'user';
             
             let bType = 'Independent Agent';
             if (role === 'hoadmin') bType = 'Hotel / Accommodation';
             if (role === 'reagent') bType = 'Real Estate Agency';
 
             setFormData({
-              name: data.name || user.displayName || '',
+              name: userData.name || user.displayName || '',
               businessType: bType,
-              businessName: data.hotelName || data.agencyName || data.businessName || '',
-              phone: data.phoneNumber || data.phone || data.whatsappNumber || '',
-              location: data.city || data.area || ''
+              businessName: userData.hotelName || userData.agencyName || userData.businessName || '',
+              phone: userData.phoneNumber || userData.phone || userData.whatsappNumber || '',
+              location: userData.city || userData.area || ''
             });
           }
         } catch (error) {
-          console.error("Error fetching user data:", error);
+          console.error("Error fetching user profile from Supabase:", error);
         }
       }
       setLoading(false);
@@ -86,38 +99,49 @@ function PaymentPageContent() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // --- 2. SUBMIT ORDER & OPEN WHATSAPP ---
+  // --- 2. SUBMIT ORDER VIA SECURE API & OPEN WHATSAPP ---
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
 
-    const uid = currentUser?.uid || 'guest';
     const supportPhone = "252653227084"; // Your WhatsApp Support Number
 
     try {
-      // 1. Save to Firebase 'orders' collection
-      const orderData = {
-        userId: uid,
-        planId: planId,
-        planName: planName,
-        amount: Number(amount),
-        customerName: formData.name,
-        businessName: formData.businessName,
-        businessType: formData.businessType,
-        contactPhone: formData.phone,
-        location: formData.location,
-        status: 'pending_whatsapp',
-        createdAt: serverTimestamp(),
-      };
+      const currentUserObj = auth.currentUser;
+      const idToken = currentUserObj ? await currentUserObj.getIdToken() : '';
 
-      const docRef = await addDoc(collection(db, 'orders'), orderData);
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          planId,
+          planName,
+          amount: Number(amount),
+          customerName: formData.name,
+          businessName: formData.businessName,
+          businessType: formData.businessType,
+          contactPhone: formData.phone,
+          location: formData.location
+        })
+      });
 
-      // 2. Format WhatsApp Message
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create order.');
+      }
+
+      const generatedOrderId = result.order?.id || result.order?._id || 'NEW';
+
+      // Format WhatsApp Message
       const message = 
         `Hello GuriUp Support! 👋\n\n` +
         `I would like to activate my Premium Plan manually. Here are my details:\n\n` +
         `🛒 *ORDER SUMMARY*\n` +
-        `• Order ID: ${docRef.id.substring(0, 8).toUpperCase()}\n` +
+        `• Order ID: ${String(generatedOrderId).substring(0, 8).toUpperCase()}\n` +
         `• Plan Requested: ${planName}\n` +
         `• Price: $${amount}\n\n` +
         `👤 *MY DETAILS*\n` +
@@ -131,13 +155,12 @@ function PaymentPageContent() {
       const encodedMessage = encodeURIComponent(message);
       const whatsappUrl = `https://wa.me/${supportPhone}?text=${encodedMessage}`;
 
-      // 3. Open WhatsApp in new tab & show success modal
       window.open(whatsappUrl, '_blank');
       setShowSuccess(true);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Order submission failed:", error);
-      alert("Failed to create order. Please try again.");
+      alert(error.message || "Failed to create order. Please try again.");
     } finally {
       setSubmitting(false);
     }

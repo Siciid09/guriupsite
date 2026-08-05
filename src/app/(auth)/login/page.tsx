@@ -5,8 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { auth, db } from '../../lib/firebase'; // Adjust path as needed
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { auth } from '../../lib/firebase'; 
 import { Mail, Lock, Loader2, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
@@ -25,34 +24,33 @@ export default function LoginPage() {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      const userDocRef = doc(db, 'users', user.uid);
-      const userDoc = await getDoc(userDocRef);
+      if (!user.emailVerified) {
+        await auth.signOut();
+        setError('Account not verified. Please check your email and click the link.');
+        setLoading(false);
+        return;
+      }
 
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
+      const idToken = await user.getIdToken();
+      const response = await fetch('/api/users/me', {
+        headers: { Authorization: `Bearer ${idToken}` }
+      });
 
-        // 🔒 SECURITY FIX: Rely on Google/Firebase's internal security token
-        if (!user.emailVerified) {
-          await auth.signOut();
-          setError('Account not verified. Please check your email and click the link.');
-          setLoading(false);
-          return;
-        }
+      if (response.ok) {
+        const data = await response.json();
+        const userData = data.user;
 
-        // 🛠️ AUTO-REPAIR: If Firebase says they clicked the link, but your DB missed it, fix the DB silently!
-        if (user.emailVerified && userData.emailVerified !== true) {
-          await setDoc(userDocRef, { emailVerified: true }, { merge: true });
-          userData.emailVerified = true; // 🚨 FIX: Repair emailVerified, not Admin isVerified
-        }
-
-        if (userData.role === 'agent' || userData.isAgent === true) {
+        if (userData.role === 'agent' || userData.isAgent === true || userData.role === 'reagent') {
           router.push('/dashboard/agent');
+        } else if (userData.role === 'hoadmin') {
+          router.push('/dashboard/hotel');
         } else {
           router.push('/');
         }
       } else {
-        await auth.signOut();
-        setError('User profile not found. Please contact support.');
+        // ✅ AUTO-RESUME: Firebase account exists, but no Supabase profile.
+        // Send them to signup to complete their profile setup!
+        router.push('/signup');
       }
 
     } catch (err: any) {
@@ -81,44 +79,38 @@ export default function LoginPage() {
     try {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
+      const idToken = await user.getIdToken();
 
-      const userDocRef = doc(db, 'users', user.uid);
-      const userDoc = await getDoc(userDocRef);
+      const response = await fetch('/api/users/me', {
+        headers: { Authorization: `Bearer ${idToken}` }
+      });
 
-      if (!userDoc.exists()) {
-        // 🚫 SCAM PREVENTION: Do not let random Google clicks create default accounts here.
-        // Force them to go through the proper Signup page to accept terms and pick a role.
+      if (!response.ok) {
+        // ✅ AUTO-RESUME: Send new Google users to signup to pick a role
+        router.push('/signup');
+        return;
+      }
+
+      const data = await response.json();
+      const userData = data.user;
+         
+      if (userData.isBanned === true) {
         await auth.signOut();
-        setError('No account found. Please go to the Sign Up page to create an account.');
+        setError('This account has been disabled.');
         setLoading(false);
         return;
-      } else {
-         const userData = userDoc.data();
-         
-         // ✅ FIX: Check if banned, not isVerified. Google users are auto-verified.
-         if (userData.isBanned === true) {
-           await auth.signOut();
-           setError('This account has been disabled.');
-           setLoading(false);
-           return;
-         }
+      }
 
-         // ✅ FIX: Properly route all role types (added reagent and hoadmin)
-         if (userData.role === 'agent' || userData.isAgent === true || userData.role === 'reagent') {
-            router.push('/dashboard/agent');
-         } else if (userData.role === 'hoadmin') {
-            router.push('/dashboard/hotel');
-         } else {
-            router.push('/');
-         }
+      if (userData.role === 'agent' || userData.isAgent === true || userData.role === 'reagent') {
+        router.push('/dashboard/agent');
+      } else if (userData.role === 'hoadmin') {
+        router.push('/dashboard/hotel');
+      } else {
+        router.push('/');
       }
     } catch (err: any) {
         console.error("Google Login Error:", err);
-        // Ignore the error if the user simply closed the Google popup window
-        if (err.code === 'auth/popup-closed-by-user') {
-          setError('');
-        } else {
-          // Expose the actual Firebase error message to help with debugging
+        if (err.code !== 'auth/popup-closed-by-user') {
           setError(err.message || 'Failed to log in with Google.');
         }
     } finally {
@@ -128,33 +120,25 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen relative flex items-center justify-center p-4 sm:p-8 overflow-hidden bg-black">
-      
-      {/* FULL BACKGROUND IMAGE */}
       <div className="absolute inset-0 z-0">
         <Image 
           src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?q=80&w=2075&auto=format&fit=crop" 
           alt="GuriUp Premium Real Estate" 
           fill
+          sizes="100vw"
           className="object-cover scale-105 animate-in zoom-in duration-1000"
           priority
         />
-        {/* Sleek Dark Gradient Overlay */}
         <div className="absolute inset-0 bg-black/50 bg-gradient-to-t from-black/90 via-black/40 to-black/80 backdrop-blur-[4px]"></div>
       </div>
 
-      {/* CENTERED GLASSMORPHISM CARD */}
       <div className="w-full max-w-[460px] relative z-10 animate-in fade-in slide-in-from-bottom-8 duration-700">
         <div className="bg-white/10 backdrop-blur-2xl border border-white/20 p-8 sm:p-10 rounded-[2.5rem] shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] overflow-hidden">
-          
-          {/* Subtle Top Glare */}
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent"></div>
 
-          {/* HEADER INFO */}
           <div className="text-center mb-10">
             <h1 className="text-4xl font-black text-white tracking-tight mb-2 drop-shadow-md">GuriUp</h1>
-            <p className="text-white/70 font-medium text-sm px-4">
-              Access your dashboard to manage properties and exclusive listings.
-            </p>
+            <p className="text-white/70 font-medium text-sm px-4">Access your dashboard to manage properties and exclusive listings.</p>
           </div>
 
           {error && (
@@ -172,6 +156,7 @@ export default function LoginPage() {
                 <input
                   id="email"
                   type="email"
+                  autoComplete="username"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full bg-black/20 border border-white/10 rounded-2xl py-3.5 pl-12 pr-4 font-medium text-white placeholder:text-white/30 outline-none focus:border-white/50 focus:bg-white/10 transition-all backdrop-blur-md"
@@ -184,15 +169,14 @@ export default function LoginPage() {
             <div className="space-y-1.5">
               <div className="flex justify-between items-center pl-1 pr-1">
                 <label htmlFor="password" className="block text-xs font-bold text-white/70 uppercase tracking-widest">Password</label>
-                <Link href="/forgot-password" className="text-xs font-semibold text-white/70 hover:text-white hover:underline transition-colors">
-                  Forgot?
-                </Link>
+                <Link href="/forgot-password" className="text-xs font-semibold text-white/70 hover:text-white hover:underline transition-colors">Forgot?</Link>
               </div>
               <div className="relative group">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-white transition-colors" size={20} />
                 <input
                   id="password"
                   type="password"
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-black/20 border border-white/10 rounded-2xl py-3.5 pl-12 pr-4 font-medium text-white placeholder:text-white/30 outline-none focus:border-white/50 focus:bg-white/10 transition-all backdrop-blur-md"
@@ -202,11 +186,7 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full mt-2 bg-white hover:bg-slate-100 text-black py-4 rounded-2xl font-bold text-[15px] shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:shadow-[0_0_30px_rgba(255,255,255,0.4)] active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
+            <button type="submit" disabled={loading} className="w-full mt-2 bg-white hover:bg-slate-100 text-black py-4 rounded-2xl font-bold text-[15px] shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:shadow-[0_0_30px_rgba(255,255,255,0.4)] active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2">
               {loading ? <Loader2 size={20} className="animate-spin text-black" /> : 'Sign In'}
             </button>
           </form>
@@ -217,11 +197,7 @@ export default function LoginPage() {
             <div className="flex-grow border-t border-white/10"></div>
           </div>
 
-          <button
-            onClick={handleGoogleLogin}
-            disabled={loading}
-            className="w-full bg-black/30 border border-white/10 text-white hover:bg-white/10 hover:border-white/30 py-3.5 rounded-2xl font-semibold flex items-center justify-center gap-3 transition-all active:scale-[0.98] disabled:opacity-70 backdrop-blur-md"
-          >
+          <button onClick={handleGoogleLogin} disabled={loading} className="w-full bg-black/30 border border-white/10 text-white hover:bg-white/10 hover:border-white/30 py-3.5 rounded-2xl font-semibold flex items-center justify-center gap-3 transition-all active:scale-[0.98] disabled:opacity-70 backdrop-blur-md">
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
               <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -233,9 +209,7 @@ export default function LoginPage() {
 
           <p className="text-center text-white/60 mt-8 text-sm font-medium">
             New to GuriUp?{' '}
-            <Link href="/signup" className="text-white font-bold hover:underline transition-all">
-              Create an account
-            </Link>
+            <Link href="/signup" className="text-white font-bold hover:underline transition-all">Create an account</Link>
           </p>
 
         </div>

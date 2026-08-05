@@ -1,7 +1,6 @@
 import { Metadata } from 'next';
 import { cache } from 'react';
-import { doc, getDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
-import { db } from '@/app/lib/firebase';
+import { getHotelBySlug } from '@/app/lib/data'; // Utilize established Supabase data fetcher
 import HotelDetailView from '@/components/templates/HotelClientView';
 
 // --- TYPES ---
@@ -10,26 +9,14 @@ type Props = {
 };
 
 // --- OPTIMIZATION: Cache the DB call to avoid double-fetching ---
-// This ensures Firebase is only hit once per page load, even though
-// both generateMetadata and the Page component need the data.
 const getHotelData = cache(async (slug: string) => {
-  let data: any = null;
-
-  // PRIORITY 1: Search by Slug
-  const slugQuery = query(collection(db, 'hotels'), where('slug', '==', slug), limit(1));
-  const slugDocs = await getDocs(slugQuery);
-
-  if (!slugDocs.empty) {
-    data = { id: slugDocs.docs[0].id, ...slugDocs.docs[0].data() };
-  } else {
-    // PRIORITY 2: Fallback to direct ID fetch
-    const docRef = doc(db, 'hotels', slug);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      data = { id: snap.id, ...snap.data() };
-    }
+  try {
+    const data = await getHotelBySlug(slug);
+    return data;
+  } catch (error) {
+    console.error("Failed to fetch hotel data for SEO from Supabase:", error);
+    return null;
   }
-  return data;
 });
 
 // --- STEP 1: MAXIMIZED METADATA ---

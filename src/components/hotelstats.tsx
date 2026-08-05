@@ -1,17 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
-  collection, query, where, onSnapshot 
-} from 'firebase/firestore';
-import { db } from '../app/lib/firebase'; // Adjust path if needed
+import { auth } from '@/app/lib/firebase'; // Keep for secure token generation
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
   ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar 
 } from 'recharts';
 import { 
-  Eye, Users, CalendarCheck, DollarSign, Activity, Target, 
-  BedDouble, TrendingUp, ArrowUpRight, MessageSquare, Phone, Send
+  Eye, CalendarCheck, DollarSign, Activity, Target, 
+  BedDouble, TrendingUp, Phone
 } from 'lucide-react';
 import { format, subDays } from 'date-fns';
 
@@ -53,81 +50,87 @@ export default function HotelAnalytics({ hotelId }: HotelAnalyticsProps) {
   useEffect(() => {
     if (!hotelId) return;
 
-    let unsubAnalytics = () => {};
-    let unsubBookings = () => {};
+    const fetchAnalyticsData = async () => {
+      try {
+        setLoading(true);
+        const currentUser = auth.currentUser;
+        const idToken = currentUser ? await currentUser.getIdToken() : '';
 
-    // --- 1. REAL-TIME ANALYTICS LISTENER (Views & Clicks from Flutter) ---
-    const qAnalytics = query(collection(db, 'analytics_views'), where('hotelId', '==', hotelId));
-    unsubAnalytics = onSnapshot(qAnalytics, (snap) => {
-      let views = 0;
-      let whatsappClicks = 0;
-      let callClicks = 0;
-      let chatClicks = 0;
-      
-      const timelineData: Record<string, number> = {};
-      
-      // Initialize last 7 days to 0
-      Array.from({ length: 7 }).forEach((_, i) => {
-        timelineData[format(subDays(new Date(), 6 - i), 'MMM dd')] = 0;
-      });
+        // --- 1. FETCH BOOKINGS (Securely via API) ---
+        const bookingsRes = await fetch(`/api/bookings?hotelId=${hotelId}`, {
+          headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+        const bookingsData = await bookingsRes.json();
+        const bookingsList = Array.isArray(bookingsData) ? bookingsData : [];
 
-      snap.docs.forEach(doc => {
-        const d = doc.data();
-        const eventType = d.type;
-        const dateStr = d.timestamp ? format(d.timestamp.toDate(), 'MMM dd') : null;
+        // --- 2. FETCH ANALYTICS EVENTS (Securely via API) ---
+        const analyticsRes = await fetch(`/api/analytics?hotelId=${hotelId}`, {
+          headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+        const analyticsJson = await analyticsRes.json();
+        const eventsList = analyticsJson.success && analyticsJson.data?.events ? analyticsJson.data.events : [];
 
-        if (eventType === 'view_hotel') {
-          views++;
-          if (dateStr && timelineData[dateStr] !== undefined) {
-             timelineData[dateStr] += 1;
-          }
-        } else if (eventType === 'click_whatsapp') {
-          whatsappClicks++;
-        } else if (eventType === 'click_call') {
-          callClicks++;
-        } else if (eventType === 'click_chat') {
-          chatClicks++;
-        }
-      });
-
-      // Format for Recharts
-      const realTimeline = Object.keys(timelineData).map(date => ({
-        date, 
-        views: timelineData[date] 
-      }));
-
-      const inquiryDist = [
-        { name: 'WhatsApp', value: whatsappClicks },
-        { name: 'Direct Call', value: callClicks },
-        { name: 'In-App Chat', value: chatClicks },
-      ].filter(item => item.value > 0); // Only show methods that have clicks
-
-      // --- 2. REAL-TIME BOOKINGS LISTENER (Revenue & Room Popularity) ---
-      const qBookings = query(collection(db, 'bookings'), where('hotelId', '==', hotelId));
-      unsubBookings = onSnapshot(qBookings, (bookingSnap) => {
+        // --- PROCESS BOOKINGS ---
         let revenue = 0;
         let bookingsCount = 0;
         const roomCounts: Record<string, number> = {};
 
-        bookingSnap.docs.forEach(doc => {
-          const b = doc.data();
-          
+        bookingsList.forEach((b: any) => {
           // Only count revenue for valid, non-cancelled bookings
-          if (['confirmed', 'checked-in', 'checked-out'].includes(b.status)) {
-             revenue += (b.totalPrice || 0);
+          if (['confirmed', 'paid', 'checked-in', 'checked-out'].includes(b.status?.toLowerCase())) {
+             revenue += (Number(b.totalAmount) || Number(b.totalPrice) || 0);
              bookingsCount++;
              
-             // Track which rooms are most popular
-             const rName = b.roomName || 'Unknown Room';
+             const rName = b.roomName || b.roomTypeName || 'Standard Room';
              roomCounts[rName] = (roomCounts[rName] || 0) + 1;
           }
         });
 
-        // Sort rooms by popularity for the bar chart
         const topRooms = Object.keys(roomCounts)
           .map(k => ({ name: k, bookings: roomCounts[k] }))
           .sort((a, b) => b.bookings - a.bookings)
-          .slice(0, 5); // Top 5 rooms
+          .slice(0, 5);
+
+        // --- PROCESS ANALYTICS VIEWS & CLICKS ---
+        let views = 0;
+        let whatsappClicks = 0;
+        let callClicks = 0;
+        let chatClicks = 0;
+        
+        const timelineData: Record<string, number> = {};
+        
+        Array.from({ length: 7 }).forEach((_, i) => {
+          timelineData[format(subDays(new Date(), 6 - i), 'MMM dd')] = 0;
+        });
+
+        eventsList.forEach((event: any) => {
+          const eventType = event.eventType || event.type;
+          const dateStr = event.createdAt ? format(new Date(event.createdAt), 'MMM dd') : null;
+
+          if (eventType === 'view_hotel') {
+            views++;
+            if (dateStr && timelineData[dateStr] !== undefined) {
+               timelineData[dateStr] += 1;
+            }
+          } else if (eventType === 'click_whatsapp') {
+            whatsappClicks++;
+          } else if (eventType === 'click_call') {
+            callClicks++;
+          } else if (eventType === 'click_chat') {
+            chatClicks++;
+          }
+        });
+
+        const realTimeline = Object.keys(timelineData).map(date => ({
+          date, 
+          views: timelineData[date] 
+        }));
+
+        const inquiryDist = [
+          { name: 'WhatsApp', value: whatsappClicks },
+          { name: 'Direct Call', value: callClicks },
+          { name: 'In-App Chat', value: chatClicks },
+        ].filter(item => item.value > 0);
 
         setData({
           totalViews: views,
@@ -138,22 +141,22 @@ export default function HotelAnalytics({ hotelId }: HotelAnalyticsProps) {
           inquiryDistribution: inquiryDist,
           roomPopularity: topRooms
         });
-        
-        setLoading(false);
-      });
-    });
 
-    return () => {
-      unsubAnalytics();
-      unsubBookings();
+      } catch (error) {
+        console.error("Failed to load hotel analytics:", error);
+      } finally {
+        setLoading(false);
+      }
     };
+
+    fetchAnalyticsData();
   }, [hotelId]);
 
   if (loading) {
     return (
       <div className="h-[50vh] flex flex-col items-center justify-center space-y-4">
         <div className="w-12 h-12 border-4 border-[#0065eb] border-t-transparent rounded-full animate-spin"></div>
-        <p className="font-bold text-slate-400 animate-pulse uppercase tracking-widest text-xs">Syncing Live Analytics...</p>
+        <p className="font-bold text-slate-400 animate-pulse uppercase tracking-widest text-xs">Loading Live Analytics...</p>
       </div>
     );
   }

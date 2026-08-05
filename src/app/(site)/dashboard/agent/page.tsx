@@ -98,17 +98,12 @@ function DashboardContent() {
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
       if (!user) return router.push('/login');
       
-      let d = null;
-      const agentSnap = await getDoc(doc(db, 'agents', user.uid));
+      const idToken = await user.getIdToken();
       
-      if (agentSnap.exists()) {
-        d = agentSnap.data();
-      } else {
-        const userSnap = await getDoc(doc(db, 'users', user.uid));
-        if (userSnap.exists()) d = userSnap.data();
-      }
-
-      if (d) {
+      // 1. Fetch Profile from Supabase
+      const userRes = await fetch('/api/users/me', { headers: { Authorization: `Bearer ${idToken}` } });
+      if (userRes.ok) {
+        const { user: d } = await userRes.json();
         setProfile({
           uid: user.uid,
           name: d.name || d.ownerName || 'Agent',
@@ -119,11 +114,19 @@ function DashboardContent() {
         });
       }
 
-      const qProps = query(collection(db, 'property'), where('agentId', '==', user.uid));
-      onSnapshot(qProps, (snap) => setProperties(snap.docs.map(d => ({ id: d.id, ...d.data() } as Property))));
+      // 2. Fetch Properties from Supabase
+      const propRes = await fetch('/api/properties?agentId=' + user.uid);
+      if (propRes.ok) {
+         const { data } = await propRes.json();
+         setProperties(data || []);
+      }
 
-      const qTours = query(collection(db, 'tour_requests'), where('agentId', '==', user.uid), orderBy('timestamp', 'desc'));
-      onSnapshot(qTours, (snap) => setTours(snap.docs.map(d => ({ id: d.id, ...d.data() } as TourRequest))));
+      // 3. Fetch Tour Requests (Bookings) from Supabase
+      const tourRes = await fetch('/api/bookings?agentId=' + user.uid, { headers: { Authorization: `Bearer ${idToken}` } });
+      if (tourRes.ok) {
+         const { data } = await tourRes.json();
+         setTours(data || []);
+      }
 
       const qChats = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid), orderBy('updatedAt', 'desc'));
       onSnapshot(qChats, (snap) => {
@@ -151,6 +154,33 @@ function DashboardContent() {
   const handleLogout = async () => {
     await signOut(auth);
     router.push('/login');
+  };
+
+  const updateTourStatus = async (id: string, status: string) => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) return;
+      const idToken = await currentUser.getIdToken();
+      
+      const res = await fetch('/api/bookings', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        // We pass the agentId as the hotelId placeholder to satisfy the unified bookings API gatekeeper
+        body: JSON.stringify({ id, hotelId: profile?.uid, status }) 
+      });
+      
+      if (res.ok) {
+        setTours(prev => prev.map(t => t.id === id ? { ...t, status: status as any } : t));
+      } else {
+         throw new Error("Update failed");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Failed to update tour status.");
+    }
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]"><Loader2 className="animate-spin text-[#0065eb] w-12 h-12"/></div>;
@@ -272,8 +302,8 @@ function DashboardContent() {
                                 <span className="text-xs text-slate-500 font-medium">{t.propertyName} • {t.date} @ {t.time}</span>
                              </div>
                              <div className="flex gap-2">
-                                <button className="p-2 bg-emerald-500 text-white rounded-xl shadow-sm hover:scale-105 transition-transform"><CheckCircle size={18}/></button>
-                                <button className="p-2 bg-red-100 text-red-600 rounded-xl hover:bg-red-200"><XCircle size={18}/></button>
+                                <button onClick={() => updateTourStatus(t.id, 'completed')} className="p-2 bg-emerald-500 text-white rounded-xl shadow-sm hover:scale-105 transition-transform"><CheckCircle size={18}/></button>
+                                <button onClick={() => updateTourStatus(t.id, 'cancelled')} className="p-2 bg-red-100 text-red-600 rounded-xl hover:bg-red-200"><XCircle size={18}/></button>
                              </div>
                           </div>
                        ))}
@@ -365,8 +395,8 @@ function DashboardContent() {
                               </td>
                               <td className="p-6"><StatusBadge status={tour.status} /></td>
                               <td className="p-6 text-right space-x-2">
-                                 <button className="p-2 bg-emerald-50 text-emerald-600 rounded-lg"><CheckCircle size={18}/></button>
-                                 <button className="p-2 bg-red-50 text-red-600 rounded-lg"><XCircle size={18}/></button>
+                                 <button onClick={() => updateTourStatus(tour.id, 'completed')} className="p-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100"><CheckCircle size={18}/></button>
+                                 <button onClick={() => updateTourStatus(tour.id, 'cancelled')} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100"><XCircle size={18}/></button>
                               </td>
                            </tr>
                         ))}

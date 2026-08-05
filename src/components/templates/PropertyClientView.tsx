@@ -3,10 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { 
-  doc, getDoc, collection, query, where, limit, getDocs, addDoc, serverTimestamp 
-} from 'firebase/firestore';
-import { db, auth } from '../../app/lib/firebase'; 
+import { auth } from '../../app/lib/firebase'; 
+import { supabase } from '@/app/lib/supabase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import SharedChatComponent from '@/components/sharedchat';
 import { 
@@ -22,11 +20,10 @@ export interface Property {
   slug?: string;
   title: string;
   price: number;
-  videoUrl?: string; // ✅ Added Video URL support
+  videoUrl?: string; 
   description: string;
   images: string[];
   agentId: string;
-  // ✅ FIX: Added gpsCoordinates to the TypeScript definition so it stops complaining!
   location: { city: string; area: string; address?: string; lat?: number; lng?: number; gpsCoordinates?: string };
   features: { 
     bedrooms?: number; 
@@ -95,16 +92,33 @@ const BookingModal = ({ isOpen, onClose, property, agent }: { isOpen: boolean; o
     e.preventDefault();
     setLoading(true);
     try {
-      await addDoc(collection(db, 'tour_requests'), {
-        propertyId: property.id, propertyName: property.title, agentId: property.agentId,
-        userName: formData.name, userPhone: formData.phone, userId: currentUser?.uid || 'anonymous_web',
-        date: formData.date, time: formData.time, timestamp: serverTimestamp(), status: 'pending', platform: 'web'
-      });
+      // FIX 1: Replaced Firestore addDoc with Supabase insert
+      const { error: tourError } = await supabase.from('tour_requests').insert([{
+        propertyId: property.id,
+        propertyName: property.title,
+        agentId: property.agentId,
+        userName: formData.name,
+        userPhone: formData.phone,
+        userId: currentUser?.uid || 'anonymous_web',
+        date: formData.date,
+        time: formData.time,
+        createdAt: new Date().toISOString(),
+        status: 'pending',
+        platform: 'web'
+      }]);
+
+      if (tourError) throw tourError;
+
       const agentPhone = isAgentPro(agent) ? (property.contactPhone || agent?.phone || "+252653227084") : "+252653227084";
       const msg = `Salaam, waxan rabaa inan dalbado booqasho guri: '${property.title}'.\nTaariikhda: ${formData.date}\nSaacada: ${formData.time}\nMagacaygu waa: ${formData.name}`;
       window.open(`https://wa.me/${agentPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
       onClose();
-    } catch (error) { alert("Failed to submit booking."); } finally { setLoading(false); }
+    } catch (error) { 
+      console.error(error);
+      alert("Failed to submit booking."); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   return (
@@ -161,55 +175,86 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
   const [showGalleryModal, setShowGalleryModal] = useState(false);
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [restrictedFeature, setRestrictedFeature] = useState<string | null>(null);
-  const [isChatOpen, setIsChatOpen] = useState(false);
-  const [showVideoModal, setShowVideoModal] = useState(false); // ✅ Video State
-  
-  const [property] = useState<Property>(initialProperty);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  
+  const [property] = useState<Property>(initialProperty);
 
-  // ✅ ANALYTICS: Track Views exactly like the App
+  // FIX 2: API Analytics Views Tracking
   const hasTrackedView = useRef(false);
   useEffect(() => {
     if (property && !hasTrackedView.current) {
       hasTrackedView.current = true;
-      addDoc(collection(db, 'analytics_views'), {
-        type: 'view_property',
-        agentId: property.agentId,
-        listingId: property.id,
-        platform: 'web',
-        timestamp: serverTimestamp()
-      }).catch(console.error);
+      fetch('/api/analytics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventType: 'view_property',
+          agentId: property.agentId,
+          propertyId: property.id
+        })
+      }).catch(err => console.error("Analytics View Error:", err));
     }
   }, [property]);
 
-  // ✅ ANALYTICS: Track Clicks
+  // FIX 3: API Analytics Clicks Tracking
   const trackClick = (type: string) => {
-    addDoc(collection(db, 'analytics_views'), {
-      type,
-      agentId: property.agentId,
-      listingId: property.id,
-      platform: 'web',
-      timestamp: serverTimestamp()
-    }).catch(console.error);
+    fetch('/api/analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eventType: type,
+        agentId: property.agentId,
+        propertyId: property.id
+      })
+    }).catch(err => console.error("Analytics Click Error:", err));
   };
-  const [agent] = useState<Agent | null>(initialAgent);
-  const [related, setRelated] = useState<Property[]>([]);
 
-  useEffect(() => {
-    if (property) document.title = `${property.title} | GuriUp`;
-  }, [property]);
+  const [agent] = useState<Agent | null>(initialAgent);
+  const [related, setRelated] = useState<Property[]>([]);
+
+  useEffect(() => {
+    if (property) document.title = `${property.title} | GuriUp`;
+  }, [property]);
 
   const autoSlideRef = useRef<NodeJS.Timeout | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // FIX 4: Supabase Fetch Related Properties
   useEffect(() => {
     if (property?.location?.city) {
       const fetchRelated = async () => {
         try {
-          const q = query(collection(db, 'property'), where('location.city', '==', property.location.city), where('status', 'in', ['available', 'rented_out']), limit(6));
-          const relatedSnap = await getDocs(q);
-          setRelated(relatedSnap.docs.map(d => ({ id: d.id, ...d.data() } as Property)).filter(p => p.id !== property.id));
-        } catch (e) { console.error(e); }
-      }; fetchRelated();
+          let { data: relatedData } = await supabase
+            .from('properties')
+            .select('*')
+            .eq('location->>city', property.location.city)
+            .in('status', ['available', 'rented_out'])
+            .limit(7);
+
+          if (!relatedData || relatedData.length === 0) {
+            const { data: altRelated } = await supabase
+              .from('property')
+              .select('*')
+              .eq('location->>city', property.location.city)
+              .in('status', ['available', 'rented_out'])
+              .limit(7);
+            relatedData = altRelated;
+          }
+
+          if (relatedData) {
+            setRelated(
+              relatedData
+                .map((d: any) => ({ id: d.id || d._id, ...d } as Property))
+                .filter((p: Property) => p.id !== property.id)
+                .slice(0, 6)
+            );
+          }
+        } catch (e) { 
+          console.error("Error fetching related properties:", e); 
+        }
+      }; 
+      fetchRelated();
     }
   }, [property]);
 
@@ -226,7 +271,6 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
   const isVerified = isAgentPro(agent);
 
   return (
-    // FIX 1: INCREASED PADDING TOP TO PUSH CONTENT DOWN (pt-[150px])
     <div className="bg-[#FAFBFC] min-h-screen font-sans text-slate-900 pb-20 pt-[180px]">
        
       {/* MODALS */}
@@ -234,8 +278,6 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
       <RestrictedModal isOpen={!!restrictedFeature} onClose={() => setRestrictedFeature(null)} featureName={restrictedFeature || ''} />
 
       {/* ================= SECTION 1: STATIC SLIM HEADER ================= */}
-      {/* This is intentionally NOT fixed/sticky as per previous requests, 
-          but sitting nicely below the spacing provided by pt-[150px] */}
       <div className="w-full bg-white border-b border-slate-200 px-4 md:px-6 py-4 shadow-sm mb-6 -mt-[150px] relative z-30">
         <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div className="flex flex-col w-full md:w-auto">
@@ -262,29 +304,25 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
               <Image src={images[activeImg]} alt="Property" fill className="object-cover transition-transform duration-1000 group-hover:scale-105" priority />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60"></div>
               
-              {/* MOBILE FULL SCREEN ICON (LEFT TOP) */}
               <button onClick={() => setShowGalleryModal(true)} className="lg:hidden absolute top-6 left-6 z-30 p-2.5 bg-black/40 backdrop-blur-md rounded-full text-white border border-white/10 shadow-lg hover:bg-black/60">
                  <Expand size={18} />
               </button>
 
-              {/* STATUS BADGE - MOVED TO RIGHT ON MOBILE TO AVOID OVERLAP */}
               <div className="absolute top-6 right-6 lg:left-6 lg:right-auto flex gap-2 z-10">
                  <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider backdrop-blur-xl border border-white/10 shadow-lg ${property.isForSale ? 'bg-blue-600/90 text-white' : 'bg-green-600/90 text-white'}`}>{property.isForSale ? 'For Sale' : 'For Rent'}</span>
               </div>
 
-              {/* CENTER BOTTOM CONTROLS (SMALLER ON MOBILE) */}
               <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4 md:gap-6 z-20">
                 <button onClick={() => handleManualSlide(activeImg === 0 ? images.length - 1 : activeImg - 1)} className="p-2 md:p-4 bg-white/10 backdrop-blur-md rounded-full text-white hover:bg-white hover:text-black transition-all border border-white/20 shadow-lg group"><ChevronLeft size={20} className="md:w-6 md:h-6 group-hover:scale-110 transition-transform"/></button>
                 <button onClick={() => handleManualSlide(activeImg === images.length - 1 ? 0 : activeImg + 1)} className="p-2 md:p-4 bg-white/10 backdrop-blur-md rounded-full text-white hover:bg-white hover:text-black transition-all border border-white/20 shadow-lg group"><ChevronRight size={20} className="md:w-6 md:h-6 group-hover:scale-110 transition-transform"/></button>
               </div>
 
-              {/* VIEW ALL BUTTON (DESKTOP ONLY) */}
               <div className="hidden lg:flex absolute bottom-8 right-8 gap-3 z-20">
                 <button onClick={() => setShowGalleryModal(true)} className="px-5 py-2.5 bg-black/40 backdrop-blur-md text-white rounded-full text-xs font-bold flex items-center gap-2 hover:bg-black/60 transition-all border border-white/10 shadow-xl"><Expand size={14}/> View Gallery</button>
               </div>
             </div>
 
-            {/* MEDIA TABS (Gallery / Video) */}
+            {/* MEDIA TABS */}
             {property.videoUrl && (
               <div className="flex items-center gap-2 -mb-1">
                 <button className="px-6 py-2 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest shadow-md cursor-default">
@@ -299,7 +337,7 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
               </div>
             )}
 
-            {/* MOBILE THUMBNAILS (Max 4 + 1) */}
+            {/* MOBILE THUMBNAILS */}
             <div className="grid lg:hidden grid-cols-5 gap-2 mt-2 h-16 sm:h-20">
               {images.slice(0, 4).map((img, idx) => (
                 <div key={idx} onClick={() => handleManualSlide(idx)} className={`relative rounded-xl overflow-hidden cursor-pointer border-2 ${activeImg === idx ? 'border-[#0065eb]' : 'border-transparent'}`}>
@@ -310,14 +348,10 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
                 <div onClick={() => setShowGalleryModal(true)} className="relative rounded-xl overflow-hidden bg-slate-100 flex flex-col items-center justify-center cursor-pointer border-2 border-transparent">
                    <span className="text-[#0065eb] font-black text-sm">+{images.length - 4}</span>
                 </div>
-              ) : images.length === 5 && (
-                 // If exactly 5 images, show the 5th one instead of +1 card if desired, or stick to pattern. 
-                 // Logic above covers showing 4. If length is 5, >4 is true, shows +1.
-                 null
-              )}
+              ) : null}
             </div>
 
-            {/* DESKTOP THUMBNAILS (Max 9) */}
+            {/* DESKTOP THUMBNAILS */}
             <div className="hidden lg:grid h-[90px] grid-cols-9 gap-3">
               {images.slice(0, 9).map((img, idx) => (
                 <div key={idx} onClick={() => handleManualSlide(idx)} className={`relative rounded-xl overflow-hidden cursor-pointer transition-all border-2 ${activeImg === idx ? 'border-[#0065eb] ring-2 ring-[#0065eb]/20' : 'border-transparent opacity-70 hover:opacity-100'}`}>
@@ -340,7 +374,6 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
              <div className="flex-1 flex flex-col justify-center animate-in slide-in-from-right duration-700 delay-100">
                 <span className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4">Agent Information</span>
                 
-                {/* FIX 2: CLICKABLE AGENT LINK */}
                 <Link href={`/agents/${agent?.slug || agent?.uid || property.agentId}`} className="flex items-center gap-4 mb-6 group cursor-pointer hover:bg-slate-50 p-3 -ml-3 rounded-2xl transition-all">
                    <div className="w-16 h-16 rounded-2xl bg-slate-50 relative overflow-hidden border border-slate-200 shrink-0 shadow-sm group-hover:scale-105 transition-transform">
                       {agent?.photoUrl ? <Image src={agent.photoUrl} alt={agent.name} fill className="object-cover" /> : <div className="w-full h-full flex items-center justify-center text-slate-300 font-bold text-xl">{agent?.name?.[0]}</div>}
@@ -358,7 +391,6 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
                     <button onClick={() => { trackClick('click_call'); window.open(`tel:${isVerified ? (property.contactPhone || agent?.phone) : '+252653227084'}`); }} className="flex items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-[10px] md:text-xs uppercase tracking-widest transition-all hover:-translate-y-1 shadow-lg bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/20"><Phone size={16} /> Call</button>
                     <button onClick={() => { trackClick('click_chat'); setIsChatOpen(true); }} className="flex items-center justify-center gap-1.5 py-4 rounded-2xl font-bold text-[10px] md:text-xs uppercase tracking-widest transition-all hover:-translate-y-1 shadow-lg bg-blue-50 text-[#0065eb] hover:bg-blue-100"><MessageSquare size={16} /> Chat</button>
                 </div>
-                {/* REQUEST TOUR WITH SHADOW */}
                 <button onClick={() => setIsBookingOpen(true)} className="w-full py-5 bg-[#0065eb] hover:bg-[#0052c1] text-white rounded-2xl font-black text-sm uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-xl shadow-blue-500/40"><Calendar size={18} /> Request a Tour</button>
              </div>
              
@@ -370,19 +402,18 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
            {/* LEFT: DETAILS */}
            <div className="bg-white rounded-[2.5rem] p-8 md:p-10 border border-slate-100 shadow-sm flex flex-col h-full">
-             <h3 className="text-2xl font-black text-slate-900 mb-8 tracking-tight">Property Details</h3>
-             <div className="grid grid-cols-3 gap-4 mb-10">
-                 <div className="p-5 bg-slate-50 rounded-[1.5rem] border border-slate-100 text-center group"><Home size={24} className="mx-auto text-slate-300 group-hover:text-[#0065eb] mb-3 transition-colors"/><span className="block font-black text-slate-900 text-2xl mb-1">{property.features.bedrooms || 0}</span><span className="text-[10px] uppercase text-slate-400 font-black tracking-widest">Beds</span></div>
-                 <div className="p-5 bg-slate-50 rounded-[1.5rem] border border-slate-100 text-center group"><Waves size={24} className="mx-auto text-slate-300 group-hover:text-[#0065eb] mb-3 transition-colors"/><span className="block font-black text-slate-900 text-2xl mb-1">{property.features.bathrooms || 0}</span><span className="text-[10px] uppercase text-slate-400 font-black tracking-widest">Baths</span></div>
-                 <div className="p-5 bg-slate-50 rounded-[1.5rem] border border-slate-100 text-center group"><Ruler size={24} className="mx-auto text-slate-300 group-hover:text-[#0065eb] mb-3 transition-colors"/><span className="block font-black text-slate-900 text-2xl mb-1">{property.features.size || 0}</span><span className="text-[10px] uppercase text-slate-400 font-black tracking-widest">M²</span></div>
-             </div>
-             <div className="mb-8"><h4 className="font-black text-xs text-slate-400 uppercase tracking-widest mb-4">About this home</h4><p className="text-slate-600 text-sm leading-8 whitespace-pre-line font-medium">{property.description}</p></div>
-             <div className="mt-auto"><h4 className="font-black text-xs text-slate-400 uppercase tracking-widest mb-4">Amenities</h4><div className="flex flex-wrap gap-2.5">{Object.entries(property.features).filter(([key, val]) => val === true && !['bedrooms','bathrooms','size'].includes(key)).map(([key], i) => (<span key={i} className="px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2"><CheckCircle size={14} className="text-[#0065eb]"/> {key.replace(/([A-Z])/g, ' $1').trim()}</span>))}<span className="px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2"><Wifi size={14} className="text-[#0065eb]"/> Internet Ready</span></div></div>
+              <h3 className="text-2xl font-black text-slate-900 mb-8 tracking-tight">Property Details</h3>
+              <div className="grid grid-cols-3 gap-4 mb-10">
+                  <div className="p-5 bg-slate-50 rounded-[1.5rem] border border-slate-100 text-center group"><Home size={24} className="mx-auto text-slate-300 group-hover:text-[#0065eb] mb-3 transition-colors"/><span className="block font-black text-slate-900 text-2xl mb-1">{property.features.bedrooms || 0}</span><span className="text-[10px] uppercase text-slate-400 font-black tracking-widest">Beds</span></div>
+                  <div className="p-5 bg-slate-50 rounded-[1.5rem] border border-slate-100 text-center group"><Waves size={24} className="mx-auto text-slate-300 group-hover:text-[#0065eb] mb-3 transition-colors"/><span className="block font-black text-slate-900 text-2xl mb-1">{property.features.bathrooms || 0}</span><span className="text-[10px] uppercase text-slate-400 font-black tracking-widest">Baths</span></div>
+                  <div className="p-5 bg-slate-50 rounded-[1.5rem] border border-slate-100 text-center group"><Ruler size={24} className="mx-auto text-slate-300 group-hover:text-[#0065eb] mb-3 transition-colors"/><span className="block font-black text-slate-900 text-2xl mb-1">{property.features.size || 0}</span><span className="text-[10px] uppercase text-slate-400 font-black tracking-widest">M²</span></div>
+              </div>
+              <div className="mb-8"><h4 className="font-black text-xs text-slate-400 uppercase tracking-widest mb-4">About this home</h4><p className="text-slate-600 text-sm leading-8 whitespace-pre-line font-medium">{property.description}</p></div>
+              <div className="mt-auto"><h4 className="font-black text-xs text-slate-400 uppercase tracking-widest mb-4">Amenities</h4><div className="flex flex-wrap gap-2.5">{Object.entries(property.features).filter(([key, val]) => val === true && !['bedrooms','bathrooms','size'].includes(key)).map(([key], i) => (<span key={i} className="px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2"><CheckCircle size={14} className="text-[#0065eb]"/> {key.replace(/([A-Z])/g, ' $1').trim()}</span>))}<span className="px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2"><Wifi size={14} className="text-[#0065eb]"/> Internet Ready</span></div></div>
            </div>
            {/* RIGHT: MAP */}
            <div className="relative bg-slate-100 rounded-[2.5rem] border border-slate-200 overflow-hidden min-h-[400px] lg:min-h-full group">
              {(() => {
-               // ✅ FIX: Read the exact gpsCoordinates string from the API
                const gpsParts = property.location?.gpsCoordinates?.split(',') || [];
                const lat = gpsParts[0]?.trim();
                const lng = gpsParts[1]?.trim();
@@ -391,7 +422,6 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
                return (
                  <>
                    {hasMap ? (
-                     // ✅ FIX: Corrected the Google Maps Embed URL
                      <iframe width="100%" height="100%" style={{ border: 0, minHeight: '400px' }} loading="lazy" allowFullScreen referrerPolicy="no-referrer-when-downgrade" src={`https://maps.google.com/maps?q=${lat},${lng}&hl=en&z=15&output=embed`}></iframe>
                    ) : (
                      <Image src="https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=1200" alt="Map" fill className={`object-cover transition-transform duration-1000 group-hover:scale-105 ${!isVerified ? 'blur-sm opacity-60' : ''}`} />
@@ -407,10 +437,9 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
                    )}
 
                    {hasMap && (
-                     // ✅ FIX: "Open Map" button now links to correct GPS directions
                      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10">
                         <button onClick={() => window.open(`https://maps.google.com/maps?q=${lat},${lng}`, '_blank')} className="px-8 py-4 bg-white text-slate-900 rounded-2xl text-xs font-black uppercase tracking-widest shadow-2xl hover:bg-[#0065eb] hover:text-white transition-all transform hover:-translate-y-1 hover:scale-105">
-                           Open in Google Maps
+                            Open in Google Maps
                         </button>
                      </div>
                    )}
@@ -431,10 +460,10 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
                 <h2 className="text-4xl md:text-5xl lg:text-6xl font-black text-white mb-8 leading-[0.9] tracking-tight">Grow Your <br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-[#0065eb] to-cyan-300">Business Today.</span></h2>
                 <p className="text-slate-400 text-sm font-medium leading-relaxed max-w-md mb-10">Download our app for exclusive mobile deals, or join our network to grow your business exponentially.</p>
                 <div className="flex flex-wrap gap-5 items-center">
-                   <button className="flex items-center gap-4 px-8 py-4 bg-white text-slate-900 rounded-2xl font-bold hover:bg-slate-200 transition-colors shadow-[0_0_30px_rgba(255,255,255,0.1)] group"><Download size={24} className="group-hover:translate-y-1 transition-transform" /><div className="text-left leading-none"><span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Get App</span><span className="text-base">Download</span></div></button>
-                   <div className="w-px h-12 bg-white/10 hidden sm:block"></div>
-                   <Link href="/join/agent" className="text-white font-bold text-sm hover:text-blue-400 transition-colors flex items-center gap-3 px-4 py-2 hover:bg-white/5 rounded-xl"><Briefcase size={18}/> Become Agent</Link>
-                   <Link href="/join/hotel" className="text-white font-bold text-sm hover:text-blue-400 transition-colors flex items-center gap-3 px-4 py-2 hover:bg-white/5 rounded-xl"><Building2 size={18}/> List Hotel</Link>
+                    <button className="flex items-center gap-4 px-8 py-4 bg-white text-slate-900 rounded-2xl font-bold hover:bg-slate-200 transition-colors shadow-[0_0_30px_rgba(255,255,255,0.1)] group"><Download size={24} className="group-hover:translate-y-1 transition-transform" /><div className="text-left leading-none"><span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Get App</span><span className="text-base">Download</span></div></button>
+                    <div className="w-px h-12 bg-white/10 hidden sm:block"></div>
+                    <Link href="/join/agent" className="text-white font-bold text-sm hover:text-blue-400 transition-colors flex items-center gap-3 px-4 py-2 hover:bg-white/5 rounded-xl"><Briefcase size={18}/> Become Agent</Link>
+                    <Link href="/join/hotel" className="text-white font-bold text-sm hover:text-blue-400 transition-colors flex items-center gap-3 px-4 py-2 hover:bg-white/5 rounded-xl"><Building2 size={18}/> List Hotel</Link>
                 </div>
              </div>
            </div>
@@ -444,7 +473,6 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
              <div className="flex justify-between items-center mb-6">
                 <div><h4 className="font-black text-slate-900 text-lg">Related Properties</h4><p className="text-xs text-slate-400 font-bold mt-1">Similar homes in {property.location.city}</p></div>
                 <div className="flex flex-col gap-2">
-                   {/* CUSTOM VERTICAL CONTROLS */}
                    <button onClick={() => scroll('up')} className="p-2 bg-slate-50 border border-slate-200 rounded-full text-slate-600 hover:bg-[#0065eb] hover:text-white hover:border-[#0065eb] transition-all shadow-sm group"><ChevronUp size={16}/></button>
                    <button onClick={() => scroll('down')} className="p-2 bg-slate-50 border border-slate-200 rounded-full text-slate-600 hover:bg-[#0065eb] hover:text-white hover:border-[#0065eb] transition-all shadow-sm group"><ChevronDown size={16}/></button>
                 </div>

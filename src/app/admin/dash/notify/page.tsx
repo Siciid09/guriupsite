@@ -1,10 +1,9 @@
-// app/admin/notify/page.jsx
 "use client";
 
 import { useState, useEffect } from "react";
-import { auth, db } from "../../../lib/firebase"; // Make sure this points to your client config
-import { doc, getDoc } from "firebase/firestore";
+import { auth } from "@/app/lib/firebase"; 
 import { onAuthStateChanged } from "firebase/auth";
+import { supabase } from "@/app/lib/supabase";
 import { ShieldCheck, ShieldAlert, Send, ArrowLeft } from "lucide-react";
 
 export default function AdminNotifyPage() {
@@ -13,9 +12,10 @@ export default function AdminNotifyPage() {
   const [isLoadingAccess, setIsLoadingAccess] = useState(true);
   const [hasAccess, setHasAccess] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [authToken, setAuthToken] = useState("");
 
   // =======================================================================
-  // SECURITY & ACCESS CONTROL
+  // SECURITY & ACCESS CONTROL (Supabase Verifier)
   // =======================================================================
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -26,8 +26,22 @@ export default function AdminNotifyPage() {
       }
 
       try {
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        const role = userDoc.data()?.role?.toLowerCase() || "user";
+        // Fetch JWT Token to securely pass to our backend API
+        const token = await user.getIdToken();
+        setAuthToken(token);
+
+        // Fetch User Role from Supabase bypassing Firestore completely
+        const { data: userDoc, error } = await supabase
+          .from("users")
+          .select("role")
+          .or(`id.eq.${user.uid},_id.eq.${user.uid}`)
+          .single();
+
+        if (error || !userDoc) {
+          throw new Error("Could not verify Supabase profile.");
+        }
+
+        const role = userDoc.role?.toLowerCase() || "user";
 
         // STRICT CHECK: Only sadmin, admin, or badmin
         if (["sadmin", "admin", "badmin"].includes(role)) {
@@ -49,7 +63,7 @@ export default function AdminNotifyPage() {
   // =======================================================================
   // SEND NOTIFICATION LOGIC
   // =======================================================================
-  const sendNotification = async (e: { preventDefault: () => void; }) => {
+  const sendNotification = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!title.trim() || !body.trim()) {
@@ -57,13 +71,20 @@ export default function AdminNotifyPage() {
       return;
     }
 
+    if (!authToken) {
+      alert("Authentication token is missing. Please refresh the page.");
+      return;
+    }
+
     setIsSending(true);
 
     try {
-      // Calls our custom Next.js API route instead of a Cloud Function
-      const response = await fetch('/api/notify', {
+      const response = await fetch('/api/admin/notify', {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${authToken}` // Pass secure token to backend
+        },
         body: JSON.stringify({
           title: title.trim(),
           messageBody: body.trim(),
@@ -111,7 +132,7 @@ export default function AdminNotifyPage() {
         <h1 className="text-sm font-black tracking-[0.2em] text-[#0164E5]">
           ADMIN TERMINAL
         </h1>
-        <div className="w-10" /> {/* Spacer for perfect centering */}
+        <div className="w-10" />
       </header>
 
       <main className="mx-auto mt-4 max-w-2xl px-6">

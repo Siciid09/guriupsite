@@ -3,8 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { applyActionCode } from 'firebase/auth';
-import { doc, updateDoc } from 'firebase/firestore';
-import { auth, db } from '../../lib/firebase';
+import { auth } from '../../lib/firebase';
 
 // 1. Separate the logic that uses useSearchParams into its own component
 function VerifyContent() {
@@ -27,11 +26,16 @@ function VerifyContent() {
 
         const user = auth.currentUser;
 
-        // 🧠 Update Firestore manually
         if (user) {
-          await updateDoc(doc(db, 'users', user.uid), {
-            emailVerified: true,
-            // 🚨 FIX: Removed isVerified. That flag is for Admin Agent Approval only!
+          // Pass the secure token to the backend to update Supabase
+          const idToken = await user.getIdToken();
+          
+          await fetch('/api/users/verify', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${idToken}`,
+              'Content-Type': 'application/json'
+            }
           });
         }
 

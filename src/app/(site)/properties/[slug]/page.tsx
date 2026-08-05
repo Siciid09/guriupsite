@@ -1,89 +1,40 @@
 import { Metadata } from 'next';
 import { cache } from 'react';
-import { doc, getDoc, collection, query, where, limit, getDocs } from 'firebase/firestore';
-import { db } from '@/app/lib/firebase';
+import { getPropertyBySlug } from '@/app/lib/data'; // Utilize established Supabase data fetcher
 import PropertyDetailView, { Property, Agent } from '@/components/templates/PropertyClientView';
 
 type Props = {
   params: Promise<{ slug: string }>
 };
 
-// --- Helper: Convert Firebase Timestamps to Strings (UNTOUCHED) ---
-const sanitizeData = (data: any) => {
-  if (!data) return null;
-  
-  const sanitized = JSON.parse(JSON.stringify(data));
-  
-  if (data.createdAt?.seconds) sanitized.createdAt = new Date(data.createdAt.seconds * 1000).toISOString();
-  if (data.updatedAt?.seconds) sanitized.updatedAt = new Date(data.updatedAt.seconds * 1000).toISOString();
-  if (data.subscriptionExpiresAt?.seconds) sanitized.subscriptionExpiresAt = new Date(data.subscriptionExpiresAt.seconds * 1000).toISOString();
-
-  return sanitized;
-};
-
 // 1. FETCH DATA HELPER (Runs on Server) - CACHED TO PREVENT DOUBLE BILLING
 const getPropertyData = cache(async (slug: string) => {
-  let propertySnap: any = null;
+  try {
+    // Bypass strict TS type collision with 'as any' since data.ts returns a flattened object
+    const rawProperty = await getPropertyBySlug(slug) as any;
+    
+    if (!rawProperty) return null;
 
-  // PRIORITY 1: Search by slug field
-  const slugQuery = query(collection(db, 'property'), where('slug', '==', slug), limit(1));
-  const slugDocs = await getDocs(slugQuery);
-
-  if (!slugDocs.empty) {
-    propertySnap = slugDocs.docs[0];
-  } else {
-    // PRIORITY 2: Fallback to direct ID fetch
-    propertySnap = await getDoc(doc(db, 'property', slug));
+    // Satisfy the strict Agent interface by adding uid and email, and cast via unknown
+    const agent = {
+        uid: rawProperty.agentId || 'unknown-agent-id',
+        email: rawProperty.agentEmail || 'contact@guriup.com',
+        name: rawProperty.agentName || 'GuriUp Agent',
+        photoUrl: rawProperty.agentPhoto || rawProperty.agentImage || null,
+        phone: rawProperty.agentPhone || null,
+        planTier: rawProperty.planTier || rawProperty.agentPlanTier || 'free',
+        isVerified: rawProperty.agentVerified || false,
+    } as unknown as Agent;
+    
+    return { 
+      property: rawProperty as Property,
+      agent: agent,
+      rawProperty: rawProperty // Expose raw data for SEO fields not in the strict Property type
+    };
+  } catch (error) {
+    console.error("Error fetching property data from Supabase:", error);
+    return null;
   }
-
-  if (!propertySnap || !propertySnap.exists()) return null;
-
-  // Get raw data
-  const rawProperty = { id: propertySnap.id, ...propertySnap.data() };
-  const property = sanitizeData(rawProperty) as Property;
-  
-  let agent: Agent | null = null;
-  
-  if (property.agentId) {
-    // --- FIX 1: Check 'agents' collection first (for Pro/Business accounts) ---
-    let agentRef = doc(db, 'agents', property.agentId);
-    let agentSnap = await getDoc(agentRef);
-
-    // --- FIX 2: Fallback to 'users' if not found in agents ---
-    if (!agentSnap.exists()) {
-      agentRef = doc(db, 'users', property.agentId);
-      agentSnap = await getDoc(agentRef);
-    }
-
-    if (agentSnap.exists()) {
-      const rawAgent = agentSnap.data();
-      const sanitizedAgent = sanitizeData(rawAgent);
-
-      // --- FIX 3: Normalize Name & Verification (Match route.ts logic) ---
-      // Determine Plan & Verification
-      const planTier = (rawAgent.planTier || 'free').toLowerCase();
-      const isPro = planTier === 'pro' || planTier === 'premium';
-      const isVerified = isPro || rawAgent.isVerified === true;
-
-      // Prioritize Agency/Business Name over User Name
-      const finalName = rawAgent.agencyName || rawAgent.businessName || rawAgent.displayName || rawAgent.name || 'GuriUp Agent';
-      const finalPhoto = rawAgent.logoUrl || rawAgent.profileImageUrl || rawAgent.photoURL || null;
-
-      // Construct the Agent object explicitly to ensure the View gets what it needs
-      agent = {
-        ...sanitizedAgent,
-        name: finalName,            // Overwrites personal name with Agency name
-        planTier: planTier,         // Ensures 'pro' is passed
-        isVerified: isVerified,     // Explicitly sets verification
-        photoUrl: finalPhoto,       // TS FIX: photoUrl instead of photoURL
-        // Preserve other fields
-        email: rawAgent.email,
-        phone: rawAgent.phone || rawAgent.whatsappNumber
-      } as Agent;
-    }
-  }
-
-  return { property, agent };
 });
 
 // 2. SEO METADATA GENERATOR
@@ -95,16 +46,21 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     return { title: 'Property Not Found' };
   }
 
-  const { property } = data;
-  const price = property.price?.toLocaleString() || 'Contact for Price';
+  const { property, rawProperty } = data;
+  
+  // Safely access fields that might only exist on the raw data object
+  const price = rawProperty.displayPrice?.toLocaleString() || property.price?.toLocaleString() || 'Contact for Price';
+  const bedrooms = rawProperty.bedrooms || '?';
+  const bathrooms = rawProperty.bathrooms || '?';
+  
   const title = `${property.title} | $${price} | GuriUp`;
-  const description = `${property.type} for ${property.isForSale ? 'Sale' : 'Rent'} in ${property.location?.city || 'Somaliland'}. ${property.features?.bedrooms || '?'} Bed, ${property.features?.bathrooms || '?'} Bath. ${property.description ? property.description.substring(0, 100) : ''}...`;
+  const description = `${property.type || 'Property'} for ${property.isForSale ? 'Sale' : 'Rent'} in ${property.location?.city || 'Somaliland'}. ${bedrooms} Bed, ${bathrooms} Bath. ${property.description ? property.description.substring(0, 100) : ''}...`;
   const image = property.images?.[0] || '';
 
   return {
     title: title,
     description: description,
-    keywords: `${property.type} for ${property.isForSale ? 'sale' : 'rent'} in ${property.location?.city || 'Somaliland'}, real estate, GuriUp`,
+    keywords: `${property.type || 'Property'} for ${property.isForSale ? 'sale' : 'rent'} in ${property.location?.city || 'Somaliland'}, real estate, GuriUp`,
     openGraph: {
       title: title,
       description: description,
@@ -139,7 +95,7 @@ export default async function PropertyPage({ params }: Props) {
     );
   }
 
-  const { property, agent } = data;
+  const { property, agent, rawProperty } = data;
 
   // SEO: Real Estate JSON-LD Schema for Google Search Rich Snippets
   const jsonLd = {
@@ -151,7 +107,7 @@ export default async function PropertyPage({ params }: Props) {
     url: `https://guriup.com/properties/${slug}`,
     offers: {
       '@type': 'Offer',
-      price: property.price,
+      price: rawProperty.displayPrice || property.price,
       priceCurrency: 'USD',
       url: `https://guriup.com/properties/${slug}`,
       seller: {

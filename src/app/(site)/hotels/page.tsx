@@ -1,19 +1,18 @@
 import { Metadata } from 'next';
 import HotelsUI from '@/components/templates/HotelsUI';
-// ✅ FIX: Replaced broken Route Handler import with direct Database queries
-import { getFeaturedHotels, getAllHotels } from '@/app/lib/data';
+// IMPORT DIRECTLY FROM YOUR DATA LIB JUST LIKE THE HOME PAGE
+import { getFeaturedHotels, getAllHotels } from '@/app/lib/data'; 
 
 export const dynamic = 'force-dynamic';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://guriup.com';
 
-// --- 1. SEO METADATA (Targeting Africa & Global) ---
 export const metadata: Metadata = {
-  title: 'Explore Top Hotels in Africa & The World | GuriUp',
+  title: 'Explore Top Hotels & Resorts in Africa & The World | GuriUp',
   description: 'Book the best luxury, business, and budget-friendly hotels across Africa and worldwide. Explore handpicked premium stays and verified accommodations on GuriUp.',
   keywords: 'hotels in Africa, book hotels worldwide, global hotel booking, luxury stays Africa, best accommodations, GuriUp hotels, travel Africa',
   openGraph: {
-    title: 'Explore Top Hotels in Africa & The World | GuriUp',
+    title: 'Explore Top Hotels & Resorts in Africa & The World | GuriUp',
     description: 'Book the best luxury, business, and budget-friendly hotels across Africa and worldwide on GuriUp.',
     type: 'website',
     siteName: 'GuriUp',
@@ -22,7 +21,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Explore Top Hotels in Africa & The World | GuriUp',
+    title: 'Explore Top Hotels & Resorts in Africa & The World | GuriUp',
     description: 'Book the best luxury, business, and budget-friendly hotels across Africa and worldwide.',
   },
   alternates: {
@@ -31,16 +30,22 @@ export const metadata: Metadata = {
 };
 
 export default async function HotelsPage() {
-  // --- 2. FETCH DATA VIA DIRECT DB CALLS ---
-  const [featuredData, allData] = await Promise.all([
-    getFeaturedHotels(),
-    getAllHotels(),
-  ]);
+  // BYPASS THE API ROUTE AND TALK DIRECTLY TO THE DATABASE
+  let featuredHotels: any[] = [];
+  let allHotels: any[] = [];
 
-  const featuredHotels = Array.isArray(featuredData) ? featuredData : [];
-  const allHotels = Array.isArray(allData) ? allData : [];
+  try {
+    const [featHotels, lateHotels] = await Promise.all([
+      getFeaturedHotels().catch(() => []),
+      getAllHotels().catch(() => []) 
+    ]);
 
-  // --- 3. SEO JSON-LD: Collection Schema for Google ---
+    featuredHotels = featHotels || [];
+    allHotels = lateHotels || [];
+  } catch (error) {
+    console.error("🚨 Error fetching hotel data directly:", error);
+  }
+
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
@@ -51,7 +56,6 @@ export default async function HotelsPage() {
       '@type': 'Organization',
       name: 'GuriUp',
     },
-    // Safely maps up to 3 featured hotels for Google's search bots without breaking TS
     mainEntity: {
       '@type': 'ItemList',
       itemListElement: featuredHotels.slice(0, 3).map((hotel: any, index: number) => ({
@@ -66,10 +70,8 @@ export default async function HotelsPage() {
     }
   };
 
-  // --- 4. RENDER (UNTOUCHED) ---
   return (
     <>
-      {/* Invisible SEO Script for Google Search */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}

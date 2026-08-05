@@ -3,24 +3,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { auth, db, storage } from '../app/lib/firebase'; // Fixed path for src/components
-import { 
-  doc, 
-  getDoc, 
-  setDoc, 
-  updateDoc, 
-  collection, 
-  serverTimestamp, 
-  GeoPoint 
-} from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { auth, storage } from '../app/lib/firebase'; // Keep Auth client-side only for token generation
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { 
   Building, MapPin, Phone, Info, Image as ImageIcon, CheckCircle, 
   X, Plus, Lock, Star, CreditCard, Video, Loader2
 } from 'lucide-react';
-// ✅ ADDED: Google Maps Imports
+// Google Maps Imports
 import { GoogleMap, Marker, useLoadScript } from '@react-google-maps/api';
-// ✅ ADDED: Location Selector Import
+// Location Selector Import
 import LocationSelectorModal, { LocationResult } from '@/components/LocationSelectorModal';
 
 const mapContainerStyle = {
@@ -54,7 +45,7 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
   const router = useRouter();
   const isEditing = !!hotelId;
 
-  // ✅ ADDED: Load Google Maps Script
+  // Load Google Maps Script
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY as string,
   });
@@ -67,7 +58,7 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
   // --- STATE: User Plan ---
   const [userPlan, setUserPlan] = useState('free');
   const [userRole, setUserRole] = useState('user');
-  const isPro = userPlan === 'pro' || userPlan === 'premium' || userRole === 'admin';
+  const isPro = ['pro', 'premium', 'agent_pro', 'admin'].includes(userPlan?.toLowerCase() || 'free') || userRole === 'admin';
 
   // --- STATE: Form Data ---
   const [name, setName] = useState('');
@@ -81,13 +72,13 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
   const [videoUrl, setVideoUrl] = useState('');
 
   // Location
-  const [country, setCountry] = useState('Somalia'); // ✅ ADDED
+  const [country, setCountry] = useState('Somalia');
   const [city, setCity] = useState('');
   const [area, setArea] = useState('');
-  const [address, setAddress] = useState(''); // ✅ ADDED
+  const [address, setAddress] = useState('');
   const [lat, setLat] = useState('');
   const [lng, setLng] = useState('');
-  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false); // ✅ ADDED
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
 
   // Contact
   const [phoneCall, setPhoneCall] = useState('');
@@ -112,23 +103,34 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
   const [newImages, setNewImages] = useState<{ file: File; preview: string }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // --- FETCH USER PLAN & HOTEL DATA ---
+  // --- FETCH USER PLAN & HOTEL DATA VIA SECURE API ---
   useEffect(() => {
     const fetchContext = async () => {
       try {
         const user = auth.currentUser;
         if (!user) throw new Error("Not authenticated");
+        const idToken = await user.getIdToken();
 
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          setUserPlan(userDoc.data().planTier || 'free');
-          setUserRole(userDoc.data().role || 'user');
+        // Fetch User Profile Plan/Role via API
+        const userRes = await fetch(`/api/users?uid=${user.uid}`, {
+          headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+        const userData = await userRes.json();
+        if (userData.success || userData.user) {
+          const u = userData.user || userData;
+          setUserPlan(u.planTier || 'free');
+          setUserRole(u.role || 'user');
         }
 
+        // Fetch Hotel Data if Editing
         if (isEditing && hotelId) {
-          const hotelDoc = await getDoc(doc(db, 'hotels', hotelId));
-          if (hotelDoc.exists()) {
-            const data = hotelDoc.data();
+          const hotelRes = await fetch(`/api/hotels?id=${hotelId}`, {
+            headers: { 'Authorization': `Bearer ${idToken}` }
+          });
+          const hotelDataJson = await hotelRes.json();
+          const data = hotelDataJson.hotel || hotelDataJson;
+
+          if (data && (data.name || data._id || data.id)) {
             setName(data.name || '');
             setSlug(data.slug || '');
             setSlugEdited(true); 
@@ -143,8 +145,8 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
             setCity(data.location?.city || '');
             setArea(data.location?.area || '');
             setAddress(data.location?.address || '');
-            setLat(data.location?.latDisplay || '');
-            setLng(data.location?.lngDisplay || '');
+            setLat(data.location?.latDisplay || data.location?.lat?.toString() || '');
+            setLng(data.location?.lngDisplay || data.location?.lng?.toString() || '');
 
             setPhoneCall(data.contact?.phoneCall || '');
             setPhoneWhatsapp(data.contact?.phoneWhatsapp || '');
@@ -194,8 +196,22 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
     setPaymentMethods(paymentMethods.filter(m => m !== method));
   };
 
+  
+
   const handleAmenityChange = (amenity: string, checked: boolean) => {
     setSelectedAmenities(prev => ({ ...prev, [amenity]: checked }));
+  };
+
+  const handleDeleteExistingImage = async (url: string, index: number) => {
+    try {
+      if (url.includes('firebasestorage.googleapis.com')) {
+        const fileRef = ref(storage, url);
+        await deleteObject(fileRef);
+      }
+    } catch (error) {
+      console.error("Error deleting image from Firebase", error);
+    }
+    setExistingImages(prev => prev.filter((_, idx) => idx !== index));
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -229,29 +245,27 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
     try {
       const user = auth.currentUser;
       if (!user) throw new Error("Must be logged in");
+      const idToken = await user.getIdToken();
 
       if (existingImages.length === 0 && newImages.length === 0) {
         throw new Error("Please add at least one hotel photo.");
       }
 
-      const hotelRef = isEditing ? doc(db, 'hotels', hotelId!) : doc(collection(db, 'hotels'));
-
+      // Upload new image files directly to Firebase Storage
       let finalImageUrls = [...existingImages];
       for (const img of newImages) {
-        const ext = img.file.name.split('.').pop();
-        const sRef = ref(storage, `hotel_images/${hotelRef.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`);
-        await uploadBytes(sRef, img.file);
-        const url = await getDownloadURL(sRef);
-        finalImageUrls.push(url);
+        const fileRef = ref(storage, `hotel_images/${Date.now()}_${img.file.name.replace(/[^a-zA-Z0-9.]/g, '')}`);
+        await uploadBytes(fileRef, img.file);
+        const downloadUrl = await getDownloadURL(fileRef);
+        finalImageUrls.push(downloadUrl);
       }
 
-      const geoPoint = (lat && lng) ? new GeoPoint(parseFloat(lat), parseFloat(lng)) : null;
-      
       const cleanedAmenities = Object.fromEntries(
         Object.entries(selectedAmenities).filter(([_, v]) => v === true)
       );
 
-      const hotelData = {
+      const hotelPayload = {
+        id: hotelId,
         name: name.trim(),
         slug: slug.trim(),
         type,
@@ -267,9 +281,9 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
           city: city.trim(),
           area: area.trim(),
           address: address.trim(),
-          coordinates: geoPoint,
           latDisplay: isPro ? lat : null,
           lngDisplay: isPro ? lng : null,
+          gpsCoordinates: (lat && lng) ? `${lat}, ${lng}` : null,
         },
         
         amenities: isPro ? cleanedAmenities : {},
@@ -288,28 +302,24 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
           paymentMethodsList: paymentMethods,
           paymentMethods: paymentMethods.join(', '),
         },
-        lastUpdated: serverTimestamp()
+        planTierAtUpload: userPlan,
       };
 
-      if (isEditing) {
-        await updateDoc(hotelRef, hotelData);
-      } else {
-        await setDoc(hotelRef, {
-          ...hotelData,
-          createdAt: serverTimestamp(),
-          ownerId: userRole === 'admin' ? null : user.uid,
-          hotelAdminId: userRole === 'admin' ? null : user.uid,
-          featured: false,
-          planTierAtUpload: userPlan,
-        });
+      const endpoint = '/api/hotels';
+      const method = isEditing ? 'PATCH' : 'POST';
 
-        if (userRole !== 'admin') {
-          await updateDoc(doc(db, 'users', user.uid), {
-            managedHotelId: hotelRef.id,
-            isHotelOwner: true,
-            role: userRole === 'user' ? 'hoadmin' : userRole
-          });
-        }
+      const res = await fetch(endpoint, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify(hotelPayload)
+      });
+
+      const resData = await res.json();
+      if (!res.ok) {
+        throw new Error(resData.error || "Failed to save hotel.");
       }
 
       alert(isEditing ? "Hotel Updated!" : "Hotel Published Successfully!");
@@ -383,7 +393,6 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
 
         <Section title="Location" icon={MapPin}>
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-             {/* ✅ ADDED: Modal Trigger */}
              <div className="flex flex-col">
                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">City & District *</label>
                <button 
@@ -409,7 +418,6 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
                />
              </div>
 
-             {/* ✅ ADDED: Manual Address */}
              <Input 
                label="Street Address / Landmark (Optional)" 
                value={address} 
@@ -419,54 +427,53 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
            </div>
 
            <div className={`p-4 rounded-xl border-2 border-dashed ${isPro ? 'border-slate-300 bg-slate-50' : 'border-amber-200 bg-amber-50/50 relative overflow-hidden'}`}>
-              {!isPro && <ProOverlay text="GPS Coordinates Locked" />}
-              
-              {/* ✅ EXACT MAP PICKER FOR HOTELS */}
-              <div className="w-full relative mt-2">
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Exact Location (Tap Map to Drop Pin)</label>
-                
-                {!isPro ? (
-                  <div className="w-full h-[300px] bg-amber-50/50 rounded-xl flex items-center justify-center text-amber-500 font-bold border border-amber-200">
-                    Map feature requires Pro
-                  </div>
-                ) : !isLoaded ? (
-                  <div className="w-full h-[300px] bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 font-bold animate-pulse border-2 border-slate-200">
-                    Loading Interactive Map...
-                  </div>
-                ) : (
-                  <div className="rounded-xl overflow-hidden border-2 border-slate-200 shadow-sm relative z-0">
-                    <GoogleMap
-                      mapContainerStyle={mapContainerStyle}
-                      center={
-                        lat && lng 
-                          ? { lat: parseFloat(lat), lng: parseFloat(lng) }
-                          : defaultCenter
-                      }
-                      zoom={14}
-                      onClick={(e) => {
-                        if (e.latLng) {
-                          setLat(e.latLng.lat().toString());
-                          setLng(e.latLng.lng().toString());
-                        }
-                      }}
-                    >
-                      {lat && lng && (
-                        <Marker 
-                          position={{ lat: parseFloat(lat), lng: parseFloat(lng) }} 
-                        />
-                      )}
-                    </GoogleMap>
-                  </div>
-                )}
-                
-                {lat && lng && isPro && (
-                  <p className="text-xs text-blue-600 font-bold mt-3 flex items-center gap-1 bg-blue-50 w-fit px-3 py-1.5 rounded-lg border border-blue-100">
-                    <MapPin size={14} /> 
-                    Coordinates Saved: {lat}, {lng}
-                  </p>
-                )}
-              </div>
-           </div>
+             {!isPro && <ProOverlay text="GPS Coordinates Locked" />}
+             
+             <div className="w-full relative mt-2">
+               <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Exact Location (Tap Map to Drop Pin)</label>
+               
+               {!isPro ? (
+                 <div className="w-full h-[300px] bg-amber-50/50 rounded-xl flex items-center justify-center text-amber-500 font-bold border border-amber-200">
+                   Map feature requires Pro
+                 </div>
+               ) : !isLoaded ? (
+                 <div className="w-full h-[300px] bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 font-bold animate-pulse border-2 border-slate-200">
+                   Loading Interactive Map...
+                 </div>
+               ) : (
+                 <div className="rounded-xl overflow-hidden border-2 border-slate-200 shadow-sm relative z-0">
+                   <GoogleMap
+                     mapContainerStyle={mapContainerStyle}
+                     center={
+                       lat && lng 
+                         ? { lat: parseFloat(lat), lng: parseFloat(lng) }
+                         : defaultCenter
+                     }
+                     zoom={14}
+                     onClick={(e) => {
+                       if (e.latLng) {
+                         setLat(e.latLng.lat().toString());
+                         setLng(e.latLng.lng().toString());
+                       }
+                     }}
+                   >
+                     {lat && lng && (
+                       <Marker 
+                         position={{ lat: parseFloat(lat), lng: parseFloat(lng) }} 
+                       />
+                     )}
+                   </GoogleMap>
+                 </div>
+               )}
+               
+               {lat && lng && isPro && (
+                 <p className="text-xs text-blue-600 font-bold mt-3 flex items-center gap-1 bg-blue-50 w-fit px-3 py-1.5 rounded-lg border border-blue-100">
+                   <MapPin size={14} /> 
+                   Coordinates Saved: {lat}, {lng}
+                 </p>
+               )}
+             </div>
+          </div>
         </Section>
 
         <Section title="Contact Info" icon={Phone}>
@@ -483,7 +490,7 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
              {existingImages.map((url, i) => (
                <div key={`ext-${i}`} className="relative w-24 h-24 rounded-xl overflow-hidden border border-slate-200">
                  <Image src={url} alt="Hotel" fill className="object-cover" />
-                 <button type="button" onClick={() => setExistingImages(existingImages.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 bg-white rounded-full p-1 shadow hover:bg-red-50 text-red-500"><X size={14}/></button>
+                 <button type="button" onClick={() => handleDeleteExistingImage(url, i)} className="absolute top-1 right-1 bg-white rounded-full p-1 shadow hover:bg-red-50 text-red-500"><X size={14}/></button>
                </div>
              ))}
              {newImages.map((img, i) => (
@@ -542,7 +549,7 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
              <div className="flex flex-wrap gap-2 mb-3">
                {paymentMethods.map(method => (
                  <span key={method} className="bg-blue-50 border border-blue-200 text-blue-700 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2">
-                   {method} <button type="button" onClick={() => removePaymentMethod(method)}><X size={14}/></button>
+                    {method} <button type="button" onClick={() => removePaymentMethod(method)}><X size={14}/></button>
                  </span>
                ))}
              </div>

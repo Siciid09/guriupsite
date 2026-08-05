@@ -15,6 +15,8 @@ if (!admin.apps.length) {
         // Safely parse the private key, handling both \n strings and actual newlines
         privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
       }),
+      // Automatically configure the storage bucket using your project ID
+      storageBucket: process.env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID}.appspot.com`, 
     });
     console.log("🟢 Firebase Admin Initialized Successfully");
   } catch (error) {
@@ -24,7 +26,8 @@ if (!admin.apps.length) {
 
 const adminDb = admin.firestore();
 const adminAuth = admin.auth();
-const adminMessaging = admin.messaging(); // <-- ADDED THIS
+const adminMessaging = admin.messaging();
+const adminStorage = admin.storage(); // <-- ADDED THIS FOR YOUR UPLOAD API
 
-// Export all three!
-export { adminDb, adminAuth, adminMessaging };
+// Export all four!
+export { adminDb, adminAuth, adminMessaging, adminStorage };

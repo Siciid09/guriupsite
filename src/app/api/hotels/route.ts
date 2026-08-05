@@ -1,219 +1,388 @@
 import { NextResponse } from 'next/server';
-import { db } from '../../lib/firebase'; 
-import { 
-  collection, 
-  getDocs, 
-  doc, 
-  getDoc,
-  DocumentSnapshot
-} from 'firebase/firestore';
+import { supabaseAdmin } from '@/app/lib/supabase';
+import { adminAuth } from '@/app/lib/firebase-admin';
 
 export const dynamic = 'force-dynamic';
 
+// =========================================================
+// SECURITY HELPER: VERIFY FIREBASE AUTH TOKEN
+// =========================================================
+async function getVerifiedUid(request: Request): Promise<string | null> {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) return null;
+  const token = authHeader.split('Bearer ')[1];
+  try {
+    const decodedToken = await adminAuth.verifyIdToken(token);
+    return decodedToken.uid;
+  } catch (e) {
+    return null;
+  }
+}
+
+// =========================================================
+// SECURITY HELPER: STRICT ROLE CHECK
+// =========================================================
+async function getUserRoleStrict(uid: string): Promise<string | null> {
+  // 🛡️ TS NULL CHECK
+  if (!supabaseAdmin) return null;
+  
+  const { data: user } = await supabaseAdmin
+    .from('users')
+    .select('role')
+    .or(`uid.eq.${uid},_id.eq.${uid}`) // 👈 FIXED: Replaced 'id' with 'uid'
+    .maybeSingle(); 
+    
+  return user?.role || null;
+}
+
+// =========================================================
+// BUSINESS LOGIC HELPERS
+// =========================================================
 function isPaidTier(plan: string): boolean {
   const tier = (plan || 'free').toLowerCase().trim();
   return ['pro', 'premium', 'agent_pro', 'agentpro', 'admin', 'sadmin'].includes(tier);
 }
 
-// ==================================================================
-// 1. SHARED LOGIC (RELAXED FILTERING)
-// ==================================================================
-export async function getHotelsDataInternal(options: {
-  limitCount?: number;
-  isFeatured?: boolean; 
-  city?: string | null;
-  id?: string | null;
-}) {
-  const { limitCount = 50, isFeatured = false, city, id } = options;
+// Batch fetch Admins & Users to attach owner information & plan limits
+async function attachAdminData(hotels: any[]) {
+  // 🛡️ TS NULL CHECK
+  if (!supabaseAdmin) return hotels;
 
+  // 1. Gather unique Admin/Owner IDs
+  const adminIds = [...new Set(hotels.map(h => h.hotelAdminId || h.ownerId || h.agentId).filter(Boolean))];
+  
+  const adminMap = new Map();
+
+  // 2. Fetch admin data ONLY if we have IDs
+  if (adminIds.length > 0) {
+    const adminIdList = adminIds.join(',');
+    
+    // 👈 FIXED: Replaced 'id.in' with 'uid.in' to stop the DB crash
+    const [agentsRes, usersRes] = await Promise.all([
+      supabaseAdmin.from('agents').select('*').or(`uid.in.(${adminIdList}),_id.in.(${adminIdList})`),
+      supabaseAdmin.from('users').select('*').or(`uid.in.(${adminIdList}),_id.in.(${adminIdList})`)
+    ]);
+    
+    (usersRes.data || []).forEach(u => adminMap.set(u._id || u.uid, u));
+    (agentsRes.data || []).forEach(a => adminMap.set(a._id || a.uid, a));
+  }
+
+  // 3. CRITICAL FIX: ALWAYS map every hotel so the frontend never crashes on undefined fields
+  return hotels.map(h => {
+    const adminId = h.hotelAdminId || h.ownerId || h.agentId;
+    const adminData = adminId ? (adminMap.get(adminId) || {}) : {};
+    const plan = (h.planTier || adminData.planTier || h.planTierAtUpload || 'free').toLowerCase();
+    
+    const isVerified = isPaidTier(plan) || h.isPro === true || h.isVerified === true;
+    const rawPhone = adminData.whatsappNumber || adminData.phone || adminData.phoneNumber || h.phone || h.contactPhone || '';
+
+    // Safely parse location whether it's an object or a legacy string
+    const locObj = typeof h.location === 'object' && h.location !== null ? h.location : {};
+    const city = locObj.city || (typeof h.location === 'string' ? h.location : '') || h.city || 'Unknown City';
+    const area = locObj.area || locObj.district || h.area || h.district || 'Unknown Area';
+    const address = locObj.address || h.address || `${area}, ${city}`;
+
+    // Safely parse pricing
+    const price = Number(h.pricePerNight || h.price || h.displayPrice) || 0;
+
+    return {
+      id: h._id || h.id,
+      slug: h.slug || null,
+      name: h.name || h.title || 'Untitled Hotel',
+      description: h.description || h.details || h.bio || '',
+      type: h.type || h.hotelType || 'Luxury Hotel',
+      rating: Number(h.rating) || 4.5,
+      pricePerNight: price,
+      displayPrice: price,
+      images: Array.isArray(h.images) && h.images.length > 0 ? h.images : ['https://placehold.co/600x400?text=No+Hotel+Image'],
+      amenities: Array.isArray(h.amenities) ? h.amenities : [],
+      location: {
+        city: city,
+        area: area,
+        address: address,
+        gpsCoordinates: locObj.gpsCoordinates || locObj.coordinates || null,
+      },
+      ownerName: adminData.businessName || adminData.agencyName || adminData.name || h.ownerName || 'GuriUp Partner',
+      planTier: plan,
+      isPro: isVerified,
+      featured: h.featured === true,
+      contactPhone: isVerified ? rawPhone : null,
+      createdAt: h.createdAt || h.created_at || new Date().toISOString(),
+    };
+  });
+}
+
+// =========================================================
+// GET: FETCH & SEARCH HOTELS (Public View / Search)
+// =========================================================
+export async function GET(request: Request) {
   try {
-    // --- SCENARIO A: SINGLE ID FETCH ---
-    if (id) {
-      const docRef = doc(db, 'hotels', id);
-      const docSnap = await getDoc(docRef);
-      if (!docSnap.exists()) return null; 
-      
-      // Only block if explicitly archived/banned
-      const data = docSnap.data();
-      if (data?.isArchived === true || data?.status === 'banned') return null;
-
-      return await fetchAdminAndMerge(docSnap);
+    // 🛡️ TS NULL CHECK
+    if (!supabaseAdmin) {
+      return NextResponse.json({ error: 'Server error: Admin client missing.' }, { status: 500 });
     }
 
-    // --- SCENARIO B: LIST FETCH ---
-    const collectionRef = collection(db, 'hotels');
-    const snapshot = await getDocs(collectionRef);
-    const rawDocs = snapshot.docs;
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id') || searchParams.get('_id');
+    const slug = searchParams.get('slug');
+    const q = searchParams.get('q')?.toLowerCase().trim() || searchParams.get('search')?.toLowerCase().trim();
+    const limitCount = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 200;
+    const isFeatured = searchParams.get('featured') === 'true';
+    const city = searchParams.get('city');
+    const type = searchParams.get('type');
+    const adminId = searchParams.get('adminId'); // 👈 ADD THIS
+    const minPrice = searchParams.get('minPrice') ? parseFloat(searchParams.get('minPrice')!) : null;
+    const maxPrice = searchParams.get('maxPrice') ? parseFloat(searchParams.get('maxPrice')!) : null;
+    const minRating = searchParams.get('minRating') ? parseFloat(searchParams.get('minRating')!) : null;
+    const amenitiesParam = searchParams.get('amenities');
 
-    // Filter in Memory
-    let filteredDocs = rawDocs.filter(doc => {
-      const data = doc.data();
+    // --- SCENARIO A: SINGLE HOTEL FETCH ---
+    if (id || slug) {
+      const identifier = id || slug;
+      // 🛡️ TUNNEL FIX: Use supabaseAdmin
+      const { data, error } = await supabaseAdmin
+        .from('hotels')
+        .select('*')
+        .or(`_id.eq.${identifier},id.eq.${identifier},slug.eq.${identifier}`)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) return NextResponse.json({ success: false, error: 'Hotel not found' }, { status: 404 });
+
+      const fullyMergedHotel = await attachAdminData([data]);
+      return NextResponse.json({ success: true, hotel: fullyMergedHotel[0] });
+    }
+
+    // --- SCENARIO B: BULK QUERY & DEEP SEARCH ---
+    // 🛡️ TUNNEL FIX: Use supabaseAdmin
+    let query = supabaseAdmin.from('hotels').select('*');
+
+    if (isFeatured) {
+      query = query.or('isPro.eq.true,featured.eq.true');
+    }
+
+    // 👈 ADD THIS BLOCK: Filter by owner if the dashboard requests it
+    if (adminId) {
+      query = query.or(`hotelAdminId.eq.${adminId},ownerId.eq.${adminId}`);
+    }
+
+    const { data, error } = await query.limit(limitCount);
+    if (error) throw error;
+
+    let hotelsList = data || [];
+    
+    // GUARANTEE formatted data structure
+    hotelsList = await attachAdminData(hotelsList);
+
+    // Filter PRO/Featured if requested
+    if (isFeatured) {
+      hotelsList = hotelsList.filter(h => h.isPro === true || h.featured === true);
+    }
+
+    // IN-MEMORY MULTI-FIELD SEARCH & FILTERING
+    let filteredHotels = hotelsList.filter(h => {
       
-      // 1. ARCHIVE/BAN CHECK (The Blocklist)
-      // We show everything EXCEPT banned or archived items.
-      // This allows 'draft', 'pending', or missing status to still appear.
-      if (data.isArchived === true) return false;
-      if (data.status === 'banned') return false;
-      if (data.status === 'archived') return false;
+      // 1. Keyword search
+      if (q) {
+        const matchesName = h.name.toLowerCase().includes(q);
+        const matchesDesc = h.description.toLowerCase().includes(q);
+        const matchesType = h.type.toLowerCase().includes(q);
+        const matchesCity = h.location.city.toLowerCase().includes(q);
+        const matchesArea = h.location.area.toLowerCase().includes(q);
+        const matchesAddress = h.location.address.toLowerCase().includes(q);
+        const matchesOwner = h.ownerName.toLowerCase().includes(q);
+        const matchesPrice = h.pricePerNight.toString().includes(q);
+        const matchesAmenities = h.amenities.some((a: string) => a.toLowerCase().includes(q));
 
-      // 2. CITY CHECK
-      if (city && city !== 'All Cities') {
-        const docCity = data.location?.city || data.city;
-        if (docCity !== city) return false;
+        if (!matchesName && !matchesDesc && !matchesType && !matchesCity && !matchesArea && !matchesAddress && !matchesOwner && !matchesPrice && !matchesAmenities) {
+          return false;
+        }
       }
 
-      // 3. RECOMMENDED CHECK (STRICT PRO/PREMIUM)
-      if (isFeatured) {
-        const tier = (data.planTier || data.planTierAtUpload || 'free').toLowerCase();
-        if (!isPaidTier(tier)) return false;
+      // 2. City Filter
+      if (city && city !== 'All Cities' && city !== 'Anywhere') {
+        if (h.location.city.toLowerCase() !== city.toLowerCase()) return false;
+      }
+
+      // 3. Hotel Type Filter
+      if (type && type !== 'Any Type' && type !== 'All') {
+        if (h.type.toLowerCase() !== type.toLowerCase()) return false;
+      }
+
+      // 4. Price Filter
+      if (minPrice !== null && h.pricePerNight < minPrice) return false;
+      if (maxPrice !== null && h.pricePerNight > maxPrice) return false;
+
+      // 5. Rating Filter
+      if (minRating !== null && h.rating < minRating) return false;
+
+      // 6. Amenities Filter
+      if (amenitiesParam) {
+        const requiredAmenities = amenitiesParam.split(',').map(a => a.trim().toLowerCase());
+        const hotelAmenities = h.amenities.map((a: string) => a.toLowerCase());
+        const hasAllAmenities = requiredAmenities.every(a => hotelAmenities.includes(a));
+        if (!hasAllAmenities) return false;
       }
 
       return true;
     });
 
-    // Sort: Verified/Pro First, then Newest
-    filteredDocs.sort((a, b) => {
-      const tierA = (a.data().planTier || 'free').toLowerCase();
-      const tierB = (b.data().planTier || 'free').toLowerCase();
-      
-      const isAPro = isPaidTier(tierA);
-      const isBPro = isPaidTier(tierB);
+    return NextResponse.json({ success: true, hotels: filteredHotels });
 
-      if (isAPro && !isBPro) return -1;
-      if (!isAPro && isBPro) return 1;
-
-      // Date Sort (Handle missing dates safely)
-      const dateA = a.data().createdAt?.toDate ? a.data().createdAt.toDate().getTime() : 0;
-      const dateB = b.data().createdAt?.toDate ? b.data().createdAt.toDate().getTime() : 0;
-      return dateB - dateA;
-    });
-
-    // Apply Limit
-    if (limitCount && filteredDocs.length > limitCount) {
-      filteredDocs = filteredDocs.slice(0, limitCount);
-    }
-
-    // Batch Fetch Admin Data
-    const adminIds = [...new Set(filteredDocs.map(d => d.data().hotelAdminId).filter(Boolean))];
-    const adminMap = await fetchAdminsBatch(adminIds);
-
-    return filteredDocs.map(hotelDoc => {
-      const liveAdmin = adminMap[hotelDoc.data().hotelAdminId] || {};
-      return mergeAndNormalizeHotel(hotelDoc, liveAdmin);
-    });
-
-  } catch (error) {
-    console.error('Internal Data Error:', error);
-    return []; 
-  }
-}
-
-// --- HELPER: Batch Fetch Admins ---
-async function fetchAdminsBatch(adminIds: string[]) {
-  const adminMap: Record<string, any> = {};
-  if (adminIds.length === 0) return adminMap;
-
-  await Promise.all(adminIds.map(async (adminId) => {
-    let snap = await getDoc(doc(db, 'hotels', adminId));
-    if (!snap.exists()) {
-      snap = await getDoc(doc(db, 'users', adminId));
-    }
-    if (snap.exists()) {
-      adminMap[adminId] = snap.data();
-    }
-  }));
-  return adminMap;
-}
-
-// --- HELPER: Single Merge ---
-async function fetchAdminAndMerge(hotelDoc: DocumentSnapshot) {
-  const hData = hotelDoc.data()!;
-  const adminId = hData.hotelAdminId;
-  let adminData = {};
-
-  if (adminId) {
-    const adminMap = await fetchAdminsBatch([adminId]);
-    adminData = adminMap[adminId] || {};
-  }
-  return mergeAndNormalizeHotel(hotelDoc, adminData);
-}
-
-// ==================================================================
-// 2. ROUTE HANDLER
-// ==================================================================
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get('id');
-  const limitCount = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 50;
-  const isFeatured = searchParams.get('featured') === 'true';
-  const city = searchParams.get('city');
-
-  try {
-    const data = await getHotelsDataInternal({ id, limitCount, isFeatured, city });
-    if (id && !data) return NextResponse.json({ error: 'Hotel not found' }, { status: 404 });
-    return NextResponse.json(data);
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Server Error' }, { status: 500 });
+    console.error('Hotels GET Error:', error);
+    return NextResponse.json({ success: false, error: error.message || 'Server Error', hotels: [] }, { status: 500 });
   }
 }
 
-// --- DATA NORMALIZATION ---
-function mergeAndNormalizeHotel(hotelDoc: DocumentSnapshot, liveAdminData: any) {
-  const h = hotelDoc.data()!;
-  
-  let amenitiesList: string[] = [];
-  const rawAm = h.amenities;
-  if (Array.isArray(rawAm)) {
-    amenitiesList = rawAm; 
-  } else if (typeof rawAm === 'object' && rawAm !== null) {
-    if (rawAm.hasWifi) amenitiesList.push('Wi-Fi');
-    if (rawAm.hasPool) amenitiesList.push('Swimming Pool');
-    if (rawAm.hasGym) amenitiesList.push('Gym');
-    if (rawAm.hasRestaurant) amenitiesList.push('Restaurant');
-    if (rawAm.hasParking) amenitiesList.push('Parking');
-    if (rawAm.hasAC) amenitiesList.push('Air Conditioning');
+// =========================================================
+// POST: CREATE HOTEL
+// =========================================================
+export async function POST(request: Request) {
+  try {
+    // 🛡️ TS NULL CHECK
+    if (!supabaseAdmin) {
+      return NextResponse.json({ error: 'Server error: Admin client missing.' }, { status: 500 });
+    }
+
+    const uid = await getVerifiedUid(request);
+    if (!uid) return NextResponse.json({ error: 'Unauthorized. Invalid Token.' }, { status: 401 });
+
+    const role = await getUserRoleStrict(uid);
+    if (role !== 'admin' && role !== 'hoadmin') {
+      return NextResponse.json({ error: 'Forbidden: Requires admin or hoadmin role.' }, { status: 403 });
+    }
+
+    const payload = await request.json();
+    
+    // 1. Generate the unique ID
+    const newId = crypto.randomUUID();
+    
+    // 2. Assign ONLY to the column that actually exists in your DB
+    payload._id = newId;
+    
+    // 3. CRITICAL: Delete 'id' if the frontend accidentally sent it, so Supabase doesn't crash
+    delete payload.id; 
+
+    payload.hotelAdminId = uid;
+    payload.ownerId = uid;
+    payload.createdAt = new Date().toISOString();
+
+    const { data, error } = await supabaseAdmin
+      .from('hotels')
+      .insert([payload])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    await supabaseAdmin
+      .from('users')
+      .update({ role: 'hoadmin', managedHotelId: data._id }) // 👈 Only using _id here too
+      .or(`uid.eq.${uid},_id.eq.${uid}`);
+
+    return NextResponse.json({ success: true, hotel: data }, { status: 201 });
+  } catch (error: any) {
+    console.error('Hotels POST Error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
+}
 
-  // Verification Logic
-  const plan = (h.planTier || liveAdminData.planTier || h.planTierAtUpload || 'free').toLowerCase();
-  const isVerified = plan === 'pro' || plan === 'premium';
+// =========================================================
+// PATCH: UPDATE HOTEL
+// =========================================================
+export async function PATCH(request: Request) {
+  try {
+    // 🛡️ TS NULL CHECK
+    if (!supabaseAdmin) {
+      return NextResponse.json({ error: 'Server error: Admin client missing.' }, { status: 500 });
+    }
 
-  // Price Logic
-  const price = Number(h.pricePerNight) || 0;
-  const discount = Number(h.discountPrice) || 0;
-  const hasDiscount = h.hasDiscount && discount > 0;
+    const uid = await getVerifiedUid(request);
+    if (!uid) return NextResponse.json({ error: 'Unauthorized. Invalid Token.' }, { status: 401 });
 
-  // Date Logic
-  let createdAt = new Date().toISOString();
-  if (h.createdAt?.toDate) {
-    createdAt = h.createdAt.toDate().toISOString();
+    const role = await getUserRoleStrict(uid);
+    if (role !== 'admin' && role !== 'hoadmin') {
+      return NextResponse.json({ error: 'Forbidden: Requires admin or hoadmin role.' }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const { id, _id, ...updateData } = body;
+    const targetId = id || _id;
+
+    if (!targetId) return NextResponse.json({ error: 'Hotel ID is required' }, { status: 400 });
+
+    if (role !== 'admin') {
+      const { data: check, error: checkError } = await supabaseAdmin
+        .from('hotels')
+        .select('hotelAdminId, ownerId')
+        .or(`_id.eq.${targetId},id.eq.${targetId}`)
+        .maybeSingle(); // Prevent crash if missing
+
+      if (checkError || !check || (check.hotelAdminId !== uid && check.ownerId !== uid)) {
+        return NextResponse.json({ error: 'Forbidden. You do not own this hotel.' }, { status: 403 });
+      }
+    }
+
+    updateData.updatedAt = new Date().toISOString();
+
+    const { error } = await supabaseAdmin
+      .from('hotels')
+      .update(updateData)
+      .or(`_id.eq.${targetId},id.eq.${targetId}`);
+
+    if (error) throw error;
+    return NextResponse.json({ success: true, message: 'Hotel updated successfully' });
+  } catch (error: any) {
+    console.error('Hotels PATCH Error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
+}
 
-  return {
-    id: hotelDoc.id,
-    slug: h.slug || null,
-    name: h.name || 'Untitled Hotel',
-    pricePerNight: Number(h.pricePerNight) || 0,
-    hasDiscount,
-    displayPrice: hasDiscount ? discount : price,
-    images: h.images?.length > 0 ? h.images : ['https://placehold.co/600x400?text=No+Image'],
-    rating: Number(h.rating) || 0,
-    location: {
-      city: h.location?.city || h.city || 'Unknown City',
-      area: h.location?.area || h.area || 'Unknown Area',
-      // ✅ ADDED: Pass the exact map coordinates to the mobile app and website
-      latDisplay: h.location?.latDisplay || null,
-      lngDisplay: h.location?.lngDisplay || null,
-      // Also provide a combined string just in case the mobile app prefers it this way!
-      gpsCoordinates: (h.location?.latDisplay && h.location?.lngDisplay) 
-        ? `${h.location.latDisplay}, ${h.location.lngDisplay}` 
-        : null,
-    },
-    amenities: amenitiesList,
-    planTier: plan,
-    isPro: isVerified,
-    featured: isVerified,
-    contactPhone: isVerified ? (liveAdminData.whatsappNumber || liveAdminData.phone || liveAdminData.phoneNumber || h.phone || '') : null,
-    createdAt: createdAt,
-  };
+// =========================================================
+// DELETE: REMOVE HOTEL
+// =========================================================
+export async function DELETE(request: Request) {
+  try {
+    // 🛡️ TS NULL CHECK
+    if (!supabaseAdmin) {
+      return NextResponse.json({ error: 'Server error: Admin client missing.' }, { status: 500 });
+    }
+
+    const uid = await getVerifiedUid(request);
+    if (!uid) return NextResponse.json({ error: 'Unauthorized. Invalid Token.' }, { status: 401 });
+
+    const role = await getUserRoleStrict(uid);
+    if (role !== 'admin' && role !== 'hoadmin') {
+      return NextResponse.json({ error: 'Forbidden: Requires admin or hoadmin role.' }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id') || searchParams.get('_id'); // Safe param fallback
+
+    if (!id) return NextResponse.json({ error: 'Hotel ID is required' }, { status: 400 });
+
+    if (role !== 'admin') {
+      const { data: check, error: checkError } = await supabaseAdmin
+        .from('hotels')
+        .select('hotelAdminId, ownerId')
+        .or(`_id.eq.${id},id.eq.${id}`)
+        .maybeSingle(); // Prevent crash if missing
+
+      if (checkError || !check || (check.hotelAdminId !== uid && check.ownerId !== uid)) {
+        return NextResponse.json({ error: 'Forbidden. You do not own this hotel.' }, { status: 403 });
+      }
+    }
+
+    const { error } = await supabaseAdmin
+      .from('hotels')
+      .delete()
+      .or(`_id.eq.${id},id.eq.${id}`);
+
+    if (error) throw error;
+    return NextResponse.json({ success: true, message: 'Hotel permanently deleted' });
+  } catch (error: any) {
+    console.error('Hotels DELETE Error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }

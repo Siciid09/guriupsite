@@ -3,20 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import Image from 'next/image';
-import { 
-  doc, 
-  getDoc, 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  Timestamp,
-  addDoc,      // Added for rating submission
-  serverTimestamp, 
-  limit
-} from 'firebase/firestore';
-import { db } from '@/app/lib/firebase'; // Ensure this matches your path
 
 // --- ICONS ---
 const Icons = {
@@ -26,13 +12,12 @@ const Icons = {
   Chat: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>,
   Whatsapp: () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.588-5.946 0-6.556 5.332-11.891 11.891-11.891 3.181 0 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.481 8.403 0 6.556-5.332 11.891-11.891 11.891-2.003 0-3.976-.505-5.717-1.46l-6.276 1.678zm6.29-4.15l.349.21c1.47.882 3.167 1.347 4.914 1.347 5.176 0 9.39-4.214 9.39-9.39 0-2.505-.974-4.86-2.744-6.628-1.77-1.77-4.122-2.744-6.628-2.744-5.176 0-9.39 4.214-9.39 9.39 0 1.83.533 3.613 1.54 5.143l.235.357-1.01 3.687 3.744-.982z"/></svg>,
   Lock: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>,
-  Menu: () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"/></svg>,
   Bed: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3v-8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>,
   Bath: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>,
-  Square: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>,
+  Square: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l-5 5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>,
   Star: () => <svg className="w-4 h-4 text-amber-400 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>,
   BackArrow: () => <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>,
-  StarOutline: () => <svg className="w-6 h-6 text-gray-300 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>, // For rating input
+  StarOutline: () => <svg className="w-6 h-6 text-gray-300 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>, 
   StarFillBig: () => <svg className="w-6 h-6 text-amber-400 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
 };
 
@@ -76,19 +61,32 @@ export default function AgentProfileView() {
   const params = useParams();
   const agentDocId = params.id as string; 
 
-  // State
   const [agent, setAgent] = useState<AgentProfile | null>(null);
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
-  // UI State
   const [isContactModalOpen, setContactModalOpen] = useState(false);
-
-  // Rating State
   const [userRating, setUserRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+  const [hasRated, setHasRated] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null); // NEW: Track logged-in user
+
+  useEffect(() => {
+    if (agentDocId && typeof window !== 'undefined') {
+      setHasRated(localStorage.getItem(`rated_agent_${agentDocId}`) === 'true');
+    }
+
+    // Safely check Firebase Auth status without breaking SSR
+    import('firebase/auth').then(({ getAuth, onAuthStateChanged }) => {
+      const auth = getAuth();
+      const unsubscribe = onAuthStateChanged(auth, (user) => {
+        setCurrentUser(user);
+      });
+      return () => unsubscribe();
+    }).catch(() => console.warn("Firebase auth not initialized yet"));
+  }, [agentDocId]);
 
   useEffect(() => {
     if (!agentDocId) return;
@@ -98,115 +96,74 @@ export default function AgentProfileView() {
         setLoading(true);
 
         // 1. Fetch Agent Profile
-        // 1. Fetch Agent Profile (Dual Lookup: Slug -> ID)
-        let agentSnap: any = null;
-        let data: any = null;
-
-        // PRIORITY 1: Search by Slug in 'agents' collection
-        const slugQuery = query(collection(db, 'agents'), where('slug', '==', agentDocId), limit(1));
-        const slugDocs = await getDocs(slugQuery);
-
-        if (!slugDocs.empty) {
-          agentSnap = slugDocs.docs[0];
-          data = agentSnap.data();
-        } else {
-          // PRIORITY 2: Fallback to direct ID fetch
-          const agentDocRef = doc(db, 'agents', agentDocId);
-          agentSnap = await getDoc(agentDocRef);
-          if (agentSnap.exists()) data = agentSnap.data();
-          else {
-             // Fallback: Check 'users' collection
-             const userRef = doc(db, 'users', agentDocId);
-             agentSnap = await getDoc(userRef);
-             if (agentSnap.exists()) data = agentSnap.data();
-          }
-        }
-
-        if (!data) {
+        const agentRes = await fetch(`/api/agents?id=${agentDocId}&slug=${agentDocId}`);
+        if (!agentRes.ok) {
           setError('Agent not found');
           setLoading(false);
           return;
         }
-
-        let joinedString = 'Recently';
-        if (data.joinDate) {
-            const date = (data.joinDate as Timestamp).toDate();
-            joinedString = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-        }
-
-        const plan = (data.planTier || 'free').toLowerCase();
-        const linkedUserId = data.userid || agentSnap.id; 
+        const apiAgent = await agentRes.json();
 
         const agentData: AgentProfile = {
-          id: agentSnap.id,
-          userid: linkedUserId,
-          name: data.name ?? 'Unknown Agent',
-          agencyName: data.agencyName || 'Independent Agent',
-          bio: data.bio ?? 'No bio provided.',
-          profileImageUrl: data.profileImageUrl || data.photoUrl || '',
-          coverPhoto: data.coverPhoto ?? '',
-          phone: data.phone ?? '',
-          email: data.email ?? '',
-          // Logic: Global Location Fallback
-          location: data.city || data.location || 'Unknown Location',
-          planTier: plan as any,
-          joinedDate: joinedString,
-          totalListings: data.totalListings ?? 0,
-          propertiesSold: data.propertiesSold ?? 0,
-          averageRating: data.averageRating ?? 0,
-          languages: data.languages ?? [],
-          specialties: data.specialties ?? [],
+          id: apiAgent.id,
+          userid: apiAgent.id, 
+          name: apiAgent.name || 'Unknown Agent',
+          agencyName: apiAgent.agencyName || 'Independent Agent',
+          bio: apiAgent.bio || 'No bio provided.',
+          profileImageUrl: apiAgent.profileImageUrl || '',
+          coverPhoto: apiAgent.coverPhoto || '',
+          phone: apiAgent.phone || '',
+          email: apiAgent.email || '',
+          location: apiAgent.location || 'Unknown Location',
+          planTier: apiAgent.planTier as 'free' | 'pro' | 'premium',
+          joinedDate: apiAgent.joinedDate || 'Recently', 
+          totalListings: apiAgent.totalListings || 0,
+          propertiesSold: apiAgent.propertiesSold || 0,
+          averageRating: apiAgent.averageRating || 0,
+          languages: apiAgent.languages || [],
+          specialties: apiAgent.specialties || [],
         };
-
         setAgent(agentData);
 
-        // 2. Fetch REAL Properties (To get accurate count)
-        const q = query(
-            collection(db, 'property'),
-            where('agentId', '==', linkedUserId), 
-            where('isArchived', '==', false)
-        );
+        // 2. Fetch Agent's Properties
+        const propsRes = await fetch(`/api/properties`);
+        if (propsRes.ok) {
+          const parsedRes = await propsRes.json();
+          
+          // CRITICAL FIX: Ensure apiProperties is ALWAYS an array, even if the API returns an object
+          const apiProperties = Array.isArray(parsedRes) 
+            ? parsedRes 
+            : (parsedRes.properties || parsedRes.data || []);
+          
+          const agentProperties = apiProperties.filter((p: any) => 
+            p.agentId === apiAgent.id || 
+            p.agent_id === apiAgent.id || 
+            p.ownerId === apiAgent.id
+          );
+          
+          const formattedProperties: Property[] = agentProperties.map((p: any, index: number) => {
+            const city = p.location?.city || '';
+            const area = p.location?.area || '';
+            const locString = area && city && area !== 'Unknown Area' ? `${area}, ${city}` : (city || 'Unknown Location');
 
-        const querySnapshot = await getDocs(q);
-        const fetchedProperties: Property[] = [];
-
-        querySnapshot.forEach((doc) => {
-            const pData = doc.data();
-            
-            if (pData.status === 'draft') return;
-
-            let locString = 'Unknown Location';
-            if (pData.location) {
-                if (typeof pData.location === 'string') locString = pData.location;
-                else if (typeof pData.location === 'object') {
-                    const area = pData.location.area || '';
-                    const city = pData.location.city || '';
-                    if(area && city) locString = `${area}, ${city}`;
-                    else locString = city || area || 'Unknown Location';
-                }
-            }
-
-            const beds = pData.bedrooms ?? pData.features?.bedrooms ?? 0;
-            const baths = pData.bathrooms ?? pData.features?.bathrooms ?? 0;
-            const size = pData.size ?? pData.area ?? pData.features?.area ?? pData.features?.size ?? 0;
-
-            fetchedProperties.push({
-                id: doc.id,
-                title: pData.title ?? 'Untitled Property',
-                price: pData.price ?? 0,
-                status: pData.status ?? 'available',
-                isForSale: pData.isForSale ?? false,
-                images: pData.images ?? [],
+            return {
+                id: p.id || p._id || `prop-fallback-${index}`,
+                title: p.title || 'Untitled Property',
+                price: p.price || 0,
+                status: p.status || 'available',
+                isForSale: p.isForSale,
+                images: p.images || [],
                 location: locString,
-                bedrooms: Number(beds),
-                bathrooms: Number(baths),
-                area: Number(size),
-                planTier: pData.planTier,
-                isArchived: pData.isArchived ?? false,
-            });
-        });
+                bedrooms: p.bedrooms || 0,
+                bathrooms: p.bathrooms || 0,
+                area: p.area || 0,
+                planTier: p.planTier,
+                isArchived: false, 
+            };
+          });
 
-        setProperties(fetchedProperties);
+          setProperties(formattedProperties);
+        }
 
       } catch (err) {
         console.error("Error fetching agent details:", err);
@@ -219,13 +176,9 @@ export default function AgentProfileView() {
     fetchData();
   }, [agentDocId]);
 
-  // --- LOGIC: PRO STATUS & RATING ---
   const isVerified = agent?.planTier === 'pro' || agent?.planTier === 'premium';
-  
-  // Logic: Force 5.0 for Pro, otherwise use real average
   const displayRating = isVerified ? 5.0 : (agent?.averageRating || 0);
 
-  // Sort properties: Sold last, Rented last
   const sortedProperties = [...properties].sort((a, b) => {
       if (a.status === 'sold') return 1;
       if (b.status === 'sold') return -1;
@@ -234,10 +187,7 @@ export default function AgentProfileView() {
 
  const handleContactAction = (type: 'call' | 'whatsapp') => {
     if (!agent) return;
-    
-    // SILENT INTERCEPT: Verified uses their number, Free uses your custom number
     const targetPhone = isVerified && agent.phone ? agent.phone : '+252653227084';
-
     if (type === 'call') {
       window.open(`tel:${targetPhone}`);
     } else {
@@ -247,18 +197,29 @@ export default function AgentProfileView() {
   };
 
   const submitRating = async () => {
-    if (userRating === 0 || !agent) return;
+    if (userRating === 0 || !agent || hasRated || !currentUser) return;
     setIsSubmittingRating(true);
+    
     try {
-        await addDoc(collection(db, 'reviews'), {
-            targetId: agent.id,
-            targetType: 'agent',
-            rating: userRating,
-            createdAt: serverTimestamp(),
-            status: 'pending' // Moderation
+        // Get the secure token for the backend API
+        const token = await currentUser.getIdToken();
+
+        const res = await fetch('/api/reviews', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}` // Pass token to your secure API
+            },
+            body: JSON.stringify({
+                targetId: agent.id,
+                targetType: 'agent',
+                rating: userRating
+            })
         });
+        
         alert("Thank you! Your rating has been submitted.");
-        setUserRating(0);
+        setHasRated(true);
+        localStorage.setItem(`rated_agent_${agent.id}`, 'true');
     } catch (e) {
         console.error(e);
         alert("Failed to submit rating.");
@@ -276,16 +237,13 @@ export default function AgentProfileView() {
   if (error || !agent) return (
     <div className="min-h-screen bg-[#fafbfc] flex flex-col items-center justify-center">
         <h2 className="text-2xl font-bold text-slate-900 mb-2">Agent Not Found</h2>
-        <Link href="/agents" className="text-blue-600 font-bold hover:underline">Go back to Agents</Link>
+        <Link href="/agents" className="text-[#0065eb] font-bold hover:underline">Go back to Agents</Link>
     </div>
   );
 
   return (
     <div className="min-h-screen bg-[#fafbfc] pb-20">
-      
-      {/* ================= HERO HEADER ================= */}
       <div className="relative w-full h-[320px] md:h-[400px] bg-slate-900 overflow-hidden group">
-        {/* Cover Photo */}
         {agent.coverPhoto ? (
           <>
             <div className="absolute inset-0 bg-cover bg-center transition-transform duration-1000 group-hover:scale-105" style={{ backgroundImage: `url('${agent.coverPhoto}')` }} />
@@ -297,7 +255,6 @@ export default function AgentProfileView() {
           </div>
         )}
 
-        {/* Back Button */}
         <div className="absolute top-28 left-6 z-20">
             <Link href="/agents" className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:bg-white hover:text-black transition-all">
                 <Icons.BackArrow />
@@ -308,11 +265,9 @@ export default function AgentProfileView() {
       <div className="max-w-[1200px] mx-auto px-6 relative z-10 -mt-24 md:-mt-32">
         <div className="flex flex-col md:flex-row gap-8 items-start">
             
-            {/* ================= LEFT SIDE: PROFILE CARD ================= */}
             <div className="w-full md:w-[380px] shrink-0">
                 <div className="bg-white rounded-[32px] shadow-xl p-8 relative overflow-hidden border border-gray-100">
                     
-                    {/* Verification Badge */}
                     {isVerified ? (
                         <div className="absolute top-6 right-6 flex items-center gap-1.5 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100">
                             <Icons.Verified />
@@ -324,7 +279,6 @@ export default function AgentProfileView() {
                         </div>
                     )}
 
-                    {/* Avatar */}
                     <div className="relative mb-6">
                         <div className="w-32 h-32 rounded-full p-1.5 bg-white shadow-xl ring-4 ring-gray-50 mx-auto md:mx-0 overflow-hidden">
                             <img 
@@ -336,7 +290,6 @@ export default function AgentProfileView() {
                         </div>
                     </div>
 
-                    {/* Name & Details */}
                     <div className="text-center md:text-left mb-8">
                         <h1 className="text-3xl font-black text-slate-900 mb-1 leading-tight">{agent.name}</h1>
                         <p className="text-sm font-bold text-gray-500 mb-4">{agent.agencyName}</p>
@@ -352,9 +305,7 @@ export default function AgentProfileView() {
                         </div>
                     </div>
 
-                    {/* Stats Grid */}
                     <div className="grid grid-cols-2 gap-3 mb-8">
-                        {/* Logic: Use REAL count of properties, not static field */}
                         <div className="bg-gray-50 p-5 rounded-3xl text-center border border-gray-100 flex flex-col items-center justify-center">
                             <div className="text-3xl font-black text-slate-900 mb-1">{sortedProperties.length}</div>
                             <div className="text-[10px] uppercase font-black text-gray-400 tracking-widest">Listings</div>
@@ -364,16 +315,14 @@ export default function AgentProfileView() {
                             <div className="text-[10px] uppercase font-black text-gray-400 tracking-widest">Sold</div>
                         </div>
                         
-                        {/* Logic: Rating Display (Forced 5.0 for Pro) */}
                         <div className="col-span-2 bg-[#F0F7FF] p-5 rounded-3xl flex items-center justify-between border border-blue-100">
                             <div className="flex flex-col items-start">
                                 <div className="text-2xl font-black text-slate-900">{displayRating.toFixed(1)}</div>
-                                <div className="text-[10px] uppercase font-black text-blue-600 tracking-widest">
+                                <div className="text-[10px] uppercase font-black text-[#0065eb] tracking-widest">
                                     {isVerified ? 'Pro Agent Rating' : 'Agent Rating'}
                                 </div>
                             </div>
                             <div className="flex gap-1">
-                                {/* Visually show stars based on displayRating */}
                                 {[1,2,3,4,5].map(i => (
                                     <div key={i}>
                                         {i <= Math.round(displayRating) ? <Icons.Star /> : <Icons.StarOutline />}
@@ -383,7 +332,6 @@ export default function AgentProfileView() {
                         </div>
                     </div>
 
-                    {/* Contact Actions */}
                     <div className="space-y-3 mb-8">
                         <button className="w-full bg-[#0065eb] hover:bg-[#0052c1] text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-xl shadow-blue-500/20 active:scale-95">
                             <Icons.Chat />
@@ -405,36 +353,55 @@ export default function AgentProfileView() {
                         </div>
                     </div>
 
-                    {/* NEW: Interactive Rate Agent Section */}
                     <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
-                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 text-center">Rate this Agent</h4>
-                        <div className="flex justify-center gap-2 mb-4">
-                            {[1, 2, 3, 4, 5].map((star) => (
-                                <button
-                                    key={star}
-                                    onMouseEnter={() => setHoverRating(star)}
-                                    onMouseLeave={() => setHoverRating(0)}
-                                    onClick={() => setUserRating(star)}
-                                    className="transition-transform hover:scale-110 focus:outline-none"
+                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3 text-center">
+                            {hasRated ? 'Rating Submitted' : 'Rate this Agent'}
+                        </h4>
+                        
+                        {!currentUser ? (
+                            <div className="text-center py-3">
+                                <p className="text-sm font-bold text-slate-600 mb-4">You must be logged in to leave a rating.</p>
+                                <Link href="/login" className="inline-block bg-slate-900 text-white px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wide hover:bg-[#0065eb] transition-all shadow-md">
+                                    Log In to Rate
+                                </Link>
+                            </div>
+                        ) : hasRated ? (
+                            <div className="text-center text-sm font-bold text-[#0065eb] py-3 flex flex-col items-center gap-2">
+                                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                    <Icons.Verified />
+                                </div>
+                                Thank you for your feedback!
+                            </div>
+                        ) : (
+                            <>
+                                <div className="flex justify-center gap-2 mb-4">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                        <button
+                                            key={star}
+                                            onMouseEnter={() => setHoverRating(star)}
+                                            onMouseLeave={() => setHoverRating(0)}
+                                            onClick={() => setUserRating(star)}
+                                            className="transition-transform hover:scale-110 focus:outline-none"
+                                        >
+                                            {star <= (hoverRating || userRating) ? (
+                                                <Icons.StarFillBig />
+                                            ) : (
+                                                <Icons.StarOutline />
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                                <button 
+                                    onClick={submitRating}
+                                    disabled={userRating === 0 || isSubmittingRating}
+                                    className={`w-full py-2.5 rounded-xl text-xs font-bold uppercase tracking-wide transition-all ${userRating > 0 ? 'bg-slate-900 text-white shadow-lg' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
                                 >
-                                    {star <= (hoverRating || userRating) ? (
-                                        <Icons.StarFillBig />
-                                    ) : (
-                                        <Icons.StarOutline />
-                                    )}
+                                    {isSubmittingRating ? 'Submitting...' : 'Submit Rating'}
                                 </button>
-                            ))}
-                        </div>
-                        <button 
-                            onClick={submitRating}
-                            disabled={userRating === 0 || isSubmittingRating}
-                            className={`w-full py-2.5 rounded-xl text-xs font-bold uppercase tracking-wide transition-all ${userRating > 0 ? 'bg-slate-900 text-white shadow-lg' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
-                        >
-                            {isSubmittingRating ? 'Submitting...' : 'Submit Rating'}
-                        </button>
+                            </>
+                        )}
                     </div>
 
-                    {/* Bio & Specialties */}
                     <div className="mt-8 pt-8 border-t border-gray-100">
                         <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-4">Specialties</h3>
                         <div className="flex flex-wrap gap-2 mb-6">
@@ -453,18 +420,14 @@ export default function AgentProfileView() {
                 </div>
             </div>
 
-            {/* ================= RIGHT SIDE: PROPERTIES ================= */}
             <div className="flex-1 w-full mt-8 md:mt-0">
-                {/* Header */}
                 <div className="flex items-center gap-4 mb-8">
                     <div className="bg-white px-6 py-2 rounded-full shadow-sm border border-gray-200">
                         <span className="text-sm font-black text-slate-900 uppercase tracking-wide">Active Listings</span>
-                        {/* Logic: Actual Count */}
                         <span className="ml-2 bg-blue-100 text-[#0065eb] px-2 py-0.5 rounded-full text-xs font-bold">{sortedProperties.length}</span>
                     </div>
                 </div>
 
-                {/* Properties Grid */}
                 {sortedProperties.length > 0 ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                         {sortedProperties.map((property) => (
@@ -484,7 +447,6 @@ export default function AgentProfileView() {
         </div>
       </div>
 
-      {/* ================= UNVERIFIED MODAL ================= */}
       {isContactModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setContactModalOpen(false)}></div>
@@ -498,7 +460,7 @@ export default function AgentProfileView() {
                 </p>
                 <div className="flex flex-col gap-3">
                     <button 
-                        onClick={() => { setContactModalOpen(false); /* Trigger Chat */ }}
+                        onClick={() => { setContactModalOpen(false); }}
                         className="w-full bg-[#0065eb] hover:bg-[#0052c1] text-white py-4 rounded-2xl font-bold transition-all shadow-xl shadow-blue-500/20 active:scale-95"
                     >
                         Open Secure Chat
@@ -520,7 +482,6 @@ export default function AgentProfileView() {
 
 // --- MINI PROPERTY CARD COMPONENT ---
 const PropertyCard = ({ property }: { property: Property }) => {
-    // Determine colors based on status
     const isSold = property.status === 'sold';
     const isRented = property.status === 'rented_out';
     
@@ -539,17 +500,15 @@ const PropertyCard = ({ property }: { property: Property }) => {
         <Link href={`/properties/${property.id}`} className="group bg-white rounded-[24px] border border-gray-100 overflow-hidden hover:shadow-2xl hover:shadow-blue-900/5 transition-all duration-300 hover:-translate-y-1 cursor-pointer flex flex-col h-full">
             <div className="relative h-56 overflow-hidden">
                 <img 
-                    src={property.images && property.images.length > 0 ? property.images[0] : "https://via.placeholder.com/400x300"} 
+                    src={property.images && property.images.length > 0 ? property.images[0] : "https://placehold.co/400x300"} 
                     alt={property.title} 
                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
                 />
                 
-                {/* Status Badge */}
                 <div className={`absolute top-4 left-4 ${statusColor} text-white text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full shadow-lg`}>
                     {statusLabel}
                 </div>
 
-                {/* Price Tag */}
                 <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-md px-4 py-2 rounded-xl text-slate-900 font-black text-sm shadow-lg">
                     ${property.price.toLocaleString()}
                     {!property.isForSale && <span className="text-xs font-bold text-gray-400 ml-1">/mo</span>}

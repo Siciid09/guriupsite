@@ -1,13 +1,11 @@
 import { Metadata } from "next";
 import PropertiesUI from "@/components/templates/PropertiesUI";
-// ✅ Import direct database functions to bypass HTTP overhead
-import { getFeaturedProperties, getAllProperties } from "@/app/lib/data";
+import { supabaseAdmin } from '@/app/lib/supabase';
 
 export const dynamic = "force-dynamic";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://guriup.com';
 
-// --- 1. SEO METADATA (Targeting Africa & Global Real Estate) ---
 export const metadata: Metadata = {
   title: 'Prime Real Estate & Properties in Africa & The World | GuriUp',
   description: 'Discover top houses, apartments, and commercial properties for sale and rent across Africa and worldwide. Explore verified real estate listings on GuriUp.',
@@ -30,62 +28,107 @@ export const metadata: Metadata = {
   }
 };
 
-// 2. Define the full Property interface to match PropertiesUI requirements exactly (UNTOUCHED)
-interface Property {
-  id: string;
-  slug?: string;
-  title: string;
-  price: number;
-  discountPrice?: number;
-  hasDiscount?: boolean;
-  isForSale: boolean; 
-  status: string;
-  images: string[];
-  location: { city: string; area: string; };
-  bedrooms: number;
-  bathrooms: number;
-  area?: number; 
-  type: string; 
-  amenities?: string[]; 
-  agentId: string;
-  agentName: string; 
-  agentVerified: boolean; 
-  planTier?: 'free' | 'pro' | 'premium'; 
-  agentPlanTier?: string; 
-  featured: boolean;
-  createdAt: string; 
+// --- MIRROR THE API'S RICH NORMALIZATION LOGIC ---
+function isPaidTier(plan: string): boolean {
+  const tier = (plan || 'free').toLowerCase().trim();
+  return ['pro', 'premium', 'agent_pro', 'agentpro', 'admin', 'sadmin'].includes(tier);
 }
 
-// 3. FETCH DATA HELPER (UPDATED to use direct DB calls)
+function mergeAndNormalize(p: any, liveAgentData: any) {
+  const livePlan = (liveAgentData.planTier || p.planTier || p.plan_tier || 'free').toLowerCase();
+  const isVerified = isPaidTier(livePlan); 
+  const isManualVerified = (liveAgentData.isVerified === true) || (p.agentVerified === true);
+  const finalVerifiedStatus = isVerified || isManualVerified;
+
+  let createdAt = p.createdAt || p.created_at || new Date().toISOString();
+  if (typeof createdAt === 'object' && (createdAt as any).toDate) {
+    createdAt = (createdAt as any).toDate().toISOString();
+  }
+
+  const amenities: string[] = Array.isArray(p.amenities) ? [...p.amenities] : [];
+  const feats = p.features || {};
+  if ((p.isFurnished || feats.isFurnished) && !amenities.includes('Furnished')) amenities.push('Furnished');
+  if ((p.hasPool || feats.hasPool) && !amenities.includes('Swimming Pool')) amenities.push('Swimming Pool');
+  if ((p.hasParking || feats.hasParking) && !amenities.includes('Parking')) amenities.push('Parking');
+
+  const price = Number(p.price) || 0;
+  const discountPrice = Number(p.discountPrice || p.discount_price) || 0;
+  const hasValidDiscount = (p.hasDiscount === true || p.has_discount === true) && discountPrice > 0;
+  const locationObj = typeof p.location === 'object' && p.location !== null ? p.location : {};
+
+  return {
+    id: p._id || p.id,
+    slug: p.slug || null,
+    title: p.title || p.name || 'Untitled Property',
+    description: p.description || p.bio || p.details || '',
+    price: price,
+    discountPrice: hasValidDiscount ? discountPrice : 0,
+    hasDiscount: hasValidDiscount,
+    displayPrice: hasValidDiscount ? discountPrice : price,
+    isForSale: p.isForSale ?? p.is_for_sale ?? true,
+    status: p.status || 'available',
+    images: Array.isArray(p.images) && p.images.length > 0 ? p.images : ['https://placehold.co/600x400?text=No+Image'],
+    location: {
+      city: locationObj.city || p.city || 'Unknown City',
+      area: locationObj.area || p.area || 'Unknown Area',
+      gpsCoordinates: locationObj.gpsCoordinates || locationObj.coordinates || null,
+    },
+    bedrooms: Number(p.bedrooms || feats.bedrooms || 0),
+    bathrooms: Number(p.bathrooms || feats.bathrooms || 0),
+    area: Number(p.area || p.size || feats.size || 0),
+    type: p.type || p.propertyType || 'House',
+    amenities: amenities,
+    agentId: p.agentId || p.agent_id || '',
+    agentName: liveAgentData.agencyName || liveAgentData.businessName || liveAgentData.ownerName || liveAgentData.name || p.agentName || 'GuriUp Agent',
+    agentPhoto: liveAgentData.profileImageUrl || liveAgentData.logoUrl || p.agentPhoto || null,
+    agentPhone: finalVerifiedStatus ? (p.contactPhone || liveAgentData.whatsappNumber || liveAgentData.phone || p.agentPhone) : null,
+    agentVerified: finalVerifiedStatus,
+    agentPlanTier: livePlan,
+    featured: p.featured || p.isFeatured || false,
+    createdAt: createdAt,
+  };
+}
+
 async function getPropertiesData() {
   try {
-    // ✅ FIX: Call DB directly instead of HTTP fetch to our own API. 
-    // Faster, safer, and immune to domain/ENV mismatch!
-    const [featuredData, allData] = await Promise.all([
-      getFeaturedProperties(),
-      getAllProperties()
-    ]);
+    if (!supabaseAdmin) throw new Error("Supabase Admin Client Missing");
 
-    // Map to ensure the 'featured' flag is set to true for the UI
-    const featuredProperties: Property[] = (featuredData as unknown as Property[]).map(p => ({ 
-      ...p, 
-      featured: true 
-    }));
-    
-    const allProperties: Property[] = allData as unknown as Property[];
+    // 1. Fetch raw properties
+    const { data: rawProperties } = await supabaseAdmin
+      .from('property')
+      .select('*')
+      .in('status', ['available', 'active', 'rented_out']);
+
+    const propertiesList = (rawProperties || []).filter(p => p.isArchived !== true && p.is_archived !== true);
+
+    // 2. Batch fetch Agents for merging
+    const agentIds = [...new Set(propertiesList.map(p => p.agentId || p.agent_id).filter(Boolean))];
+    const agentMap: Record<string, any> = {};
+
+    if (agentIds.length > 0) {
+      const { data: agentsData } = await supabaseAdmin.from('agents').select('*').in('_id', agentIds);
+      (agentsData || []).forEach(agent => { agentMap[agent._id || agent.id] = agent; });
+    }
+
+    // 3. Merge and Normalize exactly like the API does
+    const allProperties = propertiesList.map(p => {
+      const liveAgent = agentMap[p.agentId || p.agent_id] || {};
+      return mergeAndNormalize(p, liveAgent);
+    });
+
+    // 4. Filter Featured based on normalized data and Pro status
+    const featuredProperties = allProperties.filter(p => p.featured && isPaidTier(p.agentPlanTier || 'free'));
 
     return { featuredProperties, allProperties };
   } catch (error) {
-    console.error("PROPERTIES PAGE FETCH ERROR:", error);
+    console.error("PROPERTIES PAGE NATIVE DB FETCH ERROR:", error);
     return { featuredProperties: [], allProperties: [] };
   }
 }
 
-// 4. MAIN PAGE
 export default async function PropertiesPage() {
   const { featuredProperties, allProperties } = await getPropertiesData();
 
-  // --- SEO JSON-LD: Collection Schema for Google ---
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
@@ -96,10 +139,9 @@ export default async function PropertiesPage() {
       '@type': 'Organization',
       name: 'GuriUp',
     },
-    // Safely feeds up to 3 premium properties into the search snippet
     mainEntity: {
       '@type': 'ItemList',
-      itemListElement: featuredProperties.slice(0, 3).map((property, index) => ({
+      itemListElement: featuredProperties.slice(0, 3).map((property: any, index: number) => ({
         '@type': 'ListItem',
         position: index + 1,
         item: {
@@ -113,16 +155,13 @@ export default async function PropertiesPage() {
 
   return (
     <>
-      {/* Invisible SEO Script for Google Search */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      
-      {/* UI Render (UNTOUCHED) */}
       <PropertiesUI
-        featuredProperties={featuredProperties}
-        allProperties={allProperties}
+        featuredProperties={featuredProperties as any}
+        allProperties={allProperties as any}
       />
     </>
   );

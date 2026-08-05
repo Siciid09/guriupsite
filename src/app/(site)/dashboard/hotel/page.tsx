@@ -57,9 +57,12 @@ interface Booking {
 }
 
 interface Room {
-  id: string;
-  roomTypeName: string;
+  id?: string;
+  _id?: string;
+  roomName?: string;
+  roomTypeName?: string;
   pricePerNight: number;
+  basePrice?: number;
   maxOccupancy: string;
   status: string;
   images: string[];
@@ -117,48 +120,49 @@ function DashboardContent() {
       if (!user) return router.push('/login');
       setCurrentUser(user);
       
-      const userDocRef = doc(db, 'users', user.uid);
-      const userSnap = await getDoc(userDocRef);
-      const userData = userSnap.data();
+      const idToken = await user.getIdToken();
+      
+      const userRes = await fetch('/api/users/me', { headers: { Authorization: `Bearer ${idToken}` } });
+      const { user: userData } = await userRes.json();
       const managedHotelId = userData?.managedHotelId;
 
-      // Gatekeeper Check: If assigned role but no hotel found
-      if (userData?.role === 'hoadmin') {
-         const hotelQ = query(collection(db, 'hotels'), where('hotelAdminId', '==', user.uid));
-         const hotelSnap = await getDocs(hotelQ);
-         if (hotelSnap.empty) setNeedsSetup(true);
-      }
+      // 1. Fetch Hotel STRICTLY using the Foreign Key
+      const hotelRes = await fetch(`/api/hotels?adminId=${user.uid}`);
+      const hotelJson = await hotelRes.json();
+      
+      // 2. 🛡️ CRITICAL FIX: The API returns `.hotels`, not `.data` or `.hotel`!
+      const hotelData = hotelJson.hotels && hotelJson.hotels.length > 0 ? hotelJson.hotels[0] : null;
 
-      const hotelQuery = managedHotelId 
-        ? query(collection(db, 'hotels'), where('__name__', '==', managedHotelId))
-        : query(collection(db, 'hotels'), where('hotelAdminId', '==', user.uid), limit(1));
-
-      const unsubHotel = onSnapshot(hotelQuery, (snap) => {
-        if (!snap.empty) {
-          const docData = snap.docs[0].data();
-          const hotelId = snap.docs[0].id;
-          
-          setHotel({ id: hotelId, ...docData } as HotelData);
-          setNeedsSetup(false);
-          
-          // Bookings Listener
-          const qBookings = query(collection(db, 'bookings'), where('hotelId', '==', hotelId), orderBy('createdAt', 'desc'));
-          onSnapshot(qBookings, (bSnap) => setBookings(bSnap.docs.map(d => ({ id: d.id, ...d.data() } as Booking))));
-          
-          // Rooms Listener
-          const qRooms = collection(db, 'hotels', hotelId, 'rooms');
-          onSnapshot(qRooms, (rSnap) => setRooms(rSnap.docs.map(d => ({ id: d.id, ...d.data() } as Room))));
-
-          // Chats Listener
-          const qChats = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid), orderBy('updatedAt', 'desc'));
-          onSnapshot(qChats, (cSnap) => setChats(cSnap.docs.map(d => ({ id: d.id, ...d.data() } as Chat))));
-
-          setLoading(false);
-        } else {
-          setLoading(false);
+      if (hotelData) {
+        setHotel(hotelData as HotelData);
+        setNeedsSetup(false); // 👈 THIS REMOVES THE "ACTION REQUIRED" SCREEN
+        const hotelId = hotelData.id || hotelData._id; // Ensure we get the correct ID
+        
+        // Fetch Bookings
+        const bRes = await fetch(`/api/bookings?hotelId=${hotelId}`, { headers: { Authorization: `Bearer ${idToken}` } });
+        if (bRes.ok) {
+           const bJson = await bRes.json();
+           setBookings(bJson.bookings || bJson.data || []); // Safety fallback
         }
-      });
-      return () => unsubHotel();
+        
+        // Fetch Rooms
+        const rRes = await fetch(`/api/rooms?hotelId=${hotelId}`);
+        if (rRes.ok) {
+           const rJson = await rRes.json();
+           const fetchedRooms = Array.isArray(rJson) ? rJson : (rJson.data || rJson.rooms || []);
+           setRooms(fetchedRooms);
+        }
+
+        // Chats Listener (Keep Firebase Realtime for Messages)
+        const qChats = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid), orderBy('updatedAt', 'desc'));
+        const unsubChats = onSnapshot(qChats, (cSnap) => setChats(cSnap.docs.map(d => ({ id: d.id, ...d.data() } as Chat))));
+
+        setLoading(false);
+        return () => unsubChats();
+      } else {
+        setNeedsSetup(true);
+        setLoading(false);
+      }
     });
     return () => unsubAuth();
   }, [router]);
@@ -170,7 +174,20 @@ function DashboardContent() {
 
   const updateBookingStatus = async (id: string, newStatus: string) => {
     try {
-      await updateDoc(doc(db, 'bookings', id), { status: newStatus });
+      if (!currentUser) return;
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch('/api/bookings', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ id, status: newStatus })
+      });
+      if (!res.ok) throw new Error("Failed");
+      
+      // Optimistic update
+      setBookings(prev => prev.map(b => b.id === id ? { ...b, status: newStatus as any } : b));
     } catch (e) {
       alert("Failed to update status");
     }
@@ -423,10 +440,10 @@ function DashboardContent() {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                      {rooms.map(room => (
-                        <div key={room.id} className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl transition-shadow group flex flex-col">
+                        <div key={room._id || room.id} className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl transition-shadow group flex flex-col">
                            <div className="h-48 bg-slate-100 relative">
                               {room.images && room.images[0] ? (
-                                <Image src={room.images[0]} alt={room.roomTypeName} fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
+                                <Image src={room.images[0]} alt={room.roomName || room.roomTypeName || 'Room'} fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center text-slate-300"><BedDouble size={48}/></div>
                               )}
@@ -435,15 +452,15 @@ function DashboardContent() {
                               </div>
                            </div>
                            <div className="p-6 flex-1 flex flex-col">
-                              <h4 className="font-bold text-xl mb-1">{room.roomTypeName}</h4>
+                              <h4 className="font-bold text-xl mb-1">{room.roomName || room.roomTypeName || 'Unnamed Room'}</h4>
                               <p className="text-xs font-bold text-slate-400 mb-4 flex items-center gap-1"><Users size={14}/> Max {room.maxOccupancy} Guests</p>
                               
                               <div className="mt-auto pt-4 border-t border-slate-100 flex items-center justify-between">
                                  <div>
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Price / Night</p>
-                                    <span className="font-black text-2xl text-[#0065eb]">${room.pricePerNight}</span>
+                                    <span className="font-black text-2xl text-[#0065eb]">${room.pricePerNight || room.basePrice || 0}</span>
                                  </div>
-                                 <button onClick={() => { setSelectedRoomId(room.id); updateTab('edit-room'); }} className="p-3 bg-slate-50 text-slate-600 rounded-xl hover:bg-[#0065eb] hover:text-white transition-colors">
+                                 <button onClick={() => { setSelectedRoomId(room._id || room.id || ''); updateTab('edit-room'); }} className="p-3 bg-slate-50 text-slate-600 rounded-xl hover:bg-[#0065eb] hover:text-white transition-colors">
                                     <Edit3 size={18}/>
                                  </button>
                               </div>

@@ -3,12 +3,8 @@
 import { GoogleMap, Marker, useLoadScript } from '@react-google-maps/api';
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
-import { 
-  collection, query, where, getDocs, doc, addDoc,
-  updateDoc, deleteDoc, serverTimestamp, onSnapshot
-} from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from './.././../src/app/lib/firebase'; 
+import { auth, storage } from './.././../src/app/lib/firebase'; // Keep Auth client-side for token generation
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { 
   Search, Plus, MapPin, Edit3, Trash2, X, Upload,
   BarChart2, MoreVertical, Archive, RefreshCw,
@@ -16,7 +12,7 @@ import {
   Save, ArrowLeft, Eye, Star, TrendingUp, Clock, Phone,
   Users, Video, Tag, Percent
 } from 'lucide-react';
-import LocationSelectorModal, { LocationResult } from '@/components/LocationSelectorModal';
+import LocationSelectorModal from '@/components/LocationSelectorModal';
 
 const mapContainerStyle = { width: '100%', height: '300px' };
 const defaultCenter = { lat: 9.560, lng: 44.068 };
@@ -70,7 +66,7 @@ export default function CompletePropertyManagement({
 
   const [viewMode, setViewMode] = useState<'list' | 'form'>('list');
   const [properties, setProperties] = useState<Property[]>([]);
-  const [tenants, setTenants] = useState<any[]>([]); // To populate tenant dropdown
+  const [tenants, setTenants] = useState<any[]>([]); 
   const [isLoading, setIsLoading] = useState(true);
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -86,78 +82,56 @@ export default function CompletePropertyManagement({
   const [statsProp, setStatsProp] = useState<Property | null>(null); 
   
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isPro = ['pro', 'premium', 'agent_pro'].includes(userPlan?.toLowerCase() || 'free');
+  const isPro = ['pro', 'premium', 'agent_pro', 'admin'].includes(userPlan?.toLowerCase() || 'free');
 
-  useEffect(() => {
+  // --- FETCH DATA VIA SECURE NEXT.JS API INSTEAD OF DIRECT FIRESTORE ---
+  // --- FETCH DATA VIA SECURE NEXT.JS API ---
+  const fetchDashboardData = async () => {
     if (!currentUserUid) return;
     setIsLoading(true);
 
-    // Fetch Properties
-    const qProps = query(collection(db, 'property'), where('agentId', '==', currentUserUid));
-    // Fetch Analytics
-    const qAnalytics = query(collection(db, 'analytics_views'), where('agentId', '==', currentUserUid));
-    // Fetch Tenants
-    const qTenants = query(collection(db, 'tenants'), where('agentId', '==', currentUserUid));
+    try {
+      const currentUser = auth.currentUser;
+      const idToken = currentUser ? await currentUser.getIdToken() : '';
 
-    let rawProperties: Property[] = [];
-    let analyticsMap: Record<string, { views: number, clicks: number }> = {};
+      // Fetch Properties through Next.js API
+      const propRes = await fetch(`/api/properties?agentId=${currentUserUid}`, {
+        headers: { 'Authorization': `Bearer ${idToken}` }
+      });
+      const propData = await propRes.json();
+      
+      const rawProperties = propData.success ? propData.properties : (Array.isArray(propData) ? propData : []);
 
-    const updateMergedState = () => {
-      const merged = rawProperties.map(p => ({
+      // Fetch Tenants via API
+      const tenantRes = await fetch(`/api/tenants?agentId=${currentUserUid}`, {
+        headers: { 'Authorization': `Bearer ${idToken}` }
+      });
+      const tenantData = await tenantRes.json();
+      setTenants(tenantData.success ? tenantData.tenants : (Array.isArray(tenantData) ? tenantData : []));
+
+      // Map & Sort Properties
+      const merged = rawProperties.map((p: any) => ({
         ...p,
-        views: analyticsMap[p.id!]?.views || 0,
-        clicks: analyticsMap[p.id!]?.clicks || 0,
+        id: p.id || p._id,
+        propertyType: p.propertyType || p.type || 'House', // Map category for frontend UI tabs
+        views: p.views || 0,
+        clicks: p.clicks || 0,
       }));
       
-      merged.sort((a: Property, b: Property) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+      merged.sort((a: Property, b: Property) => (new Date(b.createdAt || 0).getTime()) - (new Date(a.createdAt || 0).getTime()));
       setProperties(merged);
-
-      setStatsProp(prevStatsProp => {
-        if (!prevStatsProp) return null;
-        const updatedProp = merged.find((p: Property) => p.id === prevStatsProp.id);
-        return updatedProp || prevStatsProp;
-      });
-      
+    } catch (error) {
+      console.error("Failed to load dashboard data via API:", error);
+    } finally {
       setIsLoading(false);
-    };
+    }
+  };
 
-    const unsubProps = onSnapshot(qProps, (snap: any) => {
-      rawProperties = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Property));
-      updateMergedState();
-    }, (error: any) => {
-      console.error("Error fetching properties:", error);
-      setIsLoading(false);
-    });
-
-    const unsubAnalytics = onSnapshot(qAnalytics, (snap: any) => {
-      analyticsMap = {};
-      snap.docs.forEach((doc: any) => {
-        const data = doc.data();
-        const pid = data.listingId;
-        if (!pid) return;
-
-        if (!analyticsMap[pid]) analyticsMap[pid] = { views: 0, clicks: 0 };
-
-        if (data.type === 'view_property') {
-          analyticsMap[pid].views++;
-        } else if (data.type && data.type.startsWith('click_')) {
-          analyticsMap[pid].clicks++; 
-        }
-      });
-      updateMergedState();
-    });
-
-    const unsubTenants = onSnapshot(qTenants, (snap: any) => {
-      setTenants(snap.docs.map((d: any) => ({ id: d.id, ...d.data() })));
-    });
-
-    return () => {
-      unsubProps();
-      unsubAnalytics();
-      unsubTenants();
-    };
+  useEffect(() => {
+    fetchDashboardData();
   }, [currentUserUid]);
 
+  // --- ACTIONS VIA API ---
   const toggleStatus = async (prop: Property) => {
     const isAvailable = prop.status.toLowerCase() === 'available' || prop.status.toLowerCase() === 'active';
     const newStatus = isAvailable ? 'sold' : 'available';
@@ -165,31 +139,74 @@ export default function CompletePropertyManagement({
     if (!window.confirm(`Are you sure you want to mark this property as ${newStatus.toUpperCase()}?`)) return;
     
     try {
-      await updateDoc(doc(db, 'property', prop.id!), { status: newStatus, isArchived: false, updatedAt: new Date() });
+      const currentUser = auth.currentUser;
+      const idToken = currentUser ? await currentUser.getIdToken() : '';
+
+      const res = await fetch(`/api/properties`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ id: prop.id, status: newStatus, isArchived: false })
+      });
+
+      if (!res.ok) throw new Error("Failed to update status");
+
       setProperties(prev => prev.map(p => p.id === prop.id ? { ...p, status: newStatus, isArchived: false } : p));
-    } catch (error) { console.error(error); }
+    } catch (error) { 
+      console.error(error); 
+      alert("Error updating status.");
+    }
   };
 
   const toggleArchive = async (prop: Property) => {
     try {
-      await updateDoc(doc(db, 'property', prop.id!), { isArchived: !prop.isArchived });
+      const currentUser = auth.currentUser;
+      const idToken = currentUser ? await currentUser.getIdToken() : '';
+
+      const res = await fetch(`/api/properties`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ id: prop.id, isArchived: !prop.isArchived })
+      });
+
+      if (!res.ok) throw new Error("Failed to archive/unarchive");
+
       setProperties(prev => prev.map(p => p.id === prop.id ? { ...p, isArchived: !prop.isArchived } : p));
       setActiveMenu(null);
-    } catch (error) { console.error(error); }
+    } catch (error) { 
+      console.error(error); 
+    }
   };
 
   const deleteProperty = async (propId: string) => {
     if (!window.confirm("Delete this listing? This cannot be undone.")) return;
     try {
-      await deleteDoc(doc(db, 'property', propId));
+      const currentUser = auth.currentUser;
+      const idToken = currentUser ? await currentUser.getIdToken() : '';
+
+      const res = await fetch(`/api/properties?id=${propId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${idToken}` }
+      });
+
+      if (!res.ok) throw new Error("Failed to delete property");
+
       setProperties(prev => prev.filter(p => p.id !== propId));
       setActiveMenu(null);
-    } catch (error) { console.error(error); }
+    } catch (error) { 
+      console.error(error); 
+      alert("Error deleting listing.");
+    }
   };
 
   const openForm = (prop?: Property) => {
     if (prop && !isPro) {
-      const lastEdit = prop.updatedAt?.toDate?.() || new Date(prop.updatedAt || prop.createdAt);
+      const lastEdit = new Date(prop.updatedAt || prop.createdAt || Date.now());
       const diffHours = (new Date().getTime() - lastEdit.getTime()) / (1000 * 60 * 60);
       if (diffHours < 24) {
         alert(`Editing Locked: You can edit this listing again in ${Math.ceil(24 - diffHours)} hours. Upgrade to Pro for unlimited edits.`);
@@ -219,6 +236,18 @@ export default function CompletePropertyManagement({
     setViewMode('form');
   };
 
+  const handleDeleteExistingImage = async (url: string, index: number) => {
+    try {
+      if (url.includes('firebasestorage.googleapis.com')) {
+        const fileRef = ref(storage, url);
+        await deleteObject(fileRef);
+      }
+    } catch (error) {
+      console.error("Error deleting image from Firebase", error);
+    }
+    setExistingImages(prev => prev.filter((_, idx) => idx !== index));
+  };
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const filesArray = Array.from(e.target.files);
@@ -230,9 +259,11 @@ export default function CompletePropertyManagement({
     }
   };
 
+  // --- SAVE FORM VIA NEXT.JS API (HANDLES SUPABASE UPLOAD & PLAN LIMIT GATEKEEPING) ---
   const saveProperty = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProp) return;
+    
     if (!isPro && editingProp.description.length > 100) {
       alert("Description too long for Free Plan (Max 100 chars).");
       return;
@@ -244,41 +275,46 @@ export default function CompletePropertyManagement({
 
     setIsSaving(true);
     try {
-      const uploadedUrls = [];
-      for (const file of formImages) {
-        const storageRef = ref(storage, `property_images/${currentUserUid}_${Date.now()}_${file.name}`);
-        await uploadBytes(storageRef, file);
-        const url = await getDownloadURL(storageRef);
-        uploadedUrls.push(url);
-      }
+      const currentUser = auth.currentUser;
+      const idToken = currentUser ? await currentUser.getIdToken() : '';
 
-      const finalImages = [...existingImages, ...uploadedUrls];
+      // Upload raw image files directly to Firebase Storage
+      const uploadedUrls = [...existingImages];
+      for (const file of formImages) {
+        const fileRef = ref(storage, `property_images/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`);
+        await uploadBytes(fileRef, file);
+        const downloadUrl = await getDownloadURL(fileRef);
+        uploadedUrls.push(downloadUrl);
+      }
 
       const payload = {
         ...editingProp,
-        images: finalImages,
-        updatedAt: serverTimestamp(),
-        planTier: userPlan || 'free', 
-        planTierAtUpload: userPlan || 'free',
+        images: uploadedUrls,
+        agentId: currentUserUid,
       };
 
-      if (editingProp.id) {
-        await updateDoc(doc(db, 'property', editingProp.id), payload);
-        setProperties(prev => prev.map(p => p.id === editingProp.id ? { ...p, ...payload } as Property : p));
-      } else {
-        const newDocPayload = {
-          ...payload,
-          createdAt: serverTimestamp(),
-          agentVerified: isPro
-        };
-        const docRef = await addDoc(collection(db, 'property'), newDocPayload);
-        setProperties([{ ...newDocPayload, id: docRef.id } as Property, ...properties]);
+      const endpoint = '/api/properties';
+      const method = editingProp.id ? 'PATCH' : 'POST';
+
+      const res = await fetch(endpoint, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save property");
       }
 
+      await fetchDashboardData();
       setViewMode('list');
-    } catch (error) {
+    } catch (error: any) {
       console.error("Save Error:", error);
-      alert("Error saving property.");
+      alert(error.message || "Error saving property.");
     } finally {
       setIsSaving(false);
     }
@@ -330,7 +366,7 @@ export default function CompletePropertyManagement({
   }).sort((a, b) => {
     if (sortBy === 'Price High') return (b.price || 0) - (a.price || 0);
     if (sortBy === 'Price Low') return (a.price || 0) - (b.price || 0);
-    return (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0);
+    return (new Date(b.createdAt || 0).getTime()) - (new Date(a.createdAt || 0).getTime());
   });
 
   const canAdd = isPro || properties.length < FREE_LIMIT;
@@ -485,7 +521,7 @@ export default function CompletePropertyManagement({
                 <div className="bg-purple-50/50 border border-purple-100 p-4 rounded-2xl flex flex-col items-center text-center">
                   <div className="text-purple-500 mb-2 bg-white p-2 rounded-xl shadow-sm"><Clock size={20}/></div>
                   <h4 className="text-2xl font-black text-slate-900">
-                      {statsProp.createdAt ? Math.max(1, Math.floor((new Date().getTime() - (statsProp.createdAt?.toMillis?.() || new Date().getTime())) / (1000 * 3600 * 24))) : 1}
+                      {statsProp.createdAt ? Math.max(1, Math.floor((new Date().getTime() - new Date(statsProp.createdAt).getTime()) / (1000 * 3600 * 24))) : 1}
                   </h4>
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Days Active</p>
                 </div>
@@ -508,7 +544,6 @@ export default function CompletePropertyManagement({
 
     return (
       <div className="max-w-4xl mx-auto space-y-6 animate-in slide-in-from-right-8 duration-300">
-        
         <button onClick={() => setViewMode('list')} className="flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold text-sm mb-4">
           <ArrowLeft size={16} /> Back to Management
         </button>
@@ -718,7 +753,7 @@ export default function CompletePropertyManagement({
               {existingImages.map((img, i) => (
                 <div key={i} className="relative h-24 rounded-xl overflow-hidden group border border-slate-200">
                   <Image src={img} alt="Property" fill className="object-cover" />
-                  <button type="button" onClick={() => setExistingImages(prev => prev.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 bg-black/60 backdrop-blur-sm text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-500"><X size={14}/></button>
+                  <button type="button" onClick={() => handleDeleteExistingImage(img, i)} className="absolute top-1 right-1 bg-black/60 backdrop-blur-sm text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-500"><X size={14}/></button>
                 </div>
               ))}
               {formImages.map((file, i) => (

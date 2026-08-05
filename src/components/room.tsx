@@ -3,29 +3,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { auth, db, storage } from './../app/lib/firebase'; // FIXED IMPORT PATH
-import { 
-  doc, 
-  getDoc, 
-  setDoc, 
-  updateDoc, 
-  collection, 
-  serverTimestamp,
-  getCountFromServer // Added for Free plan room limits
-} from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { auth, storage } from '../app/lib/firebase'; // Keep Auth client-side only for token generation
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { 
   DollarSign, Image as ImageIcon, 
   Info, Users, Settings, Plus, X, Loader2, CheckCircle, 
-  Wifi, Trash2, Video, Globe, Tags, Lock, Star // Added Lock and Star for Pro UI
+  Wifi, Trash2, Video, Globe, Tags, Lock, Star 
 } from 'lucide-react';
-import { onAuthStateChanged } from 'firebase/auth'; // Added for User Plan checking
+import { onAuthStateChanged } from 'firebase/auth';
 
 // ============================================================================
 // CONSTANTS & SCHEMAS
 // ============================================================================
 
-// --- ADDED: Plan Limits ---
 const PLAN_LIMITS = {
   free: { maxRooms: 3, maxImages: 1 },
   pro: { maxRooms: 9999, maxImages: 50 }
@@ -61,13 +51,13 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
   const isEditing = !!roomId;
 
   const [isLoading, setIsLoading] = useState(false);
-  const [isFetching, setIsFetching] = useState(true); // Changed to true to await user plan
+  const [isFetching, setIsFetching] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // --- ADDED: User Plan State ---
+  // --- User Plan & Limits State ---
   const [userPlan, setUserPlan] = useState<'free' | 'pro'>('free');
   const [currentRoomCount, setCurrentRoomCount] = useState(0);
-  const [imageUrlInput, setImageUrlInput] = useState(''); // Added to allow linking images
+  const [imageUrlInput, setImageUrlInput] = useState('');
 
   // --- FORM STATE ---
   // 1. Basic Info
@@ -124,98 +114,100 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
   const [housekeepingNotes, setHousekeepingNotes] = useState('');
 
   // ============================================================================
-  // FETCH EXISTING DATA & USER PLAN
+  // FETCH EXISTING DATA & USER PLAN VIA SECURE APIS
   // ============================================================================
   useEffect(() => {
-    // ADDED: Fetch User Plan & Room Limits
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         try {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            setUserPlan(userDoc.data().planTier === 'pro' ? 'pro' : 'free');
+          const idToken = await user.getIdToken();
+
+          // 1. Fetch User Plan via API
+          const userRes = await fetch(`/api/users?uid=${user.uid}`, {
+            headers: { 'Authorization': `Bearer ${idToken}` }
+          });
+          const userData = await userRes.json();
+          if (userData.success || userData.user) {
+            const u = userData.user || userData;
+            setUserPlan(u.planTier === 'pro' || u.planTier === 'premium' || u.planTier === 'agent_pro' ? 'pro' : 'free');
           }
           
+          // 2. Fetch Room Count for Free Plan Limits if adding a new room
           if (!isEditing && hotelId) {
-            const snapshot = await getCountFromServer(collection(db, 'hotels', hotelId, 'rooms'));
-            setCurrentRoomCount(snapshot.data().count);
+            const roomsRes = await fetch(`/api/rooms?hotelId=${hotelId}`, {
+              headers: { 'Authorization': `Bearer ${idToken}` }
+            });
+            const roomsData = await roomsRes.json();
+            const list = roomsData.success ? roomsData.rooms : (Array.isArray(roomsData) ? roomsData : []);
+            setCurrentRoomCount(list.length);
           }
-        } catch (err) {
-          console.error("Error fetching user data", err);
+
+          // 3. Fetch Room Data if Editing
+          if (isEditing && roomId && hotelId) {
+            const roomRes = await fetch(`/api/rooms?hotelId=${hotelId}&roomId=${roomId}`, {
+              headers: { 'Authorization': `Bearer ${idToken}` }
+            });
+            const roomDataJson = await roomRes.json();
+            const data = roomDataJson.room || roomDataJson;
+
+            if (data && (data.roomName || data._id || data.id)) {
+              setRoomName(data.roomName || '');
+              setRoomNumber(data.roomNumber || '');
+              setInternalId(data.internalId || '');
+              setCategory(data.category || 'Standard');
+              setFloor(data.floor || '');
+              setWing(data.wing || '');
+              setRoomSize(data.roomSize || '');
+
+              setMaxOccupancy(data.maxOccupancy?.toString() || '2');
+              setAdultLimit(data.adultLimit?.toString() || '2');
+              setChildrenLimit(data.childrenLimit?.toString() || '0');
+              setInfantLimit(data.infantLimit?.toString() || '0');
+              setBeds(data.beds || [{ type: 'Queen', count: 1 }]);
+              setAllowExtraBed(data.allowExtraBed || false);
+              setMaxExtraBeds(data.maxExtraBeds?.toString() || '0');
+              setExtraBedCharge(data.extraBedCharge?.toString() || '0');
+
+              setBasePrice(data.basePrice?.toString() || '');
+              setWeekendPrice(data.weekendPrice?.toString() || '');
+              setTaxIncluded(data.taxIncluded ?? true);
+              setDepositRequired(data.depositRequired?.toString() || '');
+              setMinStay(data.minStay?.toString() || '1');
+              setMaxStay(data.maxStay?.toString() || '30');
+              setAllowInstantBooking(data.allowInstantBooking ?? true);
+
+              setSelectedAmenities(data.amenities || {});
+              setCustomTags(data.customTags || []);
+
+              setExistingImages(data.images || []);
+              setVideoUrl(data.videoUrl || '');
+              setTour360Url(data.tour360Url || '');
+
+              setHeadline(data.headline || '');
+              setFullDescription(data.fullDescription || '');
+              setPetsAllowed(data.petsAllowed || false);
+              setSmokingAllowed(data.smokingAllowed || false);
+
+              setRoomStatus(data.roomStatus || 'Available');
+              setCleaningStatus(data.cleaningStatus || 'Cleaned');
+              setCleaningDuration(data.cleaningDuration?.toString() || '30');
+              setMaintenanceNotes(data.maintenanceNotes || '');
+              setHousekeepingNotes(data.housekeepingNotes || '');
+            } else {
+              setError("Room not found.");
+            }
+          }
+        } catch (err: any) {
+          console.error("Error fetching data via API", err);
+          setError("Failed to load room data.");
+        } finally {
+          setIsFetching(false);
         }
+      } else {
+        setIsFetching(false);
       }
     });
-
-    const fetchRoom = async () => {
-      if (!isEditing || !roomId || !hotelId) {
-        setIsFetching(false);
-        return;
-      }
-      try {
-        const docRef = doc(db, 'hotels', hotelId, 'rooms', roomId);
-        const snap = await getDoc(docRef);
-        if (snap.exists()) {
-          const data = snap.data();
-          
-          // Basic
-          setRoomName(data.roomName || '');
-          setRoomNumber(data.roomNumber || '');
-          setInternalId(data.internalId || '');
-          setCategory(data.category || 'Standard');
-          setFloor(data.floor || '');
-          setWing(data.wing || '');
-          setRoomSize(data.roomSize || '');
-
-          // Capacity
-          setMaxOccupancy(data.maxOccupancy?.toString() || '2');
-          setAdultLimit(data.adultLimit?.toString() || '2');
-          setChildrenLimit(data.childrenLimit?.toString() || '0');
-          setInfantLimit(data.infantLimit?.toString() || '0');
-          setBeds(data.beds || [{ type: 'Queen', count: 1 }]);
-          setAllowExtraBed(data.allowExtraBed || false);
-          setMaxExtraBeds(data.maxExtraBeds?.toString() || '0');
-          setExtraBedCharge(data.extraBedCharge?.toString() || '0');
-
-          // Pricing
-          setBasePrice(data.basePrice?.toString() || '');
-          setWeekendPrice(data.weekendPrice?.toString() || '');
-          setTaxIncluded(data.taxIncluded ?? true);
-          setDepositRequired(data.depositRequired?.toString() || '');
-          setMinStay(data.minStay?.toString() || '1');
-          setMaxStay(data.maxStay?.toString() || '30');
-          setAllowInstantBooking(data.allowInstantBooking ?? true);
-
-          // Amenities & Tags
-          setSelectedAmenities(data.amenities || {});
-          setCustomTags(data.customTags || []);
-
-          // Media
-          setExistingImages(data.images || []);
-          setVideoUrl(data.videoUrl || '');
-          setTour360Url(data.tour360Url || '');
-
-          // Text
-          setHeadline(data.headline || '');
-          setFullDescription(data.fullDescription || '');
-          setPetsAllowed(data.petsAllowed || false);
-          setSmokingAllowed(data.smokingAllowed || false);
-
-          // Internal
-          setRoomStatus(data.roomStatus || 'Available');
-          setCleaningStatus(data.cleaningStatus || 'Cleaned');
-          setCleaningDuration(data.cleaningDuration?.toString() || '30');
-          setMaintenanceNotes(data.maintenanceNotes || '');
-          setHousekeepingNotes(data.housekeepingNotes || '');
-        }
-      } catch (err: any) {
-        console.error("Fetch error", err);
-        setError("Failed to load room data.");
-      } finally {
-        setIsFetching(false);
-      }
-    };
     
-    fetchRoom();
     return () => unsubscribe();
   }, [hotelId, roomId, isEditing]);
 
@@ -226,6 +218,17 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
   // ============================================================================
   // HANDLERS
   // ============================================================================
+  const handleDeleteImage = async (url: string, index: number) => {
+    try {
+      if (url.includes('firebasestorage.googleapis.com')) {
+        const fileRef = ref(storage, url);
+        await deleteObject(fileRef);
+      }
+    } catch (e) {
+      console.error("Failed to delete image from Firebase", e);
+    }
+    setExistingImages(existingImages.filter((_, idx) => idx !== index));
+  };
   const handleAddBed = () => setBeds([...beds, { type: 'Single', count: 1 }]);
   
   const handleUpdateBed = (index: number, field: string, value: string | number) => {
@@ -244,7 +247,6 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
     }
   };
 
-  // ADDED: Handler to add an image by URL instead of file upload
   const handleAddImageUrl = () => {
     if (totalImagesCount >= limits.maxImages) {
       alert(`Free plan limit reached (${limits.maxImages} image). Upgrade to Pro.`);
@@ -257,7 +259,6 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // ADDED: Freemium Limit Check
     if (userPlan === 'free' && totalImagesCount >= limits.maxImages) {
       alert(`Free plan limit reached (${limits.maxImages} image). Upgrade to Pro.`);
       return;
@@ -265,8 +266,6 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
 
     if (e.target.files) {
       const files = Array.from(e.target.files);
-      
-      // ADDED: Calculate remaining slots
       const remainingSlots = isPro ? 99 : limits.maxImages - totalImagesCount;
       const allowedFiles = files.slice(0, remainingSlots);
 
@@ -278,14 +277,13 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
   };
 
   // ============================================================================
-  // SUBMIT
+  // SUBMIT VIA SECURE API
   // ============================================================================
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
 
-    // ADDED: Check room limits for Free Plan
     if (!isEditing && !isPro && currentRoomCount >= limits.maxRooms) {
       setError(`Free plan limit reached (${limits.maxRooms} rooms). Please upgrade to Pro.`);
       setIsLoading(false);
@@ -293,20 +291,20 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
     }
 
     try {
+      const user = auth.currentUser;
+      if (!user) throw new Error("Must be logged in");
+      const idToken = await user.getIdToken();
+
       if (!roomName || !basePrice) throw new Error("Room Name and Base Price are required.");
       if (existingImages.length === 0 && newImages.length === 0) throw new Error("Please upload at least one image.");
 
-      const roomRef = isEditing 
-        ? doc(db, 'hotels', hotelId, 'rooms', roomId!) 
-        : doc(collection(db, 'hotels', hotelId, 'rooms'));
-
-      // 1. Upload Images
+      // 1. Upload New Images directly to Firebase Storage
       let finalImageUrls = [...existingImages];
       for (const img of newImages) {
-        const ext = img.file.name.split('.').pop();
-        const sRef = ref(storage, `hotel_rooms/${hotelId}/${roomRef.id}_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`);
-        await uploadBytes(sRef, img.file);
-        finalImageUrls.push(await getDownloadURL(sRef));
+        const fileRef = ref(storage, `hotel_rooms/${Date.now()}_${img.file.name.replace(/[^a-zA-Z0-9.]/g, '')}`);
+        await uploadBytes(fileRef, img.file);
+        const downloadUrl = await getDownloadURL(fileRef);
+        finalImageUrls.push(downloadUrl);
       }
 
       // 2. Clean Amenities (remove false)
@@ -316,6 +314,8 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
 
       // 3. Build Payload
       const payload = {
+        hotelId,
+        roomId: roomId || undefined,
         roomName, roomNumber, internalId, category, floor, wing, roomSize,
         maxOccupancy: Number(maxOccupancy), 
         adultLimit: Number(adultLimit), 
@@ -335,8 +335,8 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
         amenities: cleanedAmenities, 
         customTags,
         images: finalImageUrls, 
-        videoUrl: isPro ? videoUrl : '', // ADDED: Restrict video for free
-        tour360Url: isPro ? tour360Url : '', // ADDED: Restrict tour for free
+        videoUrl: isPro ? videoUrl : '', 
+        tour360Url: isPro ? tour360Url : '', 
         headline, 
         fullDescription, 
         petsAllowed, 
@@ -345,14 +345,24 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
         cleaningStatus, 
         cleaningDuration: Number(cleaningDuration),
         maintenanceNotes, 
-        housekeepingNotes,
-        updatedAt: serverTimestamp()
+        housekeepingNotes
       };
 
-      if (isEditing) {
-        await updateDoc(roomRef, payload);
-      } else {
-        await setDoc(roomRef, { ...payload, createdAt: serverTimestamp(), hotelId });
+      const endpoint = '/api/rooms';
+      const method = isEditing ? 'PATCH' : 'POST';
+
+      const res = await fetch(endpoint, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const resData = await res.json();
+      if (!res.ok) {
+        throw new Error(resData.error || "Failed to save room.");
       }
 
       alert(`Room successfully ${isEditing ? 'updated' : 'added'}!`);
@@ -371,7 +381,7 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-8 pb-32 font-sans">
       
-      {/* ADDED: Freemium Header Banner */}
+      {/* Freemium Header Banner */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
           <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">
@@ -492,7 +502,6 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
                  {!isPro && <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-1 rounded-md font-bold">Free Limit: 1 Image</span>}
               </div>
               
-              {/* ADDED: Link Input alongside Upload Button */}
               <div className="flex flex-col md:flex-row gap-4 mb-4">
                 <button 
                   type="button" 
@@ -524,7 +533,7 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
                 {existingImages.map((url, i) => (
                   <div key={`ext-${i}`} className="relative w-28 h-28 rounded-xl overflow-hidden shadow-sm">
                     <Image src={url} alt="Room" fill className="object-cover" />
-                    <button type="button" onClick={() => setExistingImages(existingImages.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 shadow hover:scale-110"><X size={12}/></button>
+                    <button type="button" onClick={() => handleDeleteImage(url, i)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 shadow hover:scale-110"><X size={12}/></button>
                   </div>
                 ))}
                 {newImages.map((img, i) => (
@@ -557,7 +566,6 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
         <Section title="5. Comprehensive Amenities" icon={Wifi}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-8">
             {Object.entries(AMENITIES_MAP).map(([category, items]) => {
-              // ADDED: Pro amenity logic
               const isLocked = !isPro && PRO_AMENITIES.includes(category);
 
               return (
@@ -634,26 +642,26 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
               <Input label="Cleaning Duration (Mins)" type="number" value={cleaningDuration} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCleaningDuration(e.target.value)} />
            </div>
            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-             <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Maintenance Log</label>
-                <textarea 
-                  rows={3} 
-                  value={maintenanceNotes} 
-                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setMaintenanceNotes(e.target.value)} 
-                  className="w-full p-4 bg-amber-50/30 border border-amber-100 rounded-xl outline-none focus:border-amber-400 text-sm" 
-                  placeholder="e.g. AC replaced Jan 2026..."
-                />
-             </div>
-             <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Housekeeping Notes</label>
-                <textarea 
-                  rows={3} 
-                  value={housekeepingNotes} 
-                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setHousekeepingNotes(e.target.value)} 
-                  className="w-full p-4 bg-blue-50/30 border border-blue-100 rounded-xl outline-none focus:border-blue-400 text-sm" 
-                  placeholder="e.g. Guest prefers extra pillows..."
-                />
-             </div>
+              <div>
+                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Maintenance Log</label>
+                 <textarea 
+                   rows={3} 
+                   value={maintenanceNotes} 
+                   onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setMaintenanceNotes(e.target.value)} 
+                   className="w-full p-4 bg-amber-50/30 border border-amber-100 rounded-xl outline-none focus:border-amber-400 text-sm" 
+                   placeholder="e.g. AC replaced Jan 2026..."
+                 />
+              </div>
+              <div>
+                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Housekeeping Notes</label>
+                 <textarea 
+                   rows={3} 
+                   value={housekeepingNotes} 
+                   onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setHousekeepingNotes(e.target.value)} 
+                   className="w-full p-4 bg-blue-50/30 border border-blue-100 rounded-xl outline-none focus:border-blue-400 text-sm" 
+                   placeholder="e.g. Guest prefers extra pillows..."
+                 />
+              </div>
            </div>
            <div className="flex gap-8 border-t border-slate-100 pt-6">
               <Toggle label="Pets Allowed" checked={petsAllowed} onChange={setPetsAllowed} />

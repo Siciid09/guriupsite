@@ -1,279 +1,178 @@
-import { db } from './firebase';
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-  limit,
-  doc,
-  getDoc,
-  orderBy,
-  Timestamp,
-  GeoPoint,
-  DocumentData,
-  QueryDocumentSnapshot,
-} from 'firebase/firestore';
+// app/lib/data.ts
+import { supabase, supabaseAdmin } from './supabase';
 import type { Property, Hotel, Room, Review, Agent } from '@/types';
 
 // =======================================================================
-// 1. DATA TRANSFORMER (Standardizes Firebase Data)
+// 1. AGENT MERGING & DATA NORMALIZATION (Business Logic Source of Truth)
 // =======================================================================
-const transformDoc = <T>(document: QueryDocumentSnapshot<DocumentData>): T => {
-  const data = document.data();
-  for (const key in data) {
-    if (data[key] instanceof Timestamp) {
-      data[key] = data[key].toDate().toISOString();
-    }
-    if (data[key] instanceof GeoPoint) {
-      data[key] = { latitude: data[key].latitude, longitude: data[key].longitude };
-    }
-    // 🚨 SAFE FIX: Handle both nested GeoPoints AND nested Timestamps
-    if (typeof data[key] === 'object' && data[key] !== null) {
-      for (const nestedKey in data[key]) {
-        if (data[key][nestedKey] instanceof GeoPoint) {
-          data[key][nestedKey] = {
-            latitude: data[key][nestedKey].latitude,
-            longitude: data[key][nestedKey].longitude,
-          };
-        } else if (data[key][nestedKey] instanceof Timestamp) {
-          data[key][nestedKey] = data[key][nestedKey].toDate().toISOString();
-        }
-      }
-    }
-  }
-  return { id: document.id, ...data } as T;
-};
 
-// =======================================================================
-// 2. AGENT MERGING (Business Logic Source of Truth)
-// =======================================================================
+function normalizeHotel(h: any): Hotel {
+  const planTier = h.planTier || h.plan_tier || 'free';
+  const isArchived = String(h.isArchived) === 'true' || String(h.is_archived) === 'true';
+  const status = h.status || 'available';
+  const featured = h.featured ?? h.is_featured ?? false;
+  const hasDiscount = h.hasDiscount ?? h.has_discount ?? false;
+  const discountPrice = h.discountPrice ?? h.discount_price ?? 0;
+  const pricePerNight = h.pricePerNight ?? h.price_per_night ?? 0;
+  const createdAt = h.createdAt || h.created_at || new Date().toISOString();
+
+  return {
+    ...h,
+    id: h.id,
+    slug: h.slug,
+    name: h.name,
+    pricePerNight,
+    displayPrice: (hasDiscount && discountPrice > 0) ? discountPrice : pricePerNight,
+    images: Array.isArray(h.images) ? h.images : (h.image_url ? [h.image_url] : []),
+    location: h.location,
+    rating: Number(h.rating || 0),
+    planTier,
+    isPro: ['pro', 'premium', 'agent_pro', 'admin'].includes(planTier.toLowerCase()),
+    amenities: Array.isArray(h.amenities) ? h.amenities : [],
+    type: h.type || h.hotel_type,
+    status,
+    isArchived,
+    featured,
+    createdAt,
+  };
+}
+
 async function mergeAgentsWithProperties(properties: any[]) {
-  const agentIds = [...new Set(properties.map(p => p.agentId).filter(Boolean))];
+  const agentIds = [...new Set(properties.map(p => p.agentId || p.agent_id).filter(Boolean))];
   
-  const agentSnapshots = await Promise.all(
-    agentIds.map(async (id) => {
-      // PRIORITY 1: Check 'agents' collection (Live Business Profile)
-      const agentSnap = await getDoc(doc(db, 'agents', id as string));
-      if (agentSnap.exists()) return { id, data: agentSnap.data() };
+  if (agentIds.length === 0) return properties;
 
-      // PRIORITY 2: Fallback to 'users' collection (Auth/Login Data)
-      const userSnap = await getDoc(doc(db, 'users', id as string));
-      if (userSnap.exists()) return { id, data: userSnap.data() };
-      
-      return null;
-    })
-  );
+  // 🛡️ CRITICAL TUNNEL FIX: We MUST use supabaseAdmin here because the users/agents 
+  // tables are protected by RLS, and the standard anon client will return empty arrays.
+  if (!supabaseAdmin) {
+    console.error("CRITICAL: supabaseAdmin is missing. Agent data will not load.");
+    return properties;
+  }
+
+  const [agentsRes, usersRes] = await Promise.all([
+    supabaseAdmin.from('agents').select('*').in('id', agentIds),
+    supabaseAdmin.from('users').select('*').in('id', agentIds)
+  ]);
 
   const agentMap = new Map();
-  agentSnapshots.forEach(item => { if (item) agentMap.set(item.id, item.data); });
+  
+  (usersRes.data || []).forEach(u => agentMap.set(u.id, u));
+  (agentsRes.data || []).forEach(a => agentMap.set(a.id, a));
 
   return properties.map(p => {
-    const agentData = agentMap.get(p.agentId) || {};
+    const agentId = p.agentId || p.agent_id;
+    const agentData = agentMap.get(agentId) || {};
     
-    // VERIFICATION LOGIC: Matches mobile 'listing_card.dart'
-    // A user is verified if they have a Paid Plan OR are manually verified
-    const plan = agentData.planTier || p.planTier || 'free';
-    const isVerified = (plan === 'pro' || plan === 'premium') || (agentData.isVerified === true) || (p.agentVerified === true);
+    const plan = (agentData.planTier || agentData.plan_tier || p.planTier || p.plan_tier || 'free').toLowerCase();
+    const isVerified = (plan === 'pro' || plan === 'premium') || (agentData.isVerified === true || agentData.is_verified === true) || (p.agentVerified === true || p.agent_verified === true);
 
     return {
       ...p,
-      // --- GUARANTEED FIX: Normalize specs from nested 'features' object ---
       bedrooms: Number(p.bedrooms || p.features?.bedrooms || 0),
       bathrooms: Number(p.bathrooms || p.features?.bathrooms || 0),
       area: Number(p.area || p.size || p.features?.area || p.features?.size || 0),
-      
-      // Prioritize business name, fall back to user name
-      agentName: agentData.businessName || agentData.name || agentData.displayName || p.agentName || 'GuriUp Agent',
+      agentName: agentData.businessName || agentData.business_name || agentData.name || agentData.displayName || p.agentName || 'GuriUp Agent',
       agentVerified: isVerified,
       planTier: plan,
-      // PRIVACY LOCK: Phone is null if not verified/paid
-      agentPhone: isVerified ? (agentData.whatsappNumber || agentData.phone || p.agentPhone) : null,
-      agentImage: agentData.logoUrl || agentData.photoUrl || p.agentImage || null
+      agentPhone: isVerified ? (agentData.whatsappNumber || agentData.whatsapp_number || agentData.phone || p.agentPhone) : null,
+      agentImage: agentData.logoUrl || agentData.logo_url || agentData.photoUrl || agentData.photo_url || p.agentImage || null
     };
   });
 }
 
 // =======================================================================
-// 3. PROPERTY QUERIES (Safe Filtering)
+// 2. PROPERTY QUERIES
 // =======================================================================
 
-// REPLACE THIS FUNCTION IN app-lib-data.ts
-
 export async function getFeaturedProperties(): Promise<Property[]> {
-  // 1. RELAXED QUERY: Only ask for 'featured'. 
-  // We fetch 20 items (increased from 10) to ensure we have enough left after filtering for Pro agents.
-  const q = query(
-    collection(db, 'property'), 
-    where('featured', '==', true), 
-    limit(20) 
-  );
-  
-  const snapshot = await getDocs(q);
-  const rawData = snapshot.docs.map(doc => transformDoc<Property>(doc));
+  const { data, error } = await supabase
+    .from('property')
+    .select('*')
+    .limit(50);
 
-  // 2. SMART FILTER: Handle "Missing" fields gracefully
-  const activeData = rawData.filter(p => {
-    // Hide if explicitly archived (but show if field is missing)
-    if (p.isArchived === true) return false;
+  if (error || !data) return [];
 
-    // Hide if explicitly draft or sold
-    if (p.status === 'draft' || p.status === 'sold') return false;
-
-    // Show if available, rented, OR if status is missing/undefined
-    return true;
+  const activeData = data.filter(p => {
+    const isArchived = p.isArchived ?? p.is_archived ?? false;
+    const status = p.status || 'available';
+    const featured = p.featured ?? p.is_featured ?? false;
+    if (isArchived) return false;
+    if (status === 'draft' || status === 'sold') return false;
+    return featured;
   });
 
-  // 3. MERGE AGENTS to get the 'planTier'
   const mergedData = await mergeAgentsWithProperties(activeData);
 
-  // 4. STRICT FILTER: Only show properties where agent is 'pro' or 'premium'
   return mergedData
-    .filter(p => p.planTier === 'pro' || p.planTier === 'premium')
-    .slice(0, 3); // Only show the top 3
+    .filter(p => ['pro', 'premium', 'agent_pro', 'admin', 'sadmin'].includes(p.planTier))
+    .slice(0, 3);
 }
 
-// REPLACE THIS FUNCTION IN app-lib-data.ts
-
 export async function getLatestProperties(): Promise<Property[]> {
-  // RELAXED QUERY: We removed "isArchived" from the database query
-  // to prevent hiding old data that is missing this field.
-  const q = query(
-    collection(db, 'property'),
-    where('status', 'in', ['available', 'rented_out']), // Keep this to fix the 10% mismatch
-    orderBy('createdAt', 'desc'),
-    limit(12) // Fetch a few extra just in case
-  );
+  const { data, error } = await supabase
+    .from('property')
+    .select('*')
+    .limit(20);
 
-  const snapshot = await getDocs(q);
-  const rawData = snapshot.docs.map(doc => transformDoc<Property>(doc));
+  if (error || !data) return [];
 
-  // SAFE FILTER: Filter archived items here in case the DB field is missing
-  const filteredData = rawData
-    .filter(p => p.isArchived !== true) // This handles 'false' AND 'undefined'
+  const filteredData = data
+    .filter(p => {
+      const isArchived = p.isArchived ?? p.is_archived ?? false;
+      const status = p.status || 'available';
+      return !isArchived && (status === 'available' || status === 'rented_out');
+    })
     .slice(0, 6);
 
   return await mergeAgentsWithProperties(filteredData);
 }
 
 export async function getAllProperties(): Promise<Property[]> {
-  const q = query(
-    collection(db, 'property'), 
-    orderBy('createdAt', 'desc'),
-    limit(50)
-  );
-  const snapshot = await getDocs(q);
-  const rawData = snapshot.docs.map(doc => transformDoc<Property>(doc));
+  const { data, error } = await supabase
+    .from('property')
+    .select('*')
+    .limit(50);
 
-  const filteredData = rawData
-    .filter(p => p.isArchived !== true && (p.status === 'available' || p.status === 'rented_out' || !p.status));
+  if (error || !data) return [];
+
+  const filteredData = data.filter(p => {
+    const isArchived = p.isArchived ?? p.is_archived ?? false;
+    const status = p.status || 'available';
+    return !isArchived && (status === 'available' || status === 'rented_out' || !status);
+  });
 
   return await mergeAgentsWithProperties(filteredData);
 }
 
 export async function getPropertyBySlug(slug: string): Promise<Property | null> {
-  let docSnap: any = null;
+  let { data, error } = await supabase.from('property').select('*').eq('slug', slug).single();
 
-  // PRIORITY 1: Search by slug field
-  const slugQuery = query(collection(db, 'property'), where('slug', '==', slug), limit(1));
-  const slugDocs = await getDocs(slugQuery);
-
-  if (!slugDocs.empty) {
-    docSnap = slugDocs.docs[0];
-  } else {
-    // PRIORITY 2: Fallback to direct ID fetch
-    docSnap = await getDoc(doc(db, 'property', slug));
+  if (error || !data) {
+    const fallback = await supabase.from('property').select('*').eq('id', slug).single();
+    data = fallback.data;
   }
 
-  if (!docSnap || !docSnap.exists()) return null;
+  if (!data) return null;
   
-  const data = docSnap.data();
-  
-  // Strict Privacy Guard for Direct Access
-  if (data.isArchived === true) return null;
-  if (data.status && !['available', 'rented_out'].includes(data.status)) return null;
+  const isArchived = data.isArchived ?? data.is_archived ?? false;
+  if (isArchived) return null;
 
-  const transformed = transformDoc<Property>(docSnap as QueryDocumentSnapshot<DocumentData>);
-  const [merged] = await mergeAgentsWithProperties([transformed]);
+  const [merged] = await mergeAgentsWithProperties([data]);
   return merged;
 }
 
-// =======================================================================
-// 4. HOTEL QUERIES (Safe & Automated)
-// =======================================================================
-
-export async function getFeaturedHotels(): Promise<Hotel[]> {
-  const q = query(collection(db, 'hotels'), limit(50));
-  const snapshot = await getDocs(q);
-  
-  const rawData = snapshot.docs.map(doc => transformDoc<Hotel>(doc));
-
-  // ✅ FIX: Supports all paid tiers and maps display prices for the UI
-  return rawData
-    .filter(h => (['pro', 'premium', 'agent_pro', 'admin'].includes((h.planTier || '').toLowerCase()) || h.featured === true) && h.isArchived !== true && h.status !== 'banned')
-    .map(h => ({ 
-      ...h, 
-      isPro: true,
-      displayPrice: (h.hasDiscount && h.discountPrice > 0) ? h.discountPrice : h.pricePerNight,
-      // ✅ FIX: Force amenities to be a valid array so the UI never crashes
-      amenities: Array.isArray(h.amenities) ? h.amenities : []
-    }))
-    .slice(0, 10);
-}
-
-export async function getLatestHotels(): Promise<Hotel[]> {
-  const q = query(collection(db, 'hotels'), orderBy('createdAt', 'desc'), limit(10));
-  const snapshot = await getDocs(q);
-  const rawData = snapshot.docs.map(doc => transformDoc<Hotel>(doc));
-  
-  // Simple filter for archive
-  return rawData
-    .filter(h => h.isArchived !== true)
-    .slice(0, 4);
-}
-
-// =======================================================================
-// 5. HELPER FUNCTIONS
-// =======================================================================
-
-export async function getAgentDetails(agentId: string): Promise<Agent | null> {
-  let agentSnap: any = null;
-
-  // 1. Check Agents collection by Slug
-  const slugQuery = query(collection(db, 'agents'), where('slug', '==', agentId), limit(1));
-  const slugDocs = await getDocs(slugQuery);
-
-  if (!slugDocs.empty) {
-    agentSnap = slugDocs.docs[0];
-  } else {
-    // 2. Fallback to Check Agents collection by ID
-    agentSnap = await getDoc(doc(db, 'agents', agentId));
-  }
-
-  if (agentSnap && agentSnap.exists()) {
-    return transformDoc<Agent>(agentSnap as QueryDocumentSnapshot<DocumentData>);
-  }
-
-  // 3. Ultimate Fallback to Users collection (Auth ID only)
-  const userSnap = await getDoc(doc(db, 'users', agentId));
-  return userSnap.exists() ? transformDoc<Agent>(userSnap as QueryDocumentSnapshot<DocumentData>) : null;
-}
-
 export async function getRelatedProperties(property: Property): Promise<Property[]> {
-  // 🚨 SAFE FIX: Prevent crash if property is missing location data
   if (!property?.location?.city) return [];
 
-  const q = query(
-    collection(db, 'property'),
-    where('location.city', '==', property.location.city),
-    limit(10) // fetch slightly more to account for filtering
-  );
+  const { data, error } = await supabase
+    .from('property')
+    .select('*')
+    .limit(10);
   
-  const snapshot = await getDocs(q);
-  const rawData = snapshot.docs.map(doc => transformDoc<Property>(doc));
+  if (error || !data) return [];
 
-  // ✅ FIX: Filter out the current property ID in-memory instead of Firestore
-  const filteredData = rawData
-    .filter(p => p.id !== property.id && p.isArchived !== true)
+  const filteredData = data
+    .filter(p => p.id !== property.id && !(p.isArchived ?? p.is_archived ?? false))
     .slice(0, 4);
 
   return await mergeAgentsWithProperties(filteredData);
@@ -281,78 +180,136 @@ export async function getRelatedProperties(property: Property): Promise<Property
 
 export async function getPropertyTypes(): Promise<string[]> {
   const properties = await getAllProperties();
-  const types = new Set(properties.map(p => p.type));
-  return Array.from(types);
+  const types = new Set(properties.map(p => p.type).filter(Boolean));
+  return Array.from(types) as string[];
 }
 
-export async function getAllHotels(): Promise<Hotel[]> {
-  // Fetch without strict Firestore ordering to prevent skipping documents missing a timestamp
-  const q = query(collection(db, 'hotels'), limit(150));
-  const snapshot = await getDocs(q);
-  const rawData = snapshot.docs.map(doc => transformDoc<Hotel>(doc));
+// =======================================================================
+// 3. HOTEL QUERIES (Normalized for Supabase schema)
+// =======================================================================
 
-  // ✅ FIX: Safely filters archived items and sorts perfectly in-memory
-  return rawData
-    .filter(h => h.isArchived !== true && h.status !== 'banned' && h.status !== 'archived')
-    .map(h => ({
-      ...h,
-      isPro: ['pro', 'premium', 'agent_pro', 'admin'].includes((h.planTier || '').toLowerCase()),
-      displayPrice: (h.hasDiscount && h.discountPrice > 0) ? h.discountPrice : h.pricePerNight,
-      // ✅ FIX: Force amenities to be a valid array so the UI never crashes
-      amenities: Array.isArray(h.amenities) ? h.amenities : []
-    }))
-    .sort((a, b) => {
-      const timeA = new Date(a.createdAt || 0).getTime();
-      const timeB = new Date(b.createdAt || 0).getTime();
-      return timeB - timeA;
-    });
+export async function getFeaturedHotels(): Promise<Hotel[]> {
+  const { data, error } = await supabase
+    .from('hotels')
+    .select('*')
+    .limit(50);
+  
+  if (error || !data) return [];
+
+  return data
+    .map(normalizeHotel)
+    .filter(h => 
+      (h.isPro || h.featured) 
+      && !h.isArchived 
+      && h.status !== 'banned'
+    )
+    .slice(0, 10);
+}
+
+export async function getLatestHotels(): Promise<Hotel[]> {
+  const { data, error } = await supabase
+    .from('hotels')
+    .select('*')
+    .limit(10);
+  
+  if (error || !data) return [];
+  
+  return data
+    .map(normalizeHotel)
+    .filter(h => !h.isArchived)
+    .slice(0, 4);
+}
+
+console.log("\n=======================================================");
+  console.log("🟢 NEXT.JS IS CURRENTLY USING THIS SUPABASE URL:");
+  console.log("➡️ ", process.env.NEXT_PUBLIC_SUPABASE_URL);
+  console.log("🟢 NEXT.JS IS CURRENTLY USING THIS KEY (First 15 chars):");
+  console.log("➡️ ", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.substring(0, 15), "...");
+  console.log("=======================================================\n");
+
+export async function getAllHotels() {
+  try {
+    const { data, error } = await supabase.from('hotels').select('*');
+    
+    // 👇 THIS PRINTS THE ACTUAL DATA TO YOUR TERMINAL 👇
+    console.log("\n====== TERMINAL DATA DUMP ======");
+    console.log(`Total Rows Found: ${data ? data.length : 0}`);
+    
+    if (data && data.length > 0) {
+      console.log("🏨 FIRST HOTEL ROW DATA:");
+      console.log(JSON.stringify(data[0], null, 2));
+    } else if (error) {
+      console.log("🚨 SUPABASE ERROR:", error);
+    } else {
+      console.log("⚠️ NO ERROR, BUT SUPABASE RETURNED AN EMPTY ARRAY []");
+    }
+    console.log("================================\n");
+
+    return data || [];
+  } catch (err: any) {
+    console.log("💥 FATAL CRASH:", err?.message || err);
+    return [];
+  }
 }
 
 export async function getHotelBySlug(slug: string): Promise<Hotel | null> {
-  let docSnap: any = null;
+  let { data, error } = await supabase.from('hotels').select('*').eq('slug', slug).single();
 
-  // PRIORITY 1: Search by slug field
-  const slugQuery = query(collection(db, 'hotels'), where('slug', '==', slug), limit(1));
-  const slugDocs = await getDocs(slugQuery);
-
-  if (!slugDocs.empty) {
-    docSnap = slugDocs.docs[0];
-  } else {
-    // PRIORITY 2: Fallback to direct ID
-    docSnap = await getDoc(doc(db, 'hotels', slug));
+  if (error || !data) {
+    const fallback = await supabase.from('hotels').select('*').eq('id', slug).single();
+    data = fallback.data;
   }
 
-  return docSnap && docSnap.exists() ? transformDoc<Hotel>(docSnap as QueryDocumentSnapshot<DocumentData>) : null;
+  return data ? normalizeHotel(data) : null;
 }
 
 export async function getHotelRooms(hotelId: string): Promise<Room[]> {
-  const snapshot = await getDocs(collection(db, 'hotels', hotelId, 'rooms'));
-  return snapshot.docs.map(doc => transformDoc<Room>(doc));
+  const { data, error } = await supabase.from('rooms').select('*').or(`hotelId.eq.${hotelId},hotel_id.eq.${hotelId}`);
+  return error ? [] : data;
 }
 
 export async function getHotelReviews(hotelId: string): Promise<Review[]> {
-  const q = query(collection(db, 'hotels', hotelId, 'reviews'), orderBy('createdAt', 'desc'));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => transformDoc<Review>(doc));
+  const { data, error } = await supabase
+    .from('reviews')
+    .select('*')
+    .or(`hotelId.eq.${hotelId},hotel_id.eq.${hotelId}`);
+  return error ? [] : data;
 }
 
 export async function getRelatedHotels(hotel: Hotel): Promise<Hotel[]> {
-  // 🚨 SAFE FIX: Prevent crash if hotel is missing location data
   if (!hotel?.location?.city) return [];
 
-  const hotelsRef = collection(db, 'hotels');
-  const q = query(
-    hotelsRef,
-    where('location.city', '==', hotel.location.city),
-    limit(8) // fetch slightly more to account for filtering
-  );
-  const querySnapshot = await getDocs(q);
-  if (querySnapshot.empty) return [];
+  const { data, error } = await supabase
+    .from('hotels')
+    .select('*')
+    .limit(8);
   
-  const rawData = querySnapshot.docs.map(doc => transformDoc<Hotel>(doc));
+  if (error || !data) return [];
 
-  // ✅ FIX: Filter out the current hotel ID in-memory and slice to limit
-  return rawData
-    .filter(h => h.id !== hotel.id)
+  return data
+    .map(normalizeHotel)
+    .filter(h => h.id !== hotel.id && !h.isArchived)
     .slice(0, 4);
+}
+
+// =======================================================================
+// 4. HELPER FUNCTIONS
+// =======================================================================
+
+export async function getAgentDetails(agentId: string): Promise<Agent | null> {
+  // 🛡️ CRITICAL TUNNEL FIX: Users and Agents tables require the admin client
+  if (!supabaseAdmin) return null;
+  
+  let { data, error } = await supabaseAdmin.from('agents').select('*').eq('slug', agentId).single();
+
+  if (error || !data) {
+    const fallbackAgent = await supabaseAdmin.from('agents').select('*').eq('id', agentId).single();
+    data = fallbackAgent.data;
+  }
+
+  if (data) return data as Agent;
+
+  const { data: userData } = await supabaseAdmin.from('users').select('*').eq('id', agentId).single();
+  
+  return userData ? (userData as Agent) : null;
 }

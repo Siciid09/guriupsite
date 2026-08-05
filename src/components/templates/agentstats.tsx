@@ -1,23 +1,21 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { 
-  collection, query, where, onSnapshot, getDocs, limit, orderBy 
-} from 'firebase/firestore';
-import { auth, db } from '../../app/lib/firebase'; // Adjust path based on your directory structure
+import React, { useState, useEffect, useCallback } from 'react';
+// IMPORT FIREBASE AUTH (Adjust path if your firebase config is elsewhere)
+import { auth } from '@/app/lib/firebase'; 
+import { onAuthStateChanged } from 'firebase/auth';
+
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, 
   ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar 
 } from 'recharts';
 import { 
-  TrendingUp, Users, Eye, Calendar, ArrowUpRight, 
-  ArrowDownRight, Building2, MapPin, MousePointer2, 
-  PieChart as PieIcon, LayoutGrid, ListFilter, DollarSign,
-  Activity, Target
+  Users, Eye, Calendar, ArrowUpRight, 
+  ArrowDownRight, Building2, MapPin, 
+  LayoutGrid, ListFilter, DollarSign,
+  Activity, Target, RefreshCw, AlertCircle
 } from 'lucide-react';
-import { format, subDays } from 'date-fns';
 
-// --- STYLING CONSTANTS ---
 const COLORS = ['#0065eb', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4'];
 
 interface AnalyticsState {
@@ -33,9 +31,13 @@ interface AnalyticsState {
   cityData: { name: string; value: number }[];
 }
 
-export default function AgentAnalytics() {
+export default function AgentAnalytics({ initialAgentId }: { initialAgentId?: string }) {
   const [loading, setLoading] = useState(true);
-  const [timeframe, setTimeframe] = useState<'total'|'weekly'|'daily'>('total');
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [timeframe, setTimeframe] = useState<'total' | 'weekly' | 'daily'>('total');
+  const [agentId, setAgentId] = useState<string | null>(initialAgentId || null);
+
   const [data, setData] = useState<AnalyticsState>({
     totalViews: 0,
     totalLeads: 0,
@@ -49,148 +51,183 @@ export default function AgentAnalytics() {
     cityData: []
   });
 
+  // 1. Get authenticated FIREBASE user
   useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) return;
+    if (initialAgentId) {
+      setAgentId(initialAgentId);
+      return;
+    }
 
-    let unsubTours = () => {};
-    let unsubAnalytics = () => {};
-
-    // 1. REAL-TIME PROPERTIES LISTENER
-    const qProps = query(collection(db, 'property'), where('agentId', '==', user.uid));
-    const unsubProps = onSnapshot(qProps, (snap) => {
-      const types: Record<string, number> = {};
-      const cities: Record<string, number> = {};
-      const propsList: any[] = [];
-
-      snap.docs.forEach(doc => {
-        const d = doc.data();
-        const type = d.propertyType || 'Residential';
-        types[type] = (types[type] || 0) + 1;
-
-        const city = d.location?.city || 'Hargeisa';
-        cities[city] = (cities[city] || 0) + 1;
-
-        propsList.push({ id: doc.id, ...d, views: 0 }); // Views will be populated from analytics
-      });
-
-      // 2. REAL-TIME ANALYTICS LISTENER (Reads from Flutter app's analytics_views)
-      const qAnalytics = query(collection(db, 'analytics_views'), where('agentId', '==', user.uid));
-      unsubAnalytics = onSnapshot(qAnalytics, (analyticsSnap) => {
-        let totalViews = 0;
-        let totalLeads = 0; // Clicks on Call, WhatsApp, Chat
-        const timelineData: Record<string, number> = {};
-        const propertyViewCounts: Record<string, number> = {};
-
-        // Initialize last 7 days to 0
-        Array.from({ length: 7 }).forEach((_, i) => {
-          timelineData[format(subDays(new Date(), 6 - i), 'MMM dd')] = 0;
-        });
-
-        analyticsSnap.docs.forEach(doc => {
-          const data = doc.data();
-          const eventType = data.type; // 'view_property' or 'click_whatsapp', etc.
-          const dateStr = data.timestamp ? format(data.timestamp.toDate(), 'MMM dd') : null;
-
-          if (eventType === 'view_property') {
-             totalViews++;
-             // Map views to specific properties
-             if (data.listingId) {
-                propertyViewCounts[data.listingId] = (propertyViewCounts[data.listingId] || 0) + 1;
-             }
-             // Add view to timeline
-             if (dateStr && timelineData[dateStr] !== undefined) {
-               timelineData[dateStr] += 1;
-             }
-          } else if (eventType && eventType.startsWith('click_')) {
-             totalLeads++;
-          }
-        });
-
-        // Update properties with actual view counts and sort them
-        const sortedProps = propsList.map(p => ({
-            ...p, 
-            views: propertyViewCounts[p.id] || 0
-        })).sort((a, b) => b.views - a.views).slice(0, 5);
-
-        // Format timeline for Recharts
-        const realTimeline = Object.keys(timelineData).map(date => ({
-           date, 
-           views: timelineData[date] 
-        }));
-
-        // 3. REAL-TIME TOURS LISTENER (For Pipeline Value)
-        const qTours = query(collection(db, 'tour_requests'), where('agentId', '==', user.uid));
-        unsubTours = onSnapshot(qTours, (tourSnap) => {
-          let pipelineTotal = 0;
-          
-          tourSnap.docs.forEach(doc => {
-            const t = doc.data();
-            if (t.status === 'pending' || t.status === 'approved') {
-               const linkedProp = propsList.find(p => p.title === t.propertyName || p.id === t.propertyId);
-               if (linkedProp) pipelineTotal += (linkedProp.price || 0);
-            }
-          });
-
-          setData({
-            totalViews: totalViews,
-            totalLeads: totalLeads, // Accurate leads based on Flutter clicks
-            tourRequests: tourSnap.size,
-            conversionRate: totalViews > 0 ? (totalLeads / totalViews) * 100 : 0,
-            propertyCount: snap.size,
-            pipelineValue: pipelineTotal,
-            viewsTimeline: realTimeline,
-            typeDistribution: Object.keys(types).map(k => ({ name: k, value: types[k] })),
-            cityData: Object.keys(cities).map(k => ({ name: k, value: cities[k] })),
-            topProperties: sortedProps
-          });
-          setLoading(false);
-        });
-      });
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setAgentId(user.uid); // Use Firebase UID
+      } else {
+        setError("No authenticated user found. Please log in.");
+        setLoading(false);
+      }
     });
 
-    return () => {
-      unsubProps();
-      unsubAnalytics();
-      unsubTours();
-    };
-  }, []);
+    return () => unsubscribe();
+  }, [initialAgentId]);
 
+  // 2. Fetch Analytics Data from Supabase via Next.js API
+  const fetchAnalytics = useCallback(async (isSilentRefresh = false) => {
+    if (!agentId) return;
+
+    if (!isSilentRefresh) setLoading(true);
+    else setRefreshing(true);
+    setError(null);
+
+    try {
+      const currentUser = auth.currentUser;
+      const idToken = currentUser ? await currentUser.getIdToken() : '';
+
+      const response = await fetch(`/api/analytics?agentId=${encodeURIComponent(agentId)}`, {
+        headers: { 'Authorization': `Bearer ${idToken}` }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        setData(result.data);
+      } else {
+        throw new Error(result.error || "Failed to retrieve analytics data from database.");
+      }
+    } catch (err: any) {
+      console.error('Error fetching analytics:', err);
+      setError(err.message || "A network error occurred while loading dashboard.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [agentId]);
+
+  useEffect(() => {
+    if (agentId) {
+      fetchAnalytics();
+    }
+  }, [agentId, fetchAnalytics]);
+
+  // Data Scaler
+  const getScaledValue = (val: number) => {
+    if (timeframe === 'weekly') return Math.ceil(val * 0.25);
+    if (timeframe === 'daily') return Math.ceil(val * 0.03);
+    return val;
+  };
+
+  // ---------------------------------------------------------
+  // RENDER: LOADING STATE
+  // ---------------------------------------------------------
   if (loading) {
     return (
       <div className="h-[60vh] flex flex-col items-center justify-center space-y-4">
         <div className="w-12 h-12 border-4 border-[#0065eb] border-t-transparent rounded-full animate-spin"></div>
-        <p className="font-bold text-slate-400 animate-pulse uppercase tracking-widest text-xs">Computing Portfolio Analytics...</p>
+        <p className="font-bold text-slate-400 animate-pulse uppercase tracking-widest text-xs">
+          Computing Portfolio Analytics...
+        </p>
       </div>
     );
   }
 
+  // ---------------------------------------------------------
+  // RENDER: ERROR STATE
+  // ---------------------------------------------------------
+  if (error) {
+    return (
+      <div className="h-[60vh] flex flex-col items-center justify-center space-y-4">
+        <div className="bg-red-50 border border-red-200 p-8 rounded-3xl max-w-lg text-center shadow-sm">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h3 className="text-xl font-black text-red-900 mb-2">Dashboard Error</h3>
+          <p className="text-sm text-red-700 font-medium mb-6">{error}</p>
+          <button 
+            onClick={() => {
+              setLoading(true);
+              setError(null);
+              if (!agentId) window.location.reload(); 
+              else fetchAnalytics();
+            }}
+            className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-all"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Handle empty Pie Chart data perfectly to avoid SVG errors
+  const pieData = data.typeDistribution.length > 0 
+    ? data.typeDistribution 
+    : [{ name: 'No Properties Yet', value: 1 }]; // Use integer 1 to prevent Recharts calculation crash
+
+  // ---------------------------------------------------------
+  // RENDER: MAIN DASHBOARD
+  // ---------------------------------------------------------
   return (
     <div className="space-y-8 pb-24 animate-in fade-in duration-700">
       
-      {/* SECTION: KPI GRID (Dynamically Multiplied by Timeframe) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Portfolio Views" value={timeframe === 'total' ? data.totalViews.toLocaleString() : timeframe === 'weekly' ? Math.ceil(data.totalViews * 0.25).toLocaleString() : Math.ceil(data.totalViews * 0.03).toLocaleString()} icon={Eye} color="blue" trend={timeframe === 'daily' ? "+1.5%" : "+12.5%"} />
-        <StatCard title="Active Leads" value={timeframe === 'total' ? data.totalLeads : timeframe === 'weekly' ? Math.ceil(data.totalLeads * 0.25) : Math.ceil(data.totalLeads * 0.03)} icon={Users} color="emerald" trend={timeframe === 'daily' ? "+0.8%" : "+4.2%"} />
-        <StatCard title="Tour Bookings" value={timeframe === 'total' ? data.tourRequests : timeframe === 'weekly' ? Math.ceil(data.tourRequests * 0.25) : Math.ceil(data.tourRequests * 0.03)} icon={Calendar} color="amber" trend={timeframe === 'daily' ? "+2.1%" : "+8.1%"} />
-        <StatCard title="Pipeline Value" value={`$${timeframe === 'total' ? data.pipelineValue.toLocaleString() : timeframe === 'weekly' ? Math.ceil(data.pipelineValue * 0.25).toLocaleString() : Math.ceil(data.pipelineValue * 0.03).toLocaleString()}`} icon={DollarSign} color="purple" trend={timeframe === 'daily' ? "+3.0%" : "+15.0%"} />
+      {/* HEADER & CONTROLS */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+        <div>
+          <h2 className="text-2xl font-black text-slate-900">Performance Dashboard</h2>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-1">Real-time metrics powered by Supabase</p>
+        </div>
+
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <button 
+            onClick={() => fetchAnalytics(true)}
+            disabled={refreshing}
+            className="p-3 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl transition-all border border-slate-200/60"
+            title="Refresh Data"
+          >
+            <RefreshCw size={18} className={refreshing ? 'animate-spin text-[#0065eb]' : ''} />
+          </button>
+
+          <div className="bg-slate-100 p-1 rounded-xl flex flex-1 sm:flex-none">
+            <button 
+              onClick={() => setTimeframe('total')}
+              className={`flex-1 sm:flex-none px-4 py-2 text-xs font-black rounded-lg transition-all ${timeframe === 'total' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
+            >
+              All Time
+            </button>
+            <button 
+              onClick={() => setTimeframe('weekly')}
+              className={`flex-1 sm:flex-none px-4 py-2 text-xs font-black rounded-lg transition-all ${timeframe === 'weekly' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
+            >
+              Weekly
+            </button>
+            <button 
+              onClick={() => setTimeframe('daily')}
+              className={`flex-1 sm:flex-none px-4 py-2 text-xs font-black rounded-lg transition-all ${timeframe === 'daily' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
+            >
+              Daily
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* SECTION: MAIN CHARTS */}
+      {/* KPI GRID */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard title="Portfolio Views" value={getScaledValue(data.totalViews).toLocaleString()} icon={Eye} color="blue" trend={timeframe === 'daily' ? "+1.5%" : "+12.5%"} />
+        <StatCard title="Active Leads" value={getScaledValue(data.totalLeads).toLocaleString()} icon={Users} color="emerald" trend={timeframe === 'daily' ? "+0.8%" : "+4.2%"} />
+        <StatCard title="Tour Bookings" value={getScaledValue(data.tourRequests).toLocaleString()} icon={Calendar} color="amber" trend={timeframe === 'daily' ? "+2.1%" : "+8.1%"} />
+        <StatCard title="Pipeline Value" value={`$${getScaledValue(data.pipelineValue).toLocaleString()}`} icon={DollarSign} color="purple" trend={timeframe === 'daily' ? "+3.0%" : "+15.0%"} />
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Exposure Velocity Area Chart */}
+        {/* Engagement Chart */}
         <div className="lg:col-span-2 bg-white p-6 md:p-10 rounded-[2.5rem] border border-slate-100 shadow-sm">
           <div className="flex justify-between items-center mb-10">
             <div>
               <h3 className="font-black text-slate-900 text-xl flex items-center gap-2">
                 <Activity size={24} className="text-[#0065eb]" /> Engagement Velocity
               </h3>
-              <p className="text-sm text-slate-400 font-bold mt-1 uppercase tracking-wider">Total listing exposure over 7 days</p>
-            </div>
-            <div className="hidden sm:flex bg-slate-50 p-1 rounded-xl">
-               <button className="px-4 py-2 bg-white text-slate-900 shadow-sm rounded-lg text-xs font-black">Daily</button>
-               <button className="px-4 py-2 text-slate-400 text-xs font-black">Weekly</button>
+              <p className="text-sm text-slate-400 font-bold mt-1 uppercase tracking-wider">Listing exposure over 7 days</p>
             </div>
           </div>
           <div className="h-[380px] w-full">
@@ -198,47 +235,49 @@ export default function AgentAnalytics() {
               <AreaChart data={data.viewsTimeline}>
                 <defs>
                   <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#0065eb" stopOpacity={0.15}/>
+                    <stop offset="5%" stopColor="#0065eb" stopOpacity={0.2}/>
                     <stop offset="95%" stopColor="#0065eb" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 700}} dy={15} />
                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 700}} dx={-15} />
-                <Tooltip 
-                  contentStyle={{borderRadius: '20px', border: 'none', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)', padding: '16px'}} 
-                  itemStyle={{fontWeight: 900, color: '#0065eb'}}
-                />
-                <Area type="monotone" dataKey="views" stroke="#0065eb" strokeWidth={5} fillOpacity={1} fill="url(#colorViews)" />
+                <Tooltip contentStyle={{borderRadius: '20px', border: 'none', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)', padding: '16px'}} itemStyle={{fontWeight: 900, color: '#0065eb'}} />
+                <Area type="monotone" dataKey="views" stroke="#0065eb" strokeWidth={4} fillOpacity={1} fill="url(#colorViews)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Lead Funnel & Distribution */}
+        {/* Pie Chart */}
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col">
           <h3 className="font-black text-slate-900 text-lg mb-8 flex items-center gap-2">
-            <Target size={20} className="text-emerald-500" /> Lead Conversion
+            <Target size={20} className="text-emerald-500" /> Portfolio Breakdown
           </h3>
           
           <div className="flex-1 min-h-[250px] relative flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={data.typeDistribution} cx="50%" cy="50%" innerRadius={75} outerRadius={105} paddingAngle={8} dataKey="value">
-                  {data.typeDistribution.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                <Pie 
+                  data={pieData} 
+                  cx="50%" cy="50%" innerRadius={75} outerRadius={105} paddingAngle={8} dataKey="value" stroke="none"
+                >
+                  {pieData.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={data.typeDistribution.length > 0 ? COLORS[index % COLORS.length] : '#f1f5f9'} />
+                  ))}
                 </Pie>
                 <Tooltip />
               </PieChart>
             </ResponsiveContainer>
             <div className="absolute flex flex-col items-center justify-center text-center">
-                <span className="text-4xl font-black text-slate-900">{data.propertyCount}</span>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Properties</span>
+              <span className="text-4xl font-black text-slate-900">{data.propertyCount}</span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Properties</span>
             </div>
           </div>
 
           <div className="space-y-4 mt-8">
             <div className="flex justify-between items-end border-b border-slate-50 pb-3">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Conversion Rate</p>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Lead Conversion Rate</p>
               <p className="text-lg font-black text-emerald-500">{data.conversionRate.toFixed(1)}%</p>
             </div>
             <div className="space-y-2">
@@ -256,7 +295,6 @@ export default function AgentAnalytics() {
         </div>
       </div>
 
-      {/* SECTION: RANKINGS & GEOGRAPHY */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         
         {/* Highest Performing Listings Table */}
@@ -269,23 +307,32 @@ export default function AgentAnalytics() {
           </div>
           <div className="space-y-4">
             {data.topProperties.length === 0 ? (
-              <div className="py-10 text-center text-slate-400 font-bold">No property data available.</div>
-            ) : data.topProperties.map((prop, i) => (
-              <div key={prop.id} className="group flex items-center gap-5 p-4 hover:bg-slate-50 rounded-3xl transition-all cursor-pointer border border-transparent hover:border-slate-100">
-                <div className="w-16 h-16 bg-slate-100 rounded-2xl overflow-hidden shrink-0 relative shadow-inner">
-                  <img src={prop.images?.[0] || 'https://placehold.co/100'} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                  <div className="absolute inset-0 bg-black/30 flex items-center justify-center text-white font-black text-sm">#{i+1}</div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-bold text-slate-900 truncate group-hover:text-[#0065eb] transition-colors">{prop.title}</h4>
-                  <p className="text-[10px] font-bold text-slate-400 flex items-center gap-1 uppercase tracking-widest mt-1"><MapPin size={10}/> {prop.location?.area}, {prop.location?.city}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-lg font-black text-[#0065eb]">{prop.views.toLocaleString()}</p>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Views</p>
-                </div>
+              <div className="py-10 text-center text-slate-400 font-bold bg-slate-50 rounded-2xl border border-slate-100">
+                No active listings found.
               </div>
-            ))}
+            ) : data.topProperties.map((prop, i) => {
+              const imageUrl = Array.isArray(prop.images) && prop.images[0] ? prop.images[0] : 'https://placehold.co/100';
+              const locationName = typeof prop.location === 'object' ? `${prop.location?.area || ''} ${prop.location?.city || ''}` : prop.city || 'Hargeisa';
+
+              return (
+                <div key={prop.id || i} className="group flex items-center gap-5 p-4 hover:bg-slate-50 rounded-3xl transition-all cursor-pointer border border-transparent hover:border-slate-100">
+                  <div className="w-16 h-16 bg-slate-100 rounded-2xl overflow-hidden shrink-0 relative shadow-inner">
+                    <img src={imageUrl} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center text-white font-black text-sm">#{i+1}</div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-bold text-slate-900 truncate group-hover:text-[#0065eb] transition-colors">{prop.title}</h4>
+                    <p className="text-[10px] font-bold text-slate-400 flex items-center gap-1 uppercase tracking-widest mt-1">
+                      <MapPin size={10}/> {locationName}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-black text-[#0065eb]">{prop.views.toLocaleString()}</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Views</p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -306,15 +353,15 @@ export default function AgentAnalytics() {
           </div>
           <div className="bg-[#f8fafc] p-6 rounded-3xl flex items-center justify-between">
             <div className="flex items-center gap-4">
-               <div className="p-3 bg-white rounded-2xl shadow-sm border border-slate-100"><Building2 size={24} className="text-[#0065eb]" /></div>
-               <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Primary Market</p>
-                  <p className="font-black text-slate-900 text-lg">{data.cityData[0]?.name || 'N/A'}</p>
-               </div>
+              <div className="p-3 bg-white rounded-2xl shadow-sm border border-slate-100"><Building2 size={24} className="text-[#0065eb]" /></div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Primary Market</p>
+                <p className="font-black text-slate-900 text-lg">{data.cityData[0]?.name || 'N/A'}</p>
+              </div>
             </div>
             <div className="text-right">
-               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Share</p>
-               <p className="font-black text-purple-600 text-lg">{data.cityData[0] ? 'Dominant' : '0%'}</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Market Share</p>
+              <p className="font-black text-purple-600 text-lg">{data.cityData[0] ? 'Dominant' : '0%'}</p>
             </div>
           </div>
         </div>
@@ -324,8 +371,7 @@ export default function AgentAnalytics() {
   );
 }
 
-// --- SUB-COMPONENTS ---
-
+// SUB-COMPONENT: STAT CARD
 function StatCard({ title, value, icon: Icon, color, trend }: any) {
   const colors: any = {
     blue: 'bg-blue-50 text-blue-600 border-blue-100',

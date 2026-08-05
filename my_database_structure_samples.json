@@ -1,0 +1,1400 @@
+{
+  "agents": [
+    {
+      "_id": "2HnqIVMtmtbMaEs6JXM4THMOAbx2",
+      "totalListings": 0,
+      "featured": false,
+      "isVerified": false,
+      "city": "bur",
+      "verifiedAt": null,
+      "agentVerified": false,
+      "bio": "waa goob ku haboon nasasho",
+      "planTier": "free",
+      "planExpiryDate": null,
+      "type": "reagent",
+      "userid": "2HnqIVMtmtbMaEs6JXM4THMOAbx2",
+      "analytics": {
+        "leads": 0,
+        "clicks": 0,
+        "views": 0
+      },
+      "whatsappNumber": "252634337669",
+      "propertiesSold": 0,
+      "specialties": [
+        "Residential"
+      ],
+      "ownerName": "Yuusuf Jaamac",
+      "averageRating": 0,
+      "licenseNumber": "PENDING",
+      "isFeatured": false,
+      "profileImageUrl": "https://lh3.googleusercontent.com/a/ACg8ocKrVR-MArIroyLTfC9PRs19RVjeyxHryfzbKbDO9xPI1raagZo=s96-c",
+      "email": "shamsulculuum123456@gmail.com",
+      "slug": "isha-waridaad",
+      "languages": [
+        "Somali",
+        "English"
+      ],
+      "coverPhoto": "",
+      "agencyName": "isha waridaad",
+      "phone": "252634337669",
+      "name": "isha waridaad",
+      "status": "active",
+      "lastUpdated": "2026-07-17T15:54:32.390Z",
+      "migratedAt": "2026-07-17T15:54:32.390Z",
+      "joinDate": "2026-07-17T15:54:32.390Z"
+    },
+    {
+      "_id": "3TuOuRAhmJRa6y9N3DVxXBlRaW42",
+      "totalListings": 0,
+      "featured": false,
+      "isVerified": false,
+      "city": "Hargeisa",
+      "verifiedAt": null,
+      "agentVerified": false,
+      "bio": "ok",
+      "planTier": "free",
+      "type": "reagent",
+      "userid": "3TuOuRAhmJRa6y9N3DVxXBlRaW42",
+      "analytics": {
+        "leads": 0,
+        "clicks": 0,
+        "views": 0
+      },
+      "whatsappNumber": "0000000",
+      "propertiesSold": 0,
+      "specialties": [
+        "Residential"
+      ],
+      "ownerName": "najiib hassan",
+      "averageRating": 0,
+      "licenseNumber": "PENDING",
+      "isFeatured": false,
+      "profileImageUrl": "https://lh3.googleusercontent.com/a/ACg8ocKbi2YxDVnh5L0oceWyoy7PF4HYiU2dLJUpk43z6-9HI-ip0g=s96-c",
+      "email": "nacheiphassan@gmail.com",
+      "slug": "majod_632",
+      "languages": [
+        "Somali",
+        "English"
+      ],
+      "coverPhoto": "",
+      "agencyName": "majod",
+      "phone": "00000000",
+      "name": "majod",
+      "lastUpdated": "2026-02-22T10:10:02.543Z",
+      "migratedAt": "2026-02-22T10:10:02.543Z",
+      "joinDate": "2026-02-22T10:10:02.543Z",
+      "isBanned": true,
+      "status": "banned"
+    },
+    {
+      "_id": "5HSBV9Vj9BMsMhafC78nLEzhmc72",
+      "type": "reagent",
+      "analytics": {
+        "leads": 0,
+        "views": 0,
+        "clicks": 0
+      },
+      "userid": "5HSBV9Vj9BMsMhafC78nLEzhmc72",
+      "slug": "malaaki-sales",
+      "totalListings": 0,
+      "specialties": [
+        "Residential"
+      ],
+      "ownerName": "Mubarik",
+      "averageRating": 0,
+      "email": "zamaier372@gmail.com",
+      "licenseNumber": "PENDING",
+      "name": "malaaki sales",
+      "city": "b",
+      "bio": "b",
+      "languages": [
+        "Somali",
+        "English"
+      ],
+      "profileImageUrl": "https://lh3.googleusercontent.com/a/ACg8ocKrYLyg1_D5UtOEY7LBCwfI7E8gV3YXC0ZLP_o7TTkCQ8CvpA=s96-c",
+      "verifiedAt": null,
+      "status": "active",
+      "coverPhoto": "",
+      "isFeatured": false,
+      "propertiesSold": 0,
+      "agencyName": "malaaki sales",
+      "featured": false,
+      "phone": "9",
+      "whatsappNumber": "6",
+      "lastUpdated": "2026-07-25T10:08:08.243Z",
+      "migratedAt": "2026-07-25T10:08:08.243Z",
+      "joinDate": "2026-07-25T10:08:08.243Z",
+      "isVerified": true,
+      "agentVerified": true,
+      "planTier": "pro",
+      "planExpiryDate": "2027-11-25T00:00:00.000Z"
+    }
+  ],
+  "analytics": [
+    {
+      "_id": "0CycNwlJKNw4zva4cHfn",
+      "agentId": "AQacLUN8D0QbhE590ZxE4dk6sZs1",
+      "viewerId": "0EVUJulhGOQqAXreYqoY4zR5F6q1",
+      "city": "Hargeisa",
+      "type": "view_property",
+      "propertyId": "98MDe7ensYrZbNvGLsfO",
+      "timestamp": "2026-02-28T10:11:39.078Z"
+    },
+    {
+      "_id": "0V3c4yUgUNgcO8gtKlts",
+      "agentId": "AQacLUN8D0QbhE590ZxE4dk6sZs1",
+      "viewerId": "vI6oy2bUJxRPIINxdC4A7DmCG5E3",
+      "city": "Hargeisa",
+      "type": "view_property",
+      "propertyId": "ZV5r3nWuJoZhQf6RLvqP",
+      "timestamp": "2026-03-08T18:23:43.786Z"
+    },
+    {
+      "_id": "0m4OqbqaQUAAvV2CBCzO",
+      "agentId": "rP7s7Oq08HQytehXWfFWIItPDK83",
+      "viewerId": "rP7s7Oq08HQytehXWfFWIItPDK83",
+      "city": "hargeisa",
+      "type": "view_property",
+      "propertyId": "ALGjA9WhfL7KE8eTjFev",
+      "timestamp": "2026-02-06T12:51:00.858Z"
+    }
+  ],
+  "analytics_views": [
+    {
+      "_id": "00mtIELaFxSmBiMqnegv",
+      "agentId": "zjpiJMioG0UOpHtEcBaZjxHvny12",
+      "listingType": "property",
+      "listingId": "FSvWFAPYHGeFK9rM2ZRc",
+      "type": "view_property",
+      "timestamp": "2026-07-12T21:04:40.100Z"
+    },
+    {
+      "_id": "00otT6rfntNGyHcaBx8c",
+      "type": "click_whatsapp",
+      "listingType": "hotel",
+      "listingId": "GX0Y6z4DRTfEa4x6ZUnD",
+      "hotelId": "GX0Y6z4DRTfEa4x6ZUnD",
+      "timestamp": "2026-07-22T13:04:23.866Z"
+    },
+    {
+      "_id": "01xwftQ9QrORmt3imZSr",
+      "agentId": "zjpiJMioG0UOpHtEcBaZjxHvny12",
+      "listingType": "property",
+      "listingId": "FSvWFAPYHGeFK9rM2ZRc",
+      "type": "view_property",
+      "timestamp": "2026-07-08T14:53:20.997Z"
+    }
+  ],
+  "bookings": [
+    {
+      "_id": "0KfpwxH6ECiYXwr6e6Rf",
+      "hotelId": "4ptvK9GKjLivsZvleZdD",
+      "hotelName": "Jees Hotel",
+      "userId": "HoQBChwUN0NuD4gRQpTJx12IB783",
+      "name": "za@gmail.com",
+      "phone": "",
+      "roomId": "5u9Zy64XlpofFLlafcpp",
+      "checkIn": "",
+      "checkOut": "",
+      "adults": 1,
+      "children": 3,
+      "roomCount": 8,
+      "status": "pending",
+      "source": "whatsapp_redirect",
+      "createdAt": "2026-02-17T20:52:17.992Z"
+    },
+    {
+      "_id": "0zLUkhFt4RiXSkxMiAF6",
+      "userPhone": "88",
+      "adults": 1,
+      "hotelId": "8haMkz1qIry39UNY1vkx",
+      "userName": "cc",
+      "hotelName": "yy",
+      "checkInDate": "2026-01-20T21:00:00.000Z",
+      "userId": "W0MFb6Mbb6hSmmJ59f9fTTt3ZHj2",
+      "roomId": "CYqMDr8tVHeoAw01Vsdq",
+      "roomName": "vg",
+      "totalAmount": 176,
+      "createdAt": "2026-01-12T13:35:03.999Z",
+      "checkOutDate": "2026-01-22T21:00:00.000Z",
+      "children": 0,
+      "roomsBooked": 1,
+      "paymentMethod": null,
+      "paymentStatus": "cancelled",
+      "systemNote": "Auto-cancelled due to 4-day inactivity."
+    },
+    {
+      "_id": "4EltrmTBx8RCOuSX7MMu",
+      "userPhone": "99",
+      "adults": 1,
+      "hotelId": "GX0Y6z4DRTfEa4x6ZUnD",
+      "userName": "h",
+      "hotelName": "Damal Hotel Hargeisa",
+      "checkInDate": "2026-04-17T21:00:00.000Z",
+      "userId": "2wDxBHNZylTuTmzEILe6teO05ev2",
+      "roomId": "xtXqb2Bqxx4rtd1lIPWy",
+      "roomName": "h",
+      "totalAmount": 50,
+      "createdAt": "2026-04-18T05:11:04.551Z",
+      "checkOutDate": "2026-04-18T21:00:00.000Z",
+      "children": 0,
+      "roomsBooked": 1,
+      "paymentMethod": null,
+      "paymentStatus": "cancelled",
+      "systemNote": "Auto-cancelled due to 4-day inactivity."
+    }
+  ],
+  "chats": [
+    {
+      "_id": "1Te4JJFmNkVEYhQtZanzqdlHCv93_rP7s7Oq08HQytehXWfFWIItPDK83_JhBKilnl6aX2sU72WGJ4",
+      "propertyImage": "https://firebasestorage.googleapis.com/v0/b/guriapp123.firebasestorage.app/o/property_images%2Fprop_1758370934500_scaled_1000338830.jpg?alt=media&token=bef87f73-b702-4521-a654-6db41e213f48",
+      "userNames": {
+        "rP7s7Oq08HQytehXWfFWIItPDK83": "GuriUp Agency",
+        "1Te4JJFmNkVEYhQtZanzqdlHCv93": "Garaad Biixi"
+      },
+      "lastMessageTime": "2026-01-16T12:15:58.123Z",
+      "propertyId": "JhBKilnl6aX2sU72WGJ4",
+      "propertyTitle": "Guri Cusub Burco Xaafada October",
+      "users": [
+        "Garaad Biixi",
+        "GuriUp Agency"
+      ],
+      "participants": [
+        "1Te4JJFmNkVEYhQtZanzqdlHCv93",
+        "rP7s7Oq08HQytehXWfFWIItPDK83"
+      ]
+    },
+    {
+      "_id": "2tzgJBcE9xaifabn69ax2UXq3eJ2_HltKAqKesEXs2TGphBusVBxBsTh1_MHQDuCu1PoCrD2Ku9uoS",
+      "propertyImage": "https://firebasestorage.googleapis.com/v0/b/guriapp123.firebasestorage.app/o/property_images%2Fprop_1758100545233_scaled_1000337677.jpg?alt=media&token=854bb21d-fec9-44a1-9eb2-5e1c4026bae5",
+      "participantNames": {
+        "HltKAqKesEXs2TGphBusVBxBsTh1": "GuriUp",
+        "2tzgJBcE9xaifabn69ax2UXq3eJ2": "Cabdalle"
+      },
+      "propertyId": "MHQDuCu1PoCrD2Ku9uoS",
+      "propertyTitle": "Guri Cusub",
+      "participants": [
+        "2tzgJBcE9xaifabn69ax2UXq3eJ2",
+        "HltKAqKesEXs2TGphBusVBxBsTh1"
+      ],
+      "unreadCount_2tzgJBcE9xaifabn69ax2UXq3eJ2": 0,
+      "lastMessageSenderId": "2tzgJBcE9xaifabn69ax2UXq3eJ2",
+      "lastMessageText": "Aar isk wrn",
+      "lastMessageTimestamp": "2025-09-23T10:06:34.507Z",
+      "unreadCount_HltKAqKesEXs2TGphBusVBxBsTh1": 2,
+      "messages": [
+        {
+          "_id": "4K88jSTmFXqszxdPjz3h",
+          "senderId": "HltKAqKesEXs2TGphBusVBxBsTh1",
+          "text": "Asc",
+          "timestamp": "2025-09-18T06:34:41.663Z"
+        },
+        {
+          "_id": "7CJujT61O45tQdKi2VK2",
+          "senderId": "HltKAqKesEXs2TGphBusVBxBsTh1",
+          "text": "Asc",
+          "timestamp": "2025-09-18T06:33:35.431Z"
+        },
+        {
+          "_id": "L8MfF0zNN0fzkKIZU7d4",
+          "senderId": "HltKAqKesEXs2TGphBusVBxBsTh1",
+          "text": "G",
+          "timestamp": "2025-09-18T06:34:02.909Z"
+        }
+      ]
+    },
+    {
+      "_id": "2tzgJBcE9xaifabn69ax2UXq3eJ2_rP7s7Oq08HQytehXWfFWIItPDK83_ALGjA9WhfL7KE8eTjFev",
+      "propertyImage": "https://firebasestorage.googleapis.com/v0/b/guriapp123.firebasestorage.app/o/property_images%2Fprop_1758273545008_scaled_1000338828.jpg?alt=media&token=914b47b0-252b-4b14-bec4-670f8ce45043",
+      "unreadCount_rP7s7Oq08HQytehXWfFWIItPDK83": 0,
+      "participantNames": {
+        "2tzgJBcE9xaifabn69ax2UXq3eJ2": "Cabdalle",
+        "rP7s7Oq08HQytehXWfFWIItPDK83": "maan"
+      },
+      "propertyId": "ALGjA9WhfL7KE8eTjFev",
+      "unreadCount_2tzgJBcE9xaifabn69ax2UXq3eJ2": 0,
+      "propertyTitle": "guryo iiba Burco",
+      "participants": [
+        "2tzgJBcE9xaifabn69ax2UXq3eJ2",
+        "rP7s7Oq08HQytehXWfFWIItPDK83"
+      ]
+    }
+  ],
+  "cities": [
+    {
+      "_id": "berbera",
+      "name": "berbera",
+      "queryName": "berbera",
+      "isVerified": true,
+      "country": "somalia",
+      "createdAt": "2026-01-19T06:31:58.159Z"
+    },
+    {
+      "_id": "boorama",
+      "name": "Boorama",
+      "queryName": "boorama",
+      "isVerified": true,
+      "country": "somalia",
+      "createdAt": "2026-01-14T06:32:52.375Z"
+    },
+    {
+      "_id": "burco",
+      "name": "Burco",
+      "queryName": "burco",
+      "isVerified": true,
+      "country": "somalia",
+      "createdAt": "2026-01-19T06:32:05.643Z"
+    }
+  ],
+  "countries": [
+    {
+      "_id": "djibouti",
+      "name": "Djibouti",
+      "cities": [
+        {
+          "_id": "ali_sabieh",
+          "name": "Ali Sabieh",
+          "districts": [
+            {
+              "_id": "centre",
+              "name": "Centre"
+            },
+            {
+              "_id": "djebel",
+              "name": "Djebel"
+            },
+            {
+              "_id": "guelleh_batal",
+              "name": "Guelleh Batal"
+            }
+          ]
+        },
+        {
+          "_id": "dikhil",
+          "name": "Dikhil",
+          "districts": [
+            {
+              "_id": "cheik_osman",
+              "name": "Cheik Osman"
+            },
+            {
+              "_id": "palmeraie",
+              "name": "Palmeraie"
+            }
+          ]
+        },
+        {
+          "_id": "djibouti_city",
+          "name": "Djibouti City",
+          "districts": [
+            {
+              "_id": "ambouli",
+              "name": "Ambouli"
+            },
+            {
+              "_id": "balbala",
+              "name": "Balbala"
+            },
+            {
+              "_id": "boulaos",
+              "name": "Boulaos"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "_id": "ethiopia",
+      "name": "Ethiopia",
+      "cities": [
+        {
+          "_id": "adama",
+          "name": "Adama",
+          "districts": [
+            {
+              "_id": "boku",
+              "name": "Boku"
+            },
+            {
+              "_id": "dabe",
+              "name": "Dabe"
+            },
+            {
+              "_id": "dembela",
+              "name": "Dembela"
+            }
+          ]
+        },
+        {
+          "_id": "addis_ababa",
+          "name": "Addis Ababa",
+          "districts": [
+            {
+              "_id": "akaky_kaliti",
+              "name": "Akaky Kaliti"
+            },
+            {
+              "_id": "arada",
+              "name": "Arada"
+            },
+            {
+              "_id": "bole",
+              "name": "Bole"
+            }
+          ]
+        },
+        {
+          "_id": "bahir_dar",
+          "name": "Bahir Dar",
+          "districts": [
+            {
+              "_id": "belay_zeleke",
+              "name": "Belay Zeleke"
+            },
+            {
+              "_id": "fasilo",
+              "name": "Fasilo"
+            },
+            {
+              "_id": "gish_abay",
+              "name": "Gish Abay"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "_id": "kenya",
+      "name": "Kenya",
+      "cities": [
+        {
+          "_id": "eldoret",
+          "name": "Eldoret",
+          "districts": [
+            {
+              "_id": "kapseret",
+              "name": "Kapseret"
+            },
+            {
+              "_id": "kesses",
+              "name": "Kesses"
+            },
+            {
+              "_id": "moiben",
+              "name": "Moiben"
+            }
+          ]
+        },
+        {
+          "_id": "kisumu",
+          "name": "Kisumu",
+          "districts": [
+            {
+              "_id": "kisumu_central",
+              "name": "Kisumu Central"
+            },
+            {
+              "_id": "kisumu_east",
+              "name": "Kisumu East"
+            },
+            {
+              "_id": "kisumu_west",
+              "name": "Kisumu West"
+            }
+          ]
+        },
+        {
+          "_id": "mombasa",
+          "name": "Mombasa",
+          "districts": [
+            {
+              "_id": "changamwe",
+              "name": "Changamwe"
+            },
+            {
+              "_id": "jomvu",
+              "name": "Jomvu"
+            },
+            {
+              "_id": "kisauni",
+              "name": "Kisauni"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "finance": [],
+  "guest_users": [
+    {
+      "_id": "079175a5-9771-4ac5-8cbb-bbb0fadbfd87",
+      "country": "Somalia",
+      "name": "Mubarik osman",
+      "loggedInAt": "2025-07-20T19:39:30.413Z"
+    },
+    {
+      "_id": "2b372a45-9b8f-40e5-aaf6-ac4dad072377",
+      "country": "Eritrea",
+      "name": "nsjsjwj",
+      "loggedInAt": "2025-07-20T19:38:34.743Z"
+    },
+    {
+      "_id": "457a70a4-6e3d-448c-ae9e-1dc975b31437",
+      "country": "Djibouti",
+      "name": "heeh",
+      "loggedInAt": "2025-07-21T06:19:54.153Z"
+    }
+  ],
+  "hotels": [
+    {
+      "_id": "DXInlGgiwHNlv8xCPY6l",
+      "images": [
+        "https://firebasestorage.googleapis.com/v0/b/guriapp123.firebasestorage.app/o/hotel_images%2FDXInlGgiwHNlv8xCPY6l%2F2026-02-23T11%3A32%3A50.051485_scaled_1000421890.jpg?alt=media&token=ea28be0e-42e7-4b42-8acf-24230f679fe4",
+        "https://firebasestorage.googleapis.com/v0/b/guriapp123.firebasestorage.app/o/hotel_images%2FDXInlGgiwHNlv8xCPY6l%2F2026-02-23T11%3A32%3A56.253356_scaled_1000421889.jpg?alt=media&token=a0106beb-0e80-4701-a257-184461a44fd9",
+        "https://firebasestorage.googleapis.com/v0/b/guriapp123.firebasestorage.app/o/hotel_images%2FDXInlGgiwHNlv8xCPY6l%2F2026-02-23T11%3A33%3A00.012523_scaled_1000421888.jpg?alt=media&token=74846c81-7d66-4cef-8a8f-b8b197747cef",
+        "https://firebasestorage.googleapis.com/v0/b/guriapp123.firebasestorage.app/o/hotel_images%2FDXInlGgiwHNlv8xCPY6l%2F2026-02-23T11%3A33%3A08.523868_scaled_1000421887.jpg?alt=media&token=8d7eea02-8b22-4e10-b6eb-605ec8506ac3"
+      ],
+      "rating": 3,
+      "policies": {
+        "paymentMethodsList": [
+          "zaad"
+        ],
+        "cancellation": ".",
+        "checkOutTime": "11:00 AM",
+        "checkInTime": "2:00 PM",
+        "paymentMethods": "zaad"
+      },
+      "description": "serene sarovar premier hargeisa is somaliland'# first branded five star hotel positioned as landmark project that",
+      "type": "Hotel",
+      "ownerId": "3DU65fGVwUgIfwIU5umEU6brWYE3",
+      "createdAt": "2026-02-23T08:33:14.120Z",
+      "hotelAdminId": "3DU65fGVwUgIfwIU5umEU6brWYE3",
+      "planTierAtUpload": "pro",
+      "name": "Serene Sarovar Premier Hargeisa",
+      "location": {
+        "area": "Near Igal Airport",
+        "city": "Hargeisa",
+        "lngDisplay": "44.067766",
+        "coordinates": {
+          "latitude": 9.561826839169681,
+          "longitude": 44.06776573508978
+        },
+        "latDisplay": "9.561827"
+      },
+      "roomsCount": 50,
+      "pricePerNight": 140,
+      "verifiedAt": "2026-02-23T08:45:01.939Z",
+      "status": "active",
+      "contact": {
+        "phoneCall": "639000018",
+        "website": "639000018",
+        "phoneWhatsapp": "639000018",
+        "phoneManager": "639000018"
+      },
+      "videoUrl": "",
+      "slug": "",
+      "planExpiryDate": null,
+      "agentVerified": true,
+      "isFeatured": true,
+      "amenities": {
+        "Business Internet": true,
+        "Prayer Room": true,
+        "Sauna": true,
+        "Football Field": true,
+        "Free Breakfast": true,
+        "Restaurant": true,
+        "Pool Bar": true,
+        "Concierge": true,
+        "Multiple Restaurants": true,
+        "Indoor Swimming Pool": true,
+        "Qibla Direction": true,
+        "Currency Exchange": true,
+        "Hot Tub / Jacuzzi": true,
+        "Free Wi-Fi (Public Areas)": true,
+        "Room Service": true,
+        "Breakfast Service": true
+      },
+      "isVerified": true,
+      "viewCount": 102,
+      "lastViewedAt": "2026-07-30T19:40:12.948Z",
+      "featured": false,
+      "planTier": "free"
+    },
+    {
+      "_id": "EiRBZFqd5MCPSiuC7igR",
+      "hasVideo": false,
+      "amenities": {},
+      "images": [
+        "https://firebasestorage.googleapis.com/v0/b/guriapp123.firebasestorage.app/o/hotel_images%2FEiRBZFqd5MCPSiuC7igR%2F2026-06-15T10%3A01%3A34.867390_scaled_1000514752.jpg?alt=media&token=eddd8ccc-d0b6-42dd-8de9-16cd6e4843d1"
+      ],
+      "featured": false,
+      "rating": 5,
+      "policies": {
+        "paymentMethodsList": [
+          "."
+        ],
+        "cancellation": ".",
+        "checkOutTime": "4:00",
+        "checkInTime": "12:00",
+        "paymentMethods": "."
+      },
+      "description": ".",
+      "type": "Hotel",
+      "ownerId": "vHC4cNgazCbUOlQqrmzTK3s1DhI3",
+      "createdAt": "2026-06-15T07:01:40.039Z",
+      "hotelAdminId": "vHC4cNgazCbUOlQqrmzTK3s1DhI3",
+      "videoUrl": null,
+      "contact": {
+        "phoneWhatsapp": "",
+        "website": "",
+        "phoneManager": "",
+        "phoneCall": ""
+      },
+      "name": "Ambassador Hotel",
+      "location": {
+        "area": "Mohamoud Haybe",
+        "city": "Hargeisa",
+        "lngDisplay": "44.072635",
+        "coordinates": {
+          "latitude": 9.524059560885588,
+          "longitude": 44.072635285556316
+        },
+        "latDisplay": "9.524060"
+      },
+      "roomsCount": 400,
+      "slug": "ambassador-hotel",
+      "pricePerNight": 40,
+      "isPro": false,
+      "isVerified": true,
+      "agentVerified": true,
+      "planTier": "pro",
+      "planExpiryDate": "2026-09-20T00:00:00.000Z",
+      "status": "active",
+      "viewCount": 118,
+      "lastViewedAt": "2026-07-30T06:38:20.815Z",
+      "rooms": [
+        {
+          "_id": "M2GdFVuP92jKBwWaZxhu",
+          "minStay": 1,
+          "images": [
+            "https://firebasestorage.googleapis.com/v0/b/guriapp123.firebasestorage.app/o/room_images%2FEiRBZFqd5MCPSiuC7igR%2FM2GdFVuP92jKBwWaZxhu%2F1781507144648_scaled_1000514748.jpg?alt=media&token=b33f2e4e-29f4-4bb8-affd-8e2e326991f5"
+          ],
+          "roomTypeName": "single standard",
+          "discountPrice": null,
+          "policies": {
+            "cancellation": "",
+            "smoking": "Non-Smoking"
+          },
+          "description": ".",
+          "taxes": "",
+          "planTier": "free",
+          "planExpiryDate": null,
+          "features": {
+            "Free Wi-Fi": true,
+            "Balcony": true,
+            "Sea View": true
+          },
+          "createdAt": "2026-06-15T07:05:48.860Z",
+          "videoUrl": null,
+          "roomSize": ".",
+          "maxOccupancy": ".",
+          "isFeatured": false,
+          "bedType": "single",
+          "pricePerNight": 40,
+          "status": "published",
+          "updatedAt": "2026-06-15T07:05:48.860Z"
+        }
+      ]
+    },
+    {
+      "_id": "GX0Y6z4DRTfEa4x6ZUnD",
+      "images": [
+        "https://firebasestorage.googleapis.com/v0/b/guriapp123.firebasestorage.app/o/hotel_images%2FGX0Y6z4DRTfEa4x6ZUnD%2F2026-04-14T12%3A25%3A42.240458_scaled_1000449744.jpg?alt=media&token=b3ea4225-6e38-466c-94de-d49fb03086d0"
+      ],
+      "rating": 3,
+      "policies": {
+        "paymentMethodsList": [
+          "zaad"
+        ],
+        "cancellation": "e",
+        "checkOutTime": "t",
+        "checkInTime": "t",
+        "paymentMethods": "zaad"
+      },
+      "description": "",
+      "type": "Hotel",
+      "ownerId": "2wDxBHNZylTuTmzEILe6teO05ev2",
+      "createdAt": "2026-04-14T09:25:47.682Z",
+      "hotelAdminId": "2wDxBHNZylTuTmzEILe6teO05ev2",
+      "contact": {
+        "phoneWhatsapp": "",
+        "website": "",
+        "phoneManager": "",
+        "phoneCall": ""
+      },
+      "name": "Damal Hotel Hargeisa",
+      "roomsCount": 250,
+      "slug": "damal-hotel-hargeisa",
+      "pricePerNight": 30,
+      "isArchived": true,
+      "featured": true,
+      "verifiedAt": "2026-04-17T05:44:09.984Z",
+      "isFeatured": true,
+      "status": "active",
+      "videoUrl": "",
+      "location": {
+        "area": "",
+        "city": "",
+        "lngDisplay": "44.065193",
+        "coordinates": {
+          "latitude": 9.561115348250011,
+          "longitude": 44.06519316136837
+        },
+        "latDisplay": "9.561115"
+      },
+      "amenities": {
+        "Free Breakfast": true
+      },
+      "planTierAtUpload": "pro",
+      "isVerified": true,
+      "agentVerified": true,
+      "planTier": "pro",
+      "planExpiryDate": "2026-05-31T00:00:00.000Z",
+      "viewCount": 92,
+      "lastViewedAt": "2026-07-30T10:14:46.838Z",
+      "reviews": [
+        {
+          "_id": "QEzEFRPicbuNh83SEfw8",
+          "rating": 5,
+          "comment": "ok",
+          "userName": "Viralfom",
+          "userId": "KTdqE4n0kyOtLSJ5OKhalVqZX7x2",
+          "createdAt": "2026-07-09T06:37:19.860Z"
+        }
+      ],
+      "room_service_orders": [
+        {
+          "_id": "6ckwFMrccNKZqKrrQxH6",
+          "totalAmount": 3,
+          "userId": "2wDxBHNZylTuTmzEILe6teO05ev2",
+          "items": [
+            {
+              "quantity": 1,
+              "price": 3,
+              "name": "Sharaab Mushakal"
+            }
+          ],
+          "status": "pending",
+          "createdAt": "2026-04-21T14:07:40.379Z"
+        },
+        {
+          "_id": "O2VYbGBNFNxj4SGjDsXN",
+          "totalAmount": 3,
+          "userId": "2wDxBHNZylTuTmzEILe6teO05ev2",
+          "items": [
+            {
+              "quantity": 1,
+              "price": 3,
+              "name": "Sharaab Mushakal"
+            }
+          ],
+          "status": "pending",
+          "createdAt": "2026-04-20T04:31:59.825Z"
+        },
+        {
+          "_id": "hiWq60gfKqkOjhUB1959",
+          "totalAmount": 3,
+          "userId": "2wDxBHNZylTuTmzEILe6teO05ev2",
+          "items": [
+            {
+              "quantity": 1,
+              "price": 3,
+              "name": "Sharaab Mushakal"
+            }
+          ],
+          "status": "pending",
+          "createdAt": "2026-04-20T04:32:00.857Z"
+        }
+      ]
+    }
+  ],
+  "notFound": [
+    {
+      "_id": "HckkjF6ScCkH79KfZOrE",
+      "name": "H",
+      "phone": "9",
+      "description": "Bb",
+      "submittedAt": "2026-04-16T05:14:35.973Z"
+    },
+    {
+      "_id": "SgqGlS27JJYdvsaROcF3",
+      "phone": "0741165715",
+      "name": "Abdinasir ",
+      "description": "vila",
+      "submittedAt": "2026-03-14T01:29:09.653Z",
+      "userId": "evY9LIxYQRNefLr8fCrExocMkEF3"
+    },
+    {
+      "_id": "XGYftwgFufFrY2qyc8uP",
+      "phone": "6887338911",
+      "name": "yacquub",
+      "description": "34",
+      "submittedAt": "2026-06-07T21:41:21.634Z",
+      "userId": "r6WZtAKRkebXE2PfciGdF7y1wts1"
+    }
+  ],
+  "notifications": [
+    {
+      "_id": "1CIBwGuS0KwFYztFCuh8",
+      "userId": "3DU65fGVwUgIfwIU5umEU6brWYE3",
+      "title": "New Booking Request! 🛎️",
+      "body": "fff requested a room for 1 adults.",
+      "type": "bookingConfirmation",
+      "isRead": false,
+      "bookingId": "fEAcs5f80gOvjIOTCZKS",
+      "createdAt": "2026-06-13T13:08:05.244Z"
+    },
+    {
+      "_id": "2SqPYvtlpc6EcCeLC3ZT",
+      "userId": "3DU65fGVwUgIfwIU5umEU6brWYE3",
+      "title": "New Booking Request! 🛎️",
+      "body": "adan requested a room for 1 adults.",
+      "type": "bookingConfirmation",
+      "isRead": false,
+      "bookingId": "iRdsYohQB5Jan9Wae1kQ",
+      "createdAt": "2026-06-14T04:42:38.887Z"
+    },
+    {
+      "_id": "48VQZVVkjfwti51U90yE",
+      "userId": "3DU65fGVwUgIfwIU5umEU6brWYE3",
+      "title": "New Booking Request! 🛎️",
+      "body": "gg requested a room for 1 adults.",
+      "type": "bookingConfirmation",
+      "bookingId": "FidG5pL8rrlENzIhTE01",
+      "createdAt": "2026-04-21T14:08:15.866Z",
+      "isRead": true
+    }
+  ],
+  "orders": [
+    {
+      "_id": "JX1ChNCje0b6LFJnXSxA",
+      "amount": 20,
+      "businessName": "bb",
+      "planName": "Real Estate Pro",
+      "planId": "agent_premium",
+      "location": "bb",
+      "businessType": "Real Estate Agency",
+      "contactPhone": "99",
+      "userId": "OlvXJ3LTnFfgg10NWY3mLGJUOpd2",
+      "customerName": "GuriUp",
+      "status": "pending_whatsapp",
+      "createdAt": "2026-04-05T10:32:19.089Z"
+    },
+    {
+      "_id": "LaUW88Gl8CK3VhxEcZPU",
+      "amount": 25,
+      "businessName": "hibaaq siciid jaamac",
+      "planName": "Hotel Business",
+      "planId": "hotel_premium",
+      "location": "hibaaq",
+      "businessType": "Independent Agent",
+      "contactPhone": "6566756",
+      "userId": "g4P5t1NkQdZSGZbIRJpaPylktmh2",
+      "customerName": "Hibaaq Siciid",
+      "status": "pending_whatsapp",
+      "createdAt": "2026-03-09T21:46:13.439Z"
+    },
+    {
+      "_id": "kvZAoiArecDWihbzVHEj",
+      "amount": 20,
+      "businessName": "hgdc",
+      "planName": "Real Estate Pro",
+      "planId": "agent_premium",
+      "location": "Nairobi",
+      "businessType": "Real Estate Agency",
+      "contactPhone": "0112617101",
+      "userId": "evY9LIxYQRNefLr8fCrExocMkEF3",
+      "customerName": "Abdinasir Mohamed",
+      "status": "pending_whatsapp",
+      "createdAt": "2026-03-14T01:34:18.258Z"
+    }
+  ],
+  "property": [
+    {
+      "_id": "98MDe7ensYrZbNvGLsfO",
+      "title": "Dhul iib ah ",
+      "type": "Land",
+      "status": "available",
+      "isForSale": false,
+      "description": "Dhulkani waa oo ku yaalla xaafada daarusalaam waa seddex baloog oo iiba",
+      "price": 70000,
+      "agentId": "AQacLUN8D0QbhE590ZxE4dk6sZs1",
+      "agentName": "Mub",
+      "images": [
+        "https://firebasestorage.googleapis.com/v0/b/guriapp123.firebasestorage.app/o/property_images%2Fimg_1771423560980_DI-0083%201.jpg?alt=media&token=d79190b4-ace0-454d-a1c6-b74702b28210"
+      ],
+      "searchKeywords": [],
+      "isArchived": false,
+      "hasDiscount": false,
+      "discountPrice": 0,
+      "videoUrl": null,
+      "features": {
+        "size": 4320,
+        "bedrooms": 1,
+        "bathrooms": 0,
+        "floorLevel": 0,
+        "workspaceArea": 0,
+        "floorCount": 0,
+        "shopCount": 0,
+        "seatingCapacity": 0,
+        "roadAccess": "Paved",
+        "isFurnished": false,
+        "hasBalcony": false,
+        "hasGarden": false,
+        "hasPool": false,
+        "isSingleFloor": false,
+        "hasPorch": false,
+        "hasKitchenette": false,
+        "hasGate": false,
+        "waterAvailable": false,
+        "hasParking": false,
+        "kitchenIncluded": false,
+        "openPlan": false,
+        "hasLaundry": false,
+        "hasMeetingRoom": false,
+        "hasInternet": false,
+        "hasFence": false,
+        "hasShopfront": false,
+        "hasStorage": false,
+        "hasRestroom": false,
+        "hasAirConditioning": false,
+        "hasFoodCourt": false,
+        "hasSecurity": false,
+        "hasElevators": false,
+        "hasStage": false
+      },
+      "views": 0,
+      "createdAt": "2026-02-18T14:06:08.201Z",
+      "updatedAt": "2026-02-18T14:06:08.201Z",
+      "featured": true,
+      "isVerified": true,
+      "planTierAtUpload": "pro",
+      "isFeatured": true,
+      "slug": "somali",
+      "agentVerified": true,
+      "planTier": "pro",
+      "gpsCoordinates": "",
+      "location": {
+        "lng": 44.063269682228565,
+        "city": "Hargeisa",
+        "lat": 9.538368345292136,
+        "gpsCoordinates": "9.538368345292136, 44.063269682228565",
+        "area": "M/ Mooge"
+      },
+      "viewCount": 347,
+      "lastViewedAt": "2026-07-30T07:50:13.266Z"
+    },
+    {
+      "_id": "FSvWFAPYHGeFK9rM2ZRc",
+      "title": "Guri Iiba",
+      "price": 110000,
+      "images": [
+        "https://firebasestorage.googleapis.com/v0/b/guriapp123.firebasestorage.app/o/property_images%2FzjpiJMioG0UOpHtEcBaZjxHvny12_1779968643982_1000024896_BGYN72U.jpg?alt=media&token=1a126acf-c13a-429e-95ab-6cc3eb45d60b"
+      ],
+      "propertyType": "House",
+      "isForSale": false,
+      "isArchived": false,
+      "description": "Guri iiba",
+      "agentId": "zjpiJMioG0UOpHtEcBaZjxHvny12",
+      "id": "FSvWFAPYHGeFK9rM2ZRc",
+      "createdAt": "2026-05-28T11:56:21.746Z",
+      "planTierAtUpload": "pro",
+      "status": "available",
+      "area": 230,
+      "featured": false,
+      "searchKeywords": [
+        ""
+      ],
+      "hasDiscount": false,
+      "discountPrice": 0,
+      "type": "House",
+      "bathrooms": 3,
+      "bedrooms": 2,
+      "size": 230,
+      "location": {
+        "area": "Mohamoud Haybe",
+        "lng": 44.063269682228565,
+        "city": "Hargeisa",
+        "gpsCoordinates": "9.538368345292136, 44.063269682228565",
+        "lat": 9.538368345292136
+      },
+      "slug": "guri-iiba",
+      "hasVideo": false,
+      "features": {
+        "hasGate": true,
+        "isSingleFloor": false,
+        "kitchenIncluded": false,
+        "roadAccess": "Paved",
+        "hasFence": false,
+        "isFurnished": false,
+        "hasElevators": false,
+        "hasLaundry": false,
+        "hasStorage": false,
+        "hasFoodCourt": false,
+        "workspaceArea": 0,
+        "hasAirConditioning": false,
+        "hasSecurity": false,
+        "hasPool": false,
+        "hasParking": false,
+        "floorLevel": 0,
+        "hasBalcony": false,
+        "floorCount": 0,
+        "hasKitchenette": false,
+        "bathrooms": 3,
+        "hasRestroom": false,
+        "waterAvailable": true,
+        "hasGarden": false,
+        "hasInternet": false,
+        "bedrooms": 2,
+        "hasPorch": false,
+        "hasMeetingRoom": false,
+        "size": 230,
+        "shopCount": 0,
+        "hasShopfront": false,
+        "openPlan": false,
+        "seatingCapacity": 0,
+        "hasStage": false
+      },
+      "videoUrl": null,
+      "tenantName": null,
+      "tenantPhone": null,
+      "tenantId": null,
+      "planExpiryDate": "2026-05-30T00:00:00.000Z",
+      "updatedAt": "2026-07-10T12:04:21.167Z",
+      "agentVerified": true,
+      "planTier": "pro",
+      "viewCount": 425,
+      "lastViewedAt": "2026-07-30T07:49:25.072Z"
+    },
+    {
+      "_id": "Om8vUcy7gbjOWPO3FhxI",
+      "title": "GURI GOGLAN",
+      "type": "House",
+      "status": "available",
+      "isForSale": false,
+      "price": 850,
+      "agentId": "AQacLUN8D0QbhE590ZxE4dk6sZs1",
+      "agentName": "Mub",
+      "images": [
+        "https://firebasestorage.googleapis.com/v0/b/guriapp123.firebasestorage.app/o/property_images%2Fimg_1771424069696_GG-0067%201.jpg?alt=media&token=e3965fdd-84f2-40a8-a01b-b284e3ac9636"
+      ],
+      "searchKeywords": [],
+      "isArchived": false,
+      "hasDiscount": false,
+      "discountPrice": 0,
+      "videoUrl": null,
+      "location": {
+        "city": "Hargeisa",
+        "area": "masalaha galbeed",
+        "gpsCoordinates": "",
+        "lat": null,
+        "lng": null
+      },
+      "views": 0,
+      "createdAt": "2026-02-18T14:14:35.877Z",
+      "featured": true,
+      "isVerified": true,
+      "planTierAtUpload": "pro",
+      "isFeatured": true,
+      "features": {
+        "hasMeetingRoom": false,
+        "hasRestroom": false,
+        "hasShopfront": false,
+        "roadAccess": "Paved",
+        "hasStorage": false,
+        "hasElevators": false,
+        "shopCount": 0,
+        "hasParking": false,
+        "hasGarden": false,
+        "size": 200,
+        "hasKitchenette": false,
+        "hasFence": false,
+        "hasGate": false,
+        "hasPorch": false,
+        "bedrooms": 7,
+        "workspaceArea": 0,
+        "hasInternet": false,
+        "hasStage": false,
+        "waterAvailable": false,
+        "floorCount": 0,
+        "seatingCapacity": 0,
+        "hasPool": false,
+        "hasLaundry": false,
+        "kitchenIncluded": false,
+        "isSingleFloor": false,
+        "hasSecurity": false,
+        "isFurnished": false,
+        "floorLevel": 0,
+        "hasFoodCourt": false,
+        "openPlan": false,
+        "hasAirConditioning": false,
+        "bathrooms": 6,
+        "hasBalcony": false
+      },
+      "description": "N",
+      "id": "Om8vUcy7gbjOWPO3FhxI",
+      "updatedAt": "2026-02-22T10:08:59.574Z",
+      "agentVerified": true,
+      "planTier": "pro",
+      "viewCount": 349,
+      "lastViewedAt": "2026-07-30T19:38:34.888Z"
+    }
+  ],
+  "restaurant_bookings": [
+    {
+      "_id": "lzKPdy9Elw4jWbW7TKFP",
+      "customerPhone": "99",
+      "bookingTime": "2026-04-15T08:49:00.000Z",
+      "restaurantName": "g",
+      "guestCount": 2,
+      "specialRequests": "",
+      "hotelId": "GX0Y6z4DRTfEa4x6ZUnD",
+      "source": "admin_manual",
+      "restaurantId": "IG1cJYxtXgXXpeYGd9wW",
+      "customerName": "v",
+      "status": "confirmed",
+      "createdAt": "2026-04-15T08:50:04.763Z"
+    }
+  ],
+  "reviews": [
+    {
+      "_id": "70cYh22VJyhqFgWOVzvf",
+      "targetId": "AQacLUN8D0QbhE590ZxE4dk6sZs1",
+      "targetType": "agent",
+      "rating": 5,
+      "status": "pending",
+      "createdAt": "2026-02-20T06:17:56.249Z"
+    },
+    {
+      "_id": "FFnFRXLLvwH3Gzgt9XhG",
+      "targetId": "AQacLUN8D0QbhE590ZxE4dk6sZs1",
+      "targetType": "agent",
+      "rating": 5,
+      "status": "pending",
+      "createdAt": "2026-02-20T20:24:52.540Z"
+    },
+    {
+      "_id": "gKyRYmqntHAQsWnJ2vW9",
+      "targetId": "zjpiJMioG0UOpHtEcBaZjxHvny12",
+      "targetType": "agent",
+      "rating": 5,
+      "status": "pending",
+      "createdAt": "2026-05-30T12:55:47.418Z"
+    }
+  ],
+  "subscription_history": [
+    {
+      "_id": "0IrOIhGwZPlzeZIm7FbF",
+      "userId": "3DU65fGVwUgIfwIU5umEU6brWYE3",
+      "planTier": "free",
+      "status": "expired",
+      "startDate": "2026-07-24T20:10:22.261Z",
+      "expiryDate": null,
+      "amountPaid": 0,
+      "paymentMethod": "Admin Override",
+      "createdAt": "2026-07-24T20:10:22.261Z"
+    },
+    {
+      "_id": "J1XgOsRNuWO4TiUrj24O",
+      "userId": "go1WlNbGs2sl2fPJCyTo",
+      "planTier": "free",
+      "status": "expired",
+      "startDate": "2026-07-25T10:22:00.301Z",
+      "expiryDate": null,
+      "amountPaid": 0,
+      "paymentMethod": "Admin Override",
+      "createdAt": "2026-07-25T10:22:00.301Z"
+    },
+    {
+      "_id": "LHePCVXiY0NwBMrpubmA",
+      "userId": "3DU65fGVwUgIfwIU5umEU6brWYE3",
+      "planTier": "pro",
+      "status": "active",
+      "startDate": "2026-07-24T20:10:36.975Z",
+      "expiryDate": "2026-07-31T00:00:00.000Z",
+      "amountPaid": 0,
+      "paymentMethod": "Admin Override",
+      "createdAt": "2026-07-24T20:10:36.975Z"
+    }
+  ],
+  "tenants": [
+    {
+      "_id": "I2I6h3McNDkNFpq02w2i",
+      "email": "bbb",
+      "notes": "",
+      "idType": "National ID",
+      "guarantor": {
+        "idNumber": "bhbh",
+        "phone": "999",
+        "relation": "vb",
+        "name": "hb"
+      },
+      "idNumber": "bb",
+      "gender": "Male",
+      "agentId": "zjpiJMioG0UOpHtEcBaZjxHvny12",
+      "name": "bb",
+      "phone": "999",
+      "status": "active",
+      "unitNumber": "",
+      "dob": "2000-01-28T21:00:00.000Z",
+      "leaseStart": null,
+      "rentAmount": 0,
+      "leaseEnd": null,
+      "depositAmount": 0,
+      "createdAt": "2026-07-24T17:06:09.771Z"
+    },
+    {
+      "_id": "p9rFb0VKKIusjoCQqJIh",
+      "phone": "889494",
+      "leaseStart": null,
+      "leaseEnd": null,
+      "rentAmount": 0,
+      "status": "active",
+      "gender": "Male",
+      "depositAmount": 0,
+      "name": "zx",
+      "dob": null,
+      "unitNumber": "",
+      "notes": "",
+      "idNumber": "",
+      "email": "xx",
+      "agentId": "zjpiJMioG0UOpHtEcBaZjxHvny12",
+      "guarantor": {
+        "phone": "08",
+        "relation": "xdxx",
+        "name": "xx",
+        "idNumber": ""
+      },
+      "idType": "National ID",
+      "createdAt": "2026-07-24T17:08:00.987Z"
+    }
+  ],
+  "test_data": [
+    {
+      "_id": "3rWLVtPIZOEncGIxpByv",
+      "name": "mubarik",
+      "age": 20,
+      "phone": 9273
+    }
+  ],
+  "tour_requests": [
+    {
+      "_id": "1nFJEIxUUr7GqjXPLCD7",
+      "date": "2026-06-20",
+      "agentId": "zjpiJMioG0UOpHtEcBaZjxHvny12",
+      "propertyName": "iin",
+      "userPhone": "0957777756",
+      "time": "5:30 AM",
+      "userName": "abdiqadir",
+      "propertyId": "5eWPCdKYRnp22gVbMK4v",
+      "userId": "hFeqoIOHrkecl630yQ99Jx5OHx43",
+      "status": "pending",
+      "timestamp": "2026-06-20T02:30:21.292Z"
+    },
+    {
+      "_id": "5d4QoObclnH4hAv38qyY",
+      "date": "2026-03-08",
+      "agentId": "AQacLUN8D0QbhE590ZxE4dk6sZs1",
+      "propertyName": "GURI GOGLAN",
+      "userPhone": "616905952",
+      "time": "23:45",
+      "userName": "ismaciil",
+      "propertyId": "Om8vUcy7gbjOWPO3FhxI",
+      "userId": "ZPa5azWuxZV2QZtJ4TBu6CNskYA3",
+      "status": "pending",
+      "timestamp": "2026-03-08T20:45:36.579Z"
+    },
+    {
+      "_id": "787YOtzsSGbwRlRZhtw2",
+      "date": "2026-07-17",
+      "agentId": "zjpiJMioG0UOpHtEcBaZjxHvny12",
+      "propertyName": "Guri Iiba",
+      "userPhone": "672319103",
+      "time": "03:47",
+      "userName": "rashid sead hassan",
+      "propertyId": "FSvWFAPYHGeFK9rM2ZRc",
+      "userId": "niUWPFOK43Nb29yKEAJ645LjyQT2",
+      "status": "pending",
+      "timestamp": "2026-07-09T05:47:41.114Z"
+    }
+  ],
+  "transactions": [
+    {
+      "_id": "9dfe9e31-0c3f-4922-a4de-58487c70caf9",
+      "date": "2025-07-11T11:57:52.828Z",
+      "amount": 20,
+      "description": "Iib",
+      "type": "income",
+      "propertyId": "c4UUBiFnXEAreHcxRl4z",
+      "propertyTitle": "Hargeisa Jigjiga"
+    },
+    {
+      "_id": "b985f8f7-08fc-439e-ae27-149df01889f5",
+      "date": "2025-07-11T11:58:25.693Z",
+      "amount": 200,
+      "description": "20kk",
+      "type": "expense",
+      "propertyId": "CaIxTqf6byFTddcdrFVh",
+      "propertyTitle": "Gurigan I"
+    }
+  ],
+  "users": [
+    {
+      "_id": "0DInuA4pzMXzhBR9ppJMcKZ5bBu2",
+      "fcmToken": "dDn3TGQRRSWN_Cfnv8Okn-:APA91bHK7XNK-vLMPztJR8AOYKmNcviEoasen9fwKgSz-5AWlQi3-yIKvd7DN5Wz_v7zdHOxyhtxC1gezUhPItc_H6xlTU7CTCrczdv_vxbuzQT3stBxz-U",
+      "activeDays": [
+        "2026-03-23"
+      ]
+    },
+    {
+      "_id": "0EVUJulhGOQqAXreYqoY4zR5F6q1",
+      "name": "MUUSE YARE",
+      "favoriteHotels": [
+        "b7IpYUhz4R9VnBCd0L3W"
+      ],
+      "status": "valid",
+      "favoriteProperties": [
+        "pWBDcOdy9y7g3jBS1JoS"
+      ],
+      "fcmToken": "ebIJlW9fTn-HGvJvvg18sM:APA91bFDhbP8NA9gkmqMn2Amw0rLHMHAY3jqjrrSBuSLetb0gX_HuyiyM0maKqV_4Vra854hvPYkChTtMP4CfFuIzsIDRxfTV_RnjJdJ09Hu6-b1C0NixFg",
+      "activeDays": [
+        "2026-04-06"
+      ]
+    },
+    {
+      "_id": "0k8U7XoAR5fsvz0fXllvJCjpE6E3",
+      "fcmToken": "emzEcvmFRua7ZWX8VCqrfW:APA91bHcMoYgiqYevjVC4Zx0_lVcm_DK9LQ3sGdi9ENmIkqde1fnof2IKoZVuTjzp5ko-687mWgM61W1-M0d1d4vO8QJqLmSo8RY9sNBKm-AduQ8hJu0meg"
+    }
+  ],
+  "version": [
+    {
+      "_id": "7OApO7oOmX2Wt8yZFjpR",
+      "url": "",
+      "title": "",
+      "desc": "",
+      "vname": "df",
+      "min_vcode": 19,
+      "force": true,
+      "number": 23,
+      "vcode": 25
+    }
+  ],
+  "versions ": [
+    {
+      "_id": "number",
+      "update_url": "",
+      "old": "",
+      "new": ""
+    }
+  ]
+}

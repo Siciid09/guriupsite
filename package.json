@@ -2,6 +2,7 @@
   "name": "guriup-platform",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
@@ -10,13 +11,18 @@
   },
   "dependencies": {
     "@react-google-maps/api": "^2.20.8",
+    "@supabase/server": "^1.4.1",
+    "@supabase/ssr": "^0.12.4",
+    "@supabase/supabase-js": "^2.111.0",
     "date-fns": "^4.1.0",
+    "dotenv": "^17.4.2",
     "firebase": "^12.3.0",
     "firebase-admin": "^13.8.0",
     "framer-motion": "^12.34.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.545.0",
     "next": "^16.1.6",
+    "pg": "^8.22.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-leaflet": "^5.0.0",
@@ -33,5 +39,18 @@
     "eslint-config-next": "15.5.4",
     "tailwindcss": "^4",
     "typescript": "^5"
-  }
+  },
+  "description": "This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).",
+  "main": "export_db.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Siciid09/guriupsite.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Siciid09/guriupsite/issues"
+  },
+  "homepage": "https://github.com/Siciid09/guriupsite#readme"
 }
