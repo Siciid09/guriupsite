@@ -10,8 +10,63 @@ import {
   SlidersHorizontal, X, Bed, Bath, Move, Building2, 
   LandPlot, Building, Warehouse, Crown, Key, HeartHandshake, 
   Zap, Globe, ChevronLeft, ChevronRight, Search, Compass, User,
-  Heart, Share2, Camera
+  Heart, Share2, Camera, RotateCcw
 } from 'lucide-react';
+
+// --- CARD AUTO & MANUAL IMAGE SLIDESHOW COMPONENT ---
+const CardImageSlider = ({ images = [], alt = '' }: { images: string[]; alt: string }) => {
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const safeImages = images && images.length > 0 ? images : ['https://placehold.co/600x400'];
+
+  useEffect(() => {
+    if (safeImages.length <= 1) return;
+    const timer = setInterval(() => {
+      setCurrentIdx((prev) => (prev + 1) % safeImages.length);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [safeImages.length, currentIdx]);
+
+  const handlePrev = (e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    setCurrentIdx((prev) => (prev === 0 ? safeImages.length - 1 : prev - 1));
+  };
+
+  const handleNext = (e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    setCurrentIdx((prev) => (prev + 1) % safeImages.length);
+  };
+
+  return (
+    <>
+      <img
+        src={safeImages[currentIdx]}
+        alt={alt}
+        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+      />
+      {safeImages.length > 1 && (
+        <>
+          <div className="absolute inset-y-0 left-0 right-0 flex items-center justify-between px-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
+            <button
+              onClick={handlePrev}
+              className="w-6 h-6 bg-white/50 hover:bg-white rounded-full flex items-center justify-center text-slate-800 backdrop-blur-sm transition-colors shadow-sm pointer-events-auto"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <button
+              onClick={handleNext}
+              className="w-6 h-6 bg-white/50 hover:bg-white rounded-full flex items-center justify-center text-slate-800 backdrop-blur-sm transition-colors shadow-sm pointer-events-auto"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+          <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-[9px] font-black px-2 py-1 rounded-md z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center gap-1.5 pointer-events-none">
+            <Camera size={10} /> {currentIdx + 1} / {safeImages.length}
+          </div>
+        </>
+      )}
+    </>
+  );
+};
 
 // =======================================================================
 //  TYPES
@@ -108,6 +163,19 @@ export default function PropertiesUI({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setPriceRange([0, 1000000]);
+    setSelectedCategory('All');
+    setSelectedAmenities([]);
+    setBeds(0);
+    setBaths(0);
+    setMinArea('');
+    setMaxArea('');
+    setSelectedLocation(null);
+    setFilterTab('all');
+  };
 
   // --- REUSABLE SUPER FILTER FUNCTION ---
   const applyFilters = (properties: Property[]) => {
@@ -262,7 +330,7 @@ export default function PropertiesUI({
             </div>
 
             <div className="p-6 border-t border-slate-100 flex gap-3 bg-white">
-               <button onClick={() => { setPriceRange([0, 1000000]); setSelectedAmenities([]); setSelectedLocation(null); setSearchQuery(''); setBeds(0); setBaths(0); setMinArea(''); setMaxArea(''); }} className="flex-1 py-4 font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-2xl transition-colors">Reset All</button>
+               <button onClick={handleResetFilters} className="flex-1 py-4 font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-2xl transition-colors">Reset All</button>
                <button onClick={() => setIsFilterOpen(false)} className="flex-[2] py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black shadow-lg transition-colors flex items-center justify-center gap-2">Show {filteredLatest.length} Results</button>
             </div>
           </div>
@@ -299,7 +367,7 @@ export default function PropertiesUI({
               </h1>
               
               {/* ================= MODERN UNIFIED SEARCH PILL ================= */}
-              <div className="w-full max-w-5xl relative z-[50]">
+              <div className="w-full max-w-5xl relative z-[9999]">
                 
                 {/* MODE TABS & VIEW MAP TOGGLE */}
                 <div className="flex justify-between items-end mb-4 md:mb-5">
@@ -315,13 +383,17 @@ export default function PropertiesUI({
                     ))}
                   </div>
 
-                  {/* VIEW MAP TOGGLE - FIXED IN HEADER */}
-                  <button 
-                    onClick={() => setViewMode('map')}
-                    className="bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white px-5 py-2.5 rounded-full font-black text-[11px] uppercase tracking-widest transition-all flex items-center gap-2 border border-blue-500/30 backdrop-blur-md"
-                  >
-                    <Compass size={14} /> <span className="hidden sm:inline">View Map</span>
-                  </button>
+                  <div className="flex items-center gap-4">
+                    <button onClick={handleResetFilters} className="text-[11px] font-bold text-white/70 hover:text-white transition-colors items-center gap-1 hidden md:flex">
+                      <RotateCcw size={12} /> Reset Filters
+                    </button>
+                    <button 
+                      onClick={() => setViewMode('map')}
+                      className="bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white px-5 py-2.5 rounded-full font-black text-[11px] uppercase tracking-widest transition-all flex items-center gap-2 border border-blue-500/30 backdrop-blur-md"
+                    >
+                      <Compass size={14} /> <span className="hidden sm:inline">View Map</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* THE UNIFIED SEARCH BAR */}
@@ -392,7 +464,7 @@ export default function PropertiesUI({
                       <ChevronDown size={14} className="text-slate-400 group-hover:text-slate-600" />
                     </button>
                     {isCatDropdownOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-4 bg-white rounded-[1.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] p-2 z-[999] border border-slate-100 max-h-80 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-200">
+                      <div className="absolute top-full left-0 right-0 mt-4 bg-white rounded-[1.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] p-2 z-[9999] border border-slate-100 max-h-80 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-200">
                         <button onClick={() => { setSelectedCategory('All'); setIsCatDropdownOpen(false); }} className="w-full text-left p-3 font-bold text-sm hover:bg-blue-50 rounded-xl transition-colors">All Properties</button>
                         {PROPERTY_CATEGORIES.map(cat => (
                           <button key={cat.name} onClick={() => { setSelectedCategory(cat.name); setIsCatDropdownOpen(false); }} className="w-full flex items-center gap-3 p-3 hover:bg-blue-50 rounded-xl transition-colors"><span className="font-bold text-sm text-slate-700">{cat.label}</span></button>
@@ -488,7 +560,7 @@ export default function PropertiesUI({
                   <div className="text-center py-20 text-slate-500 font-bold bg-slate-50 rounded-[2.5rem] border border-dashed border-slate-200 flex flex-col items-center justify-center">
                     <Search size={40} className="text-slate-300 mb-4" />
                     <p className="text-base">No properties match your active search or filter criteria.</p>
-                    <button onClick={() => { setSearchQuery(''); setPriceRange([0, 1000000]); setSelectedCategory('All'); setSelectedAmenities([]); setBeds(0); setBaths(0); setMinArea(''); setMaxArea(''); setSelectedLocation(null); setFilterTab('all'); }} className="mt-5 px-5 py-2.5 bg-white border border-slate-200 text-blue-600 font-bold rounded-xl hover:bg-blue-50 transition-colors shadow-sm text-sm">Clear All Filters</button>
+                    <button onClick={handleResetFilters} className="mt-5 px-5 py-2.5 bg-white border border-slate-200 text-blue-600 font-bold rounded-xl hover:bg-blue-50 transition-colors shadow-sm text-sm">Clear All Filters</button>
                   </div>
                 )}
              </div>
@@ -519,41 +591,6 @@ export default function PropertiesUI({
 //  COMPACT, MODERN GLASSMORPHISM CARD COMPONENT WITH CAROUSEL
 // -------------------------------------------------------------
 function PropertyCard({ property, isFeatured = false, compact = false }: { property: Property, isFeatured?: boolean, compact?: boolean }) {
-  const images = property.images?.length ? property.images : ['https://placehold.co/600x400'];
-  const [imgIdx, setImgIdx] = useState(0);
-  const [showCounter, setShowCounter] = useState(false);
-
-  const nextImg = (e: React.MouseEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    setImgIdx((prev) => (prev + 1) % images.length);
-    setShowCounter(true);
-  };
-
-  const prevImg = (e: React.MouseEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    setImgIdx((prev) => (prev === 0 ? images.length - 1 : prev - 1));
-    setShowCounter(true);
-  };
-
-  useEffect(() => {
-    if (showCounter) {
-      const timer = setTimeout(() => setShowCounter(false), 2500);
-      return () => clearTimeout(timer);
-    }
-  }, [showCounter]);
-
-  // AUTO-SLIDER LOGIC
-  useEffect(() => {
-    if (images.length > 1) {
-      // Add a slight random offset so the cards don't all flip at the exact same millisecond
-      const randomOffset = Math.floor(Math.random() * 2000);
-      const timer = setInterval(() => {
-        setImgIdx((prev) => (prev + 1) % images.length);
-      }, 4000 + randomOffset);
-      return () => clearInterval(timer);
-    }
-  }, [images.length]);
-
   const formatPrice = (price: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(price);
   const isVerified = property.agentVerified || property.agentPlanTier === 'pro' || property.agentPlanTier === 'premium';
   const displayPrice = (property.hasDiscount && (property.discountPrice || 0) > 0) ? property.discountPrice : property.price;
@@ -564,8 +601,8 @@ function PropertyCard({ property, isFeatured = false, compact = false }: { prope
         
         {/* IMAGE CAROUSEL SECTION */}
         <div className={`relative ${compact ? 'h-40' : 'h-48 md:h-[210px]'} bg-slate-200 overflow-hidden`}>
-          <Image src={images[imgIdx]} alt={property.title} fill className="object-cover transition-transform duration-700 group-hover:scale-105" loading="lazy" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-90" />
+          <CardImageSlider images={property.images} alt={property.title} />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-90 pointer-events-none" />
           
           {/* BADGES: Top Left */}
           <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-20">
@@ -584,33 +621,14 @@ function PropertyCard({ property, isFeatured = false, compact = false }: { prope
                <Share2 size={13}/>
              </button>
           </div>
-
-          {/* CAROUSEL ARROWS */}
-          {images.length > 1 && (
-            <div className="absolute inset-y-0 left-0 right-0 flex items-center justify-between px-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-               <button onClick={prevImg} className="w-6 h-6 bg-white/50 hover:bg-white rounded-full flex items-center justify-center text-slate-800 backdrop-blur-sm transition-colors shadow-sm">
-                 <ChevronLeft size={14}/>
-               </button>
-               <button onClick={nextImg} className="w-6 h-6 bg-white/50 hover:bg-white rounded-full flex items-center justify-center text-slate-800 backdrop-blur-sm transition-colors shadow-sm">
-                 <ChevronRight size={14}/>
-               </button>
-            </div>
-          )}
           
           {/* PRICE */}
-          <div className="absolute bottom-3 left-4 text-white z-10">
+          <div className="absolute bottom-3 left-4 text-white z-10 pointer-events-none">
              <div className="text-xl font-black drop-shadow-md flex items-end gap-1">
                {formatPrice(displayPrice || 0)} 
                {!property.isForSale && <span className="text-[10px] font-bold text-white/80 mb-0.5">/mo</span>}
              </div>
           </div>
-
-          {/* IMAGE COUNTER */}
-          {images.length > 1 && (
-            <div className={`absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-[9px] font-black px-2 py-1 rounded-md z-10 transition-opacity duration-300 flex items-center gap-1.5 ${showCounter ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-               <Camera size={10} /> {imgIdx + 1} / {images.length}
-            </div>
-          )}
         </div>
 
         {/* INFO SECTION */}

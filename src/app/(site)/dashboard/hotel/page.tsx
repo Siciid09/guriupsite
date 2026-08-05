@@ -15,13 +15,14 @@ import {
   LayoutDashboard, Calendar as CalendarIcon, CalendarDays, MessageSquare, BedDouble, 
   Settings, Users, TrendingUp, DollarSign, CheckCircle, XCircle, 
   Plus, Edit3, Lock, MapPin, Building2, Phone, Globe, Wifi, Shield,
-  FileText, UserPlus, BellRing, LogOut, ArrowRightCircle, ArrowLeftCircle, AlertCircle, Loader2
+  FileText, UserPlus, BellRing, LogOut, ArrowRightCircle, ArrowLeftCircle, AlertCircle, Loader2, Utensils
 } from 'lucide-react';
 
 // --- IMPORT YOUR COMPLETED FORMS ---
 import HotelForm from '../../../../components/hotelform'; 
-import AddEditRoom from '../../../../components/room'; // Your AddEditRoom component
+import AddEditRoom from '../../../../components/room'; 
 import HotelAnalytics from '@/components/hotelstats';
+import RestaurantManagement from '../../../../components/RestaurantManagement'; // Adjust path as needed
 
 // ============================================================================
 // STRICT TYPES
@@ -78,7 +79,7 @@ interface Chat {
 }
 
 // Expanded TabTypes to include inner navigation for forms
-type TabType = 'overview' | 'reservations' | 'calendar' | 'rooms' | 'messages' | 'analytics' | 'reports' | 'guests' | 'staff' | 'settings' | 'edit-hotel' | 'add-room' | 'edit-room' | 'setup-hotel' | 'setup-agent';
+type TabType = 'overview' | 'reservations' | 'calendar' | 'rooms' | 'restaurants' | 'messages' | 'analytics' | 'reports' | 'guests' | 'staff' | 'settings' | 'edit-hotel' | 'add-room' | 'edit-room' | 'setup-hotel' | 'setup-agent';
 
 // ============================================================================
 // MAIN COMPONENT WRAPPER
@@ -249,6 +250,7 @@ function DashboardContent() {
           <SidebarItem icon={CalendarIcon} label="Reservations" active={activeTab === 'reservations'} onClick={() => updateTab('reservations')} count={bookings.filter(b=>b.status==='pending').length} />
           <SidebarItem icon={CalendarDays} label="Calendar" active={activeTab === 'calendar'} onClick={() => updateTab('calendar')} />
           <SidebarItem icon={BedDouble} label="Rooms" active={['rooms', 'add-room', 'edit-room'].includes(activeTab)} onClick={() => updateTab('rooms')} />
+          <SidebarItem icon={Utensils} label="Dining & KDS" active={activeTab === 'restaurants'} onClick={() => updateTab('restaurants')} />
           <SidebarItem icon={MessageSquare} label="Messages" active={activeTab === 'messages'} onClick={() => updateTab('messages')} count={chats.filter(c => c.unreadCount > 0).length} />
           
           <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 mt-6">Pro Features</p>
@@ -475,6 +477,13 @@ function DashboardContent() {
              </motion.div>
           )}
 
+          {/* --- TAB: RESTAURANTS (DINING & KDS) --- */}
+          {activeTab === 'restaurants' && hotel && !needsSetup && (
+             <motion.div key="restaurants" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+                <RestaurantManagement hotelId={hotel.id || hotel._id || ''} />
+             </motion.div>
+          )}
+
           {/* --- TAB: ADD ROOM --- */}
           {activeTab === 'add-room' && hotel && (
              <motion.div key="add-room" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
@@ -609,7 +618,7 @@ function DashboardContent() {
          <BottomNavItem icon={CalendarIcon} label="Bookings" active={activeTab === 'reservations'} onClick={() => updateTab('reservations')} badge={bookings.filter(b=>b.status==='pending').length} />
          <BottomNavItem icon={BedDouble} label="Rooms" active={['rooms', 'add-room', 'edit-room'].includes(activeTab)} onClick={() => updateTab('rooms')} />
          <BottomNavItem icon={MessageSquare} label="Inbox" active={activeTab === 'messages'} onClick={() => updateTab('messages')} badge={chats.filter(c => c.unreadCount > 0).length} />
-         <BottomNavItem icon={Settings} label="Menu" active={['settings', 'edit-hotel', 'analytics', 'reports', 'guests', 'staff'].includes(activeTab)} onClick={() => updateTab('settings')} />
+         <BottomNavItem icon={Settings} label="Menu" active={['settings', 'edit-hotel', 'analytics', 'reports', 'guests', 'staff', 'restaurants'].includes(activeTab)} onClick={() => updateTab('settings')} />
       </nav>
 
     </div>

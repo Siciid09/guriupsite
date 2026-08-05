@@ -12,9 +12,64 @@ import {
   Heart, Briefcase, AlertCircle, Tv, Waves, Shield, 
   Bed, PhoneCall, Zap, Clock, BatteryCharging, Compass, ExternalLink,
   ChevronLeft, ChevronRight,
-  Camera
+  Camera, RotateCcw
 } from 'lucide-react';
 import MapUI from './mapui';
+
+// --- CARD AUTO & MANUAL IMAGE SLIDESHOW COMPONENT ---
+const CardImageSlider = ({ images = [], alt = '' }: { images: string[]; alt: string }) => {
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const safeImages = images && images.length > 0 ? images : ['https://placehold.co/600x400'];
+
+  useEffect(() => {
+    if (safeImages.length <= 1) return;
+    const timer = setInterval(() => {
+      setCurrentIdx((prev) => (prev + 1) % safeImages.length);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [safeImages.length, currentIdx]);
+
+  const handlePrev = (e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    setCurrentIdx((prev) => (prev === 0 ? safeImages.length - 1 : prev - 1));
+  };
+
+  const handleNext = (e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    setCurrentIdx((prev) => (prev + 1) % safeImages.length);
+  };
+
+  return (
+    <>
+      <img
+        src={safeImages[currentIdx]}
+        alt={alt}
+        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+      />
+      {safeImages.length > 1 && (
+        <>
+          <div className="absolute inset-y-0 left-0 right-0 flex items-center justify-between px-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
+            <button
+              onClick={handlePrev}
+              className="w-6 h-6 bg-white/50 hover:bg-white rounded-full flex items-center justify-center text-slate-800 backdrop-blur-sm transition-colors shadow-sm pointer-events-auto"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <button
+              onClick={handleNext}
+              className="w-6 h-6 bg-white/50 hover:bg-white rounded-full flex items-center justify-center text-slate-800 backdrop-blur-sm transition-colors shadow-sm pointer-events-auto"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+          <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-[9px] font-black px-2 py-1 rounded-md z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center gap-1.5 pointer-events-none">
+            <Camera size={10} /> {currentIdx + 1} / {safeImages.length}
+          </div>
+        </>
+      )}
+    </>
+  );
+};
 
 // =======================================================================
 //  TYPES & CONSTANTS
@@ -117,6 +172,15 @@ export default function HotelsUI({ featuredHotels = [], allHotels = [] }: Hotels
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setSearchType('');
+    setSelectedLocation(null);
+    setPriceRange([0, 2000]);
+    setSelectedAmenities([]);
+    setMinRating(0);
+  };
 
   const applyFilters = (hotels: Hotel[]) => {
     return hotels.filter(h => {
@@ -323,7 +387,7 @@ export default function HotelsUI({ featuredHotels = [], allHotels = [] }: Hotels
             </div>
 
             <div className="p-6 border-t border-slate-100 flex gap-3 bg-white">
-               <button onClick={() => { setPriceRange([0, 2000]); setSelectedAmenities([]); setMinRating(0); setSelectedLocation(null); setSearchType(''); setSearchQuery(''); }} className="flex-1 py-4 font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-2xl transition-colors">Reset All</button>
+               <button onClick={handleResetFilters} className="flex-1 py-4 font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 rounded-2xl transition-colors">Reset All</button>
                <button onClick={() => setIsFilterOpen(false)} className="flex-[2] py-4 bg-[#0065eb] hover:bg-[#0052c1] text-white rounded-2xl font-black shadow-lg transition-colors flex items-center justify-center gap-2">Show {filteredAllHotels.length} Results</button>
             </div>
           </div>
@@ -348,8 +412,15 @@ export default function HotelsUI({ featuredHotels = [], allHotels = [] }: Hotels
               <h1 className="text-white text-5xl md:text-7xl lg:text-8xl font-black mb-4 tracking-tight leading-[1.0]">Find Your <br /><span className="text-[#0065eb]">Perfect Stay</span></h1>
               <p className="text-gray-300 text-xs md:text-sm font-bold uppercase tracking-widest mb-12 max-w-[900px]">Luxury hotels, resorts & suites across the Horn of Africa.</p>
 
+              {/* Reset Filters Quick Action */}
+              <div className="w-full max-w-5xl mx-auto flex justify-end mb-2 relative z-[9999]">
+                <button onClick={handleResetFilters} className="text-[11px] font-bold text-white/70 hover:text-white transition-colors flex items-center gap-1">
+                  <RotateCcw size={12} /> Reset Filters
+                </button>
+              </div>
+
               {/* === MODERN UNIFIED SEARCH PILL === */}
-              <div className="bg-white p-2.5 rounded-[2rem] md:rounded-full shadow-[0_30px_60px_rgba(0,0,0,0.4)] flex flex-col md:flex-row items-center w-full max-w-5xl mx-auto relative z-[50]">
+              <div className="bg-white p-2.5 rounded-[2rem] md:rounded-full shadow-[0_30px_60px_rgba(0,0,0,0.4)] flex flex-col md:flex-row items-center w-full max-w-5xl mx-auto relative z-[9999]">
                 
                 {/* 1. Keyword Search */}
                 <div className="flex-[1.2] w-full flex items-center px-4 md:px-6 h-16 md:h-14 hover:bg-slate-50 rounded-full transition-colors relative group">
@@ -449,7 +520,6 @@ export default function HotelsUI({ featuredHotels = [], allHotels = [] }: Hotels
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {currentFeatured.map((h, i) => (
-                      // Apply guaranteed unique Key
                       <HotelCard key={h.id || h._id || `feat-${i}`} hotel={h} onShare={handleShare} isFavorite={favorites.includes(h.id || '')} onToggleFavorite={toggleFavorite} />
                     ))}
                   </div>
@@ -501,7 +571,7 @@ export default function HotelsUI({ featuredHotels = [], allHotels = [] }: Hotels
                 <div className="text-center py-20 bg-slate-50 rounded-[3rem] border border-dashed border-slate-200">
                   <h3 className="text-xl font-bold text-slate-900">No hotels found</h3>
                   <p className="text-slate-500 text-sm mt-1">Try adjusting your filters or keyword query.</p>
-                  <button onClick={() => { setSelectedLocation(null); setSearchType(''); setPriceRange([0, 2000]); setSelectedAmenities([]); setMinRating(0); setSearchQuery(''); }} className="mt-4 px-6 py-3 bg-white border border-slate-200 text-[#0065eb] font-bold rounded-xl hover:bg-blue-50 transition-colors shadow-sm">Clear all filters</button>
+                  <button onClick={handleResetFilters} className="mt-4 px-6 py-3 bg-white border border-slate-200 text-[#0065eb] font-bold rounded-xl hover:bg-blue-50 transition-colors shadow-sm">Clear all filters</button>
                 </div>
               )}
             </div>
@@ -524,40 +594,6 @@ const HotelCard = ({ hotel, onShare, isFavorite, onToggleFavorite }: any) => {
   const reviewCount = hotel.reviewCount || Math.floor(Math.random() * 80) + 12;
   const price = hotel.pricePerNight || hotel.price || hotel.displayPrice || 0;
 
-  // CAROUSEL STATE
-  const images = hotel.images?.length ? hotel.images : ['https://placehold.co/600x400'];
-  const [imgIdx, setImgIdx] = useState(0);
-  const [showCounter, setShowCounter] = useState(false);
-
-  const nextImg = (e: React.MouseEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    setImgIdx((prev) => (prev + 1) % images.length);
-    setShowCounter(true);
-  };
-
-  const prevImg = (e: React.MouseEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    setImgIdx((prev) => (prev === 0 ? images.length - 1 : prev - 1));
-    setShowCounter(true);
-  };
-
-  useEffect(() => {
-    if (showCounter) {
-      const timer = setTimeout(() => setShowCounter(false), 2500);
-      return () => clearTimeout(timer);
-    }
-  }, [showCounter]);
-
-  useEffect(() => {
-    if (images.length > 1) {
-      const randomOffset = Math.floor(Math.random() * 2000);
-      const timer = setInterval(() => {
-        setImgIdx((prev) => (prev + 1) % images.length);
-      }, 4000 + randomOffset);
-      return () => clearInterval(timer);
-    }
-  }, [images.length]);
-
   return (
     <div className="group relative bg-white/90 backdrop-blur-md rounded-[2rem] overflow-hidden border border-blue-500/20 shadow-[0_8px_30px_rgba(0,0,0,0.04)] hover:shadow-[0_20px_40px_rgba(0,101,235,0.12)] hover:-translate-y-1.5 transition-all duration-500 flex flex-col h-full">
        
@@ -569,28 +605,9 @@ const HotelCard = ({ hotel, onShare, isFavorite, onToggleFavorite }: any) => {
       <Link href={`/hotels/${hotel.slug || hotel.id || hotel._id}`} className="block flex-1 flex flex-col">
         {/* REDUCED HEIGHT: h-48 md:h-52 instead of h-72 */}
         <div className="h-48 md:h-52 overflow-hidden relative bg-slate-200 m-2 rounded-[1.5rem]">
-          <Image src={images[imgIdx]} alt={hotel.name || hotel.title} fill className="object-cover transition-transform duration-700 group-hover:scale-105" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-90 z-0" />
+          <CardImageSlider images={hotel.images} alt={hotel.name || hotel.title} />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-90 z-0 pointer-events-none" />
           {isPro && <div className="absolute bottom-3 left-3 bg-blue-600/90 backdrop-blur-md text-white px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-lg flex items-center gap-1.5 z-20"><ShieldCheck size={12} /> Verified</div>}
-          
-          {/* CAROUSEL ARROWS */}
-          {images.length > 1 && (
-            <div className="absolute inset-y-0 left-0 right-0 flex items-center justify-between px-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-               <button onClick={prevImg} className="w-6 h-6 bg-white/50 hover:bg-white rounded-full flex items-center justify-center text-slate-800 backdrop-blur-sm transition-colors shadow-sm">
-                 <ChevronLeft size={14}/>
-               </button>
-               <button onClick={nextImg} className="w-6 h-6 bg-white/50 hover:bg-white rounded-full flex items-center justify-center text-slate-800 backdrop-blur-sm transition-colors shadow-sm">
-                 <ChevronRight size={14}/>
-               </button>
-            </div>
-          )}
-
-          {/* IMAGE COUNTER */}
-          {images.length > 1 && (
-            <div className={`absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-[9px] font-black px-2 py-1 rounded-md z-10 transition-opacity duration-300 flex items-center gap-1.5 ${showCounter ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-               <Camera size={10} /> {imgIdx + 1} / {images.length}
-            </div>
-          )}
         </div>
         
         {/* COMPACT PADDING: p-5 instead of p-7 */}
@@ -649,69 +666,16 @@ const HotelListCard = ({ hotel, onShare, isFavorite, onToggleFavorite }: any) =>
   const reviewCount = hotel.reviewCount || Math.floor(Math.random() * 50) + 8;
   const price = hotel.pricePerNight || hotel.price || hotel.displayPrice || 0;
 
-  // CAROUSEL STATE
-  const images = hotel.images?.length ? hotel.images : ['https://placehold.co/600x400'];
-  const [imgIdx, setImgIdx] = useState(0);
-  const [showCounter, setShowCounter] = useState(false);
-
-  const nextImg = (e: React.MouseEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    setImgIdx((prev) => (prev + 1) % images.length);
-    setShowCounter(true);
-  };
-
-  const prevImg = (e: React.MouseEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    setImgIdx((prev) => (prev === 0 ? images.length - 1 : prev - 1));
-    setShowCounter(true);
-  };
-
-  useEffect(() => {
-    if (showCounter) {
-      const timer = setTimeout(() => setShowCounter(false), 2500);
-      return () => clearTimeout(timer);
-    }
-  }, [showCounter]);
-
-  useEffect(() => {
-    if (images.length > 1) {
-      const randomOffset = Math.floor(Math.random() * 2000);
-      const timer = setInterval(() => {
-        setImgIdx((prev) => (prev + 1) % images.length);
-      }, 4000 + randomOffset);
-      return () => clearInterval(timer);
-    }
-  }, [images.length]);
-
   return (
     <div className="group relative bg-white rounded-[2rem] border border-slate-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 p-3.5 flex flex-col justify-between">
       <Link href={`/hotels/${hotel.slug || hotel.id || hotel._id}`} className="block flex-1 flex flex-col">
         <div className="h-52 rounded-[1.5rem] overflow-hidden relative mb-4 bg-slate-200">
-          <Image src={images[imgIdx]} alt={hotel.name || hotel.title} fill className="object-cover transition-transform duration-500 group-hover:scale-105" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-90 z-0" />
+          <CardImageSlider images={hotel.images} alt={hotel.name || hotel.title} />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-90 z-0 pointer-events-none" />
           <div className="absolute top-3 right-3 flex gap-2 z-20">
                <button onClick={(e) => onToggleFavorite(e, hotel.id || hotel._id)} className={`p-2 rounded-full backdrop-blur-md shadow-md ${isFavorite ? 'bg-red-500 text-white' : 'bg-white/80 text-slate-700 hover:bg-white hover:text-red-500'}`}><Heart size={14} className={isFavorite ? 'fill-white' : ''}/></button>
                <button onClick={(e) => { e.preventDefault(); onShare(e, hotel.slug || hotel.id || hotel._id); }} className="bg-white/80 hover:bg-white text-slate-700 hover:text-slate-900 p-2 rounded-full backdrop-blur-md shadow-md"><Share2 size={14} /></button>
           </div>
-          
-          {/* CAROUSEL ARROWS */}
-          {images.length > 1 && (
-            <div className="absolute inset-y-0 left-0 right-0 flex items-center justify-between px-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-               <button onClick={prevImg} className="w-6 h-6 bg-white/50 hover:bg-white rounded-full flex items-center justify-center text-slate-800 backdrop-blur-sm transition-colors shadow-sm">
-                 <ChevronLeft size={14}/>
-               </button>
-               <button onClick={nextImg} className="w-6 h-6 bg-white/50 hover:bg-white rounded-full flex items-center justify-center text-slate-800 backdrop-blur-sm transition-colors shadow-sm">
-                 <ChevronRight size={14}/>
-               </button>
-            </div>
-          )}
-
-          {/* IMAGE COUNTER */}
-          {images.length > 1 && (
-            <div className={`absolute bottom-3 left-3 bg-black/60 backdrop-blur-md text-white text-[9px] font-black px-2 py-1 rounded-md z-10 transition-opacity duration-300 flex items-center gap-1.5 ${showCounter ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-               <Camera size={10} /> {imgIdx + 1} / {images.length}
-            </div>
-          )}
         </div>
         <div className="px-2 flex-1 flex flex-col justify-between">
           <div>
