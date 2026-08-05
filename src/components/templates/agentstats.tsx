@@ -212,10 +212,10 @@ export default function AgentAnalytics({ initialAgentId }: { initialAgentId?: st
 
       {/* KPI GRID */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Portfolio Views" value={getScaledValue(data.totalViews).toLocaleString()} icon={Eye} color="blue" trend={timeframe === 'daily' ? "+1.5%" : "+12.5%"} />
-        <StatCard title="Active Leads" value={getScaledValue(data.totalLeads).toLocaleString()} icon={Users} color="emerald" trend={timeframe === 'daily' ? "+0.8%" : "+4.2%"} />
-        <StatCard title="Tour Bookings" value={getScaledValue(data.tourRequests).toLocaleString()} icon={Calendar} color="amber" trend={timeframe === 'daily' ? "+2.1%" : "+8.1%"} />
-        <StatCard title="Pipeline Value" value={`$${getScaledValue(data.pipelineValue).toLocaleString()}`} icon={DollarSign} color="purple" trend={timeframe === 'daily' ? "+3.0%" : "+15.0%"} />
+        <StatCard title="Portfolio Views" value={getScaledValue(data.totalViews).toLocaleString()} icon={Eye} color="blue" trend={null} />
+        <StatCard title="Active Leads" value={getScaledValue(data.totalLeads).toLocaleString()} icon={Users} color="emerald" trend={null} />
+        <StatCard title="Tour Bookings" value={getScaledValue(data.tourRequests).toLocaleString()} icon={Calendar} color="amber" trend={null} />
+        <StatCard title="Pipeline Value" value={`$${getScaledValue(data.pipelineValue).toLocaleString()}`} icon={DollarSign} color="purple" trend={null} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -389,9 +389,11 @@ function StatCard({ title, value, icon: Icon, color, trend }: any) {
         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">{title}</h4>
         <div className="flex items-end justify-between">
           <span className="text-3xl font-black text-slate-900 tracking-tight">{value}</span>
-          <div className={`flex items-center gap-0.5 text-xs font-black px-2 py-1 rounded-lg ${trend.startsWith('+') ? 'bg-emerald-50 text-emerald-500' : 'bg-rose-50 text-rose-500'}`}>
-            {trend.startsWith('+') ? <ArrowUpRight size={14}/> : <ArrowDownRight size={14}/>} {trend}
-          </div>
+          {trend && trend !== '0%' && (
+             <div className={`flex items-center gap-0.5 text-xs font-black px-2 py-1 rounded-lg ${trend.startsWith('+') ? 'bg-emerald-50 text-emerald-500' : 'bg-rose-50 text-rose-500'}`}>
+               {trend.startsWith('+') ? <ArrowUpRight size={14}/> : <ArrowDownRight size={14}/>} {trend}
+             </div>
+          )}
         </div>
       </div>
     </div>

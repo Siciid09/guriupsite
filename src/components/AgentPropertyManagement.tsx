@@ -20,6 +20,7 @@ const defaultCenter = { lat: 9.560, lng: 44.068 };
 // --- TYPES ---
 interface Property {
   id?: string;
+  slug?: string;
   title: string;
   price: number;
   views?: number;           
@@ -132,31 +133,21 @@ export default function CompletePropertyManagement({
   }, [currentUserUid]);
 
   // --- ACTIONS VIA API ---
-  const toggleStatus = async (prop: Property) => {
-    const isAvailable = prop.status.toLowerCase() === 'available' || prop.status.toLowerCase() === 'active';
-    const newStatus = isAvailable ? 'sold' : 'available';
-    
-    if (!window.confirm(`Are you sure you want to mark this property as ${newStatus.toUpperCase()}?`)) return;
-    
+  const updatePropertyStatus = async (prop: Property, newStatus: string) => {
+    if (!window.confirm(`Are you sure you want to mark this listing as ${newStatus.toUpperCase()}?`)) return;
     try {
       const currentUser = auth.currentUser;
       const idToken = currentUser ? await currentUser.getIdToken() : '';
-
       const res = await fetch(`/api/properties`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
         body: JSON.stringify({ id: prop.id, status: newStatus, isArchived: false })
       });
-
       if (!res.ok) throw new Error("Failed to update status");
-
       setProperties(prev => prev.map(p => p.id === prop.id ? { ...p, status: newStatus, isArchived: false } : p));
     } catch (error) { 
       console.error(error); 
-      alert("Error updating status.");
+      alert("Error updating status."); 
     }
   };
 
@@ -251,8 +242,9 @@ export default function CompletePropertyManagement({
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const filesArray = Array.from(e.target.files);
-      if (!isPro && filesArray.length + existingImages.length > 1) {
-        alert("Free plan is limited to 1 image. Upgrade for unlimited.");
+      const currentTotal = formImages.length + existingImages.length;
+      if (!isPro && currentTotal + filesArray.length > 1) {
+        alert("Free plan is limited to 1 image. Please upgrade for unlimited uploads.");
         return;
       }
       setFormImages(prev => [...prev, ...filesArray]);
@@ -475,9 +467,20 @@ export default function CompletePropertyManagement({
                     <button onClick={() => isPro ? setStatsProp(prop) : onUpgrade()} className="flex-1 min-w-[80px] flex justify-center items-center gap-1.5 p-2 bg-purple-50/50 text-purple-600 rounded-xl hover:bg-purple-50 active:scale-95 transition-all">
                       {isPro ? <BarChart2 size={14}/> : <Lock size={12}/>} <span className="text-xs font-bold">Stats</span>
                     </button>
-                    <button onClick={() => toggleStatus(prop)} className={`flex-1 min-w-[80px] flex justify-center items-center gap-1.5 p-2 rounded-xl transition-colors ${isSold ? 'bg-emerald-50/50 text-emerald-600 hover:bg-emerald-50' : 'bg-orange-50/50 text-orange-600 hover:bg-orange-50'}`}>
-                      {isSold ? <ArrowUpRight size={14}/> : <CheckCircle size={14}/>} <span className="text-xs font-bold">{isSold ? 'Relist' : 'Sold'}</span>
-                    </button>
+                    {prop.status === 'sold' || prop.status === 'rented_out' ? (
+                      <button onClick={() => updatePropertyStatus(prop, 'available')} className="flex-1 min-w-[80px] flex justify-center items-center gap-1.5 p-2 bg-emerald-50/50 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors">
+                        <ArrowUpRight size={14}/> <span className="text-xs font-bold">Relist</span>
+                      </button>
+                    ) : (
+                      <>
+                        <button onClick={() => updatePropertyStatus(prop, 'sold')} className="flex-1 min-w-[80px] flex justify-center items-center gap-1.5 p-2 bg-rose-50/50 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors">
+                          <CheckCircle size={14}/> <span className="text-xs font-bold">Sold</span>
+                        </button>
+                        <button onClick={() => updatePropertyStatus(prop, 'rented_out')} className="flex-1 min-w-[80px] flex justify-center items-center gap-1.5 p-2 bg-orange-50/50 text-orange-600 hover:bg-orange-50 rounded-xl transition-colors">
+                          <CheckCircle size={14}/> <span className="text-xs font-bold">Rented</span>
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -570,9 +573,13 @@ export default function CompletePropertyManagement({
           <div className="space-y-4">
             <h3 className="font-bold text-slate-900 flex items-center gap-2"><Building size={18} className="text-blue-500"/> Basic Details</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Title</label>
-                <input required type="text" value={editingProp.title} onChange={e => setEditingProp({...editingProp, title: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. Modern Villa in Downtown" />
+              <div className="md:col-span-1">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Title *</label>
+                <input required type="text" value={editingProp.title} onChange={e => setEditingProp({...editingProp, title: e.target.value, slug: e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '')})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. Modern Villa in Downtown" />
+              </div>
+              <div className="md:col-span-1">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">URL Slug *</label>
+                <input required type="text" value={editingProp.slug || ''} onChange={e => setEditingProp({...editingProp, slug: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="modern-villa" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Transaction Type</label>

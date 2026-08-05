@@ -7,7 +7,7 @@ import { db } from '@/app/lib/firebase';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import LocationSelectorModal, { LocationResult } from '@/components/LocationSelectorModal';
-import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowRight, ChevronDown, X } from 'lucide-react';
 
 // --- TYPES (Updated to match your API/Firestore Types) ---
 interface LocationData {
@@ -250,7 +250,7 @@ const HomeUI = ({
         .reveal.visible .gradient-underline { width: 80px; }
 
         /* HERO */
-        .hero-container { width: 100%; height: 94vh; min-height: 700px; max-height: 950px; position: relative; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; }
+        .hero-container { width: 100%; height: 94vh; min-height: 700px; max-height: 950px; position: relative; display: flex; flex-direction: column; justify-content: space-between; }
         .hero-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-image: url('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2000'); background-size: cover; background-position: center -90px; background-color: #1a1e23; background-blend-mode: overlay; clip-path: url(#hero-cutout); z-index: 0; }
         
         .glass-card { background: rgba(35, 40, 48, 0.6); backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.1); transition: all 0.4s ease; }
@@ -380,19 +380,25 @@ const HomeUI = ({
                 <div className="flex flex-col md:flex-row items-center bg-gray-50 rounded-[1.5rem] border border-gray-100 p-2">
                   
                   {/* --- LOCATION MODAL TRIGGER --- */}
-                  <div className="flex flex-1 items-center gap-3 px-4 py-5 w-full border-b md:border-b-0 md:border-r border-gray-200 hover:bg-white transition-colors group rounded-xl relative cursor-pointer" onClick={() => setIsLocationModalOpen(true)}>
-                      <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center group-hover:bg-[#0065eb] group-hover:text-white transition-colors">
-                        <svg className="w-4 h-4 text-[#0065eb] group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                      </div>
-                      <div className="flex flex-col w-full overflow-hidden">
-                        <span className="text-[9px] uppercase font-black text-gray-400 tracking-wider mb-0.5">Location</span>
-                        <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-slate-900 truncate">
-                               {selectedLocation ? `${selectedLocation.city}${selectedLocation.district ? `, ${selectedLocation.district}` : ''}` : 'All Cities'}
-                            </span>
-                            <svg className="w-3 h-3 text-gray-400 shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                  <div className="flex flex-1 items-center gap-3 px-4 py-5 w-full border-b md:border-b-0 md:border-r border-gray-200 hover:bg-white transition-colors group rounded-xl relative">
+                      <div className="flex flex-1 items-center cursor-pointer" onClick={() => setIsLocationModalOpen(true)}>
+                        <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center group-hover:bg-[#0065eb] group-hover:text-white transition-colors mr-3">
+                          <svg className="w-4 h-4 text-[#0065eb] group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        </div>
+                        <div className="flex flex-col w-full overflow-hidden">
+                          <span className="text-[9px] uppercase font-black text-gray-400 tracking-wider mb-0.5">Location</span>
+                          <span className="text-xs font-bold text-slate-900 truncate pr-6">
+                            {selectedLocation ? `${selectedLocation.city}${selectedLocation.district ? `, ${selectedLocation.district}` : ''}` : 'All Cities'}
+                          </span>
                         </div>
                       </div>
+                      {selectedLocation ? (
+                        <button onClick={(e) => { e.stopPropagation(); setSelectedLocation(null); }} className="absolute right-4 p-1.5 bg-slate-200 hover:bg-slate-300 rounded-full text-slate-600 z-10 transition-colors">
+                          <X size={14} />
+                        </button>
+                      ) : (
+                        <ChevronDown size={14} className="absolute right-4 text-slate-400 group-hover:text-slate-600 pointer-events-none" />
+                      )}
                       
                       <LocationSelectorModal 
                         isOpen={isLocationModalOpen}

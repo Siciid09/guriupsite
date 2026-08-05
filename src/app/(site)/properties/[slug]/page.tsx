@@ -7,11 +7,32 @@ type Props = {
   params: Promise<{ slug: string }>
 };
 
+import { supabaseAdmin } from '@/app/lib/supabase'; // Safe DB fallback
+
+// BULLETPROOF DATABASE FINDER FOR PROPERTIES
+async function getPropertySafely(identifier: string) {
+  if (!supabaseAdmin) return null;
+  const queries = [
+    { col: 'slug', val: identifier, ilike: false },
+    { col: '_id', val: identifier, ilike: false },
+    { col: 'id', val: identifier, ilike: false },
+    { col: 'slug', val: identifier, ilike: true }
+  ];
+  for (const q of queries) {
+    try {
+      const { data, error } = q.ilike 
+        ? await supabaseAdmin.from('property').select('*').ilike(q.col, q.val).maybeSingle()
+        : await supabaseAdmin.from('property').select('*').eq(q.col, q.val).maybeSingle();
+      if (data && !error) return data;
+    } catch (e) {}
+  }
+  return null;
+}
+
 // 1. FETCH DATA HELPER (Runs on Server) - CACHED TO PREVENT DOUBLE BILLING
 const getPropertyData = cache(async (slug: string) => {
   try {
-    // Bypass strict TS type collision with 'as any' since data.ts returns a flattened object
-    const rawProperty = await getPropertyBySlug(slug) as any;
+    const rawProperty = await getPropertySafely(slug) as any;
     
     if (!rawProperty) return null;
 

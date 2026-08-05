@@ -1,6 +1,6 @@
 import { Metadata } from 'next';
 import { cache } from 'react';
-import { getHotelBySlug } from '@/app/lib/data'; // Utilize established Supabase data fetcher
+import { supabaseAdmin } from '@/app/lib/supabase';
 import HotelDetailView from '@/components/templates/HotelClientView';
 
 // --- TYPES ---
@@ -8,10 +8,30 @@ type Props = {
   params: Promise<{ slug: string }>
 };
 
+// BULLETPROOF DATABASE FINDER FOR HOTELS
+async function getHotelSafely(identifier: string) {
+  if (!supabaseAdmin) return null;
+  const queries = [
+    { col: 'slug', val: identifier, ilike: false },
+    { col: '_id', val: identifier, ilike: false },
+    { col: 'id', val: identifier, ilike: false },
+    { col: 'slug', val: identifier, ilike: true }
+  ];
+  for (const q of queries) {
+    try {
+      const { data, error } = q.ilike 
+        ? await supabaseAdmin.from('hotels').select('*').ilike(q.col, q.val).maybeSingle()
+        : await supabaseAdmin.from('hotels').select('*').eq(q.col, q.val).maybeSingle();
+      if (data && !error) return data;
+    } catch (e) {}
+  }
+  return null;
+}
+
 // --- OPTIMIZATION: Cache the DB call to avoid double-fetching ---
 const getHotelData = cache(async (slug: string) => {
   try {
-    const data = await getHotelBySlug(slug);
+    const data = await getHotelSafely(slug);
     return data;
   } catch (error) {
     console.error("Failed to fetch hotel data for SEO from Supabase:", error);

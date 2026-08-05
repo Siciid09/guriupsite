@@ -347,42 +347,50 @@ export default function HotelsUI({ featuredHotels = [], allHotels = [] }: Hotels
               <h1 className="text-white text-5xl md:text-7xl lg:text-8xl font-black mb-4 tracking-tight leading-[1.0]">Find Your <br /><span className="text-[#0065eb]">Perfect Stay</span></h1>
               <p className="text-gray-300 text-xs md:text-sm font-bold uppercase tracking-widest mb-12 max-w-[900px]">Luxury hotels, resorts & suites across the Horn of Africa.</p>
 
-              {/* RESPONSIVE SEARCH CAPSULE (EXPANDED WIDTH) */}
-              <div className="glass-card p-2 md:p-3 rounded-[2.5rem] shadow-2xl w-full max-w-[1200px] mx-auto flex flex-col md:flex-row items-center relative z-[50] gap-2">
+              {/* === MODERN UNIFIED SEARCH PILL === */}
+              <div className="bg-white p-2.5 rounded-[2rem] md:rounded-full shadow-[0_30px_60px_rgba(0,0,0,0.4)] flex flex-col md:flex-row items-center w-full max-w-5xl mx-auto relative z-[50]">
                 
-                {/* Keyword Search Input */}
-                <div className="flex-[1.5] w-full">
-                  <div className="w-full h-14 md:h-full flex items-center gap-3 px-5 bg-slate-50/50 rounded-[2rem] hover:bg-white text-left transition-all border border-transparent focus-within:border-blue-200 focus-within:bg-white">
-                    <Search className="text-[#0065eb] shrink-0" size={20} />
-                    <div className="flex-1 overflow-hidden">
-                       <p className="text-[9px] font-black uppercase text-slate-400 hidden md:block">Search Keywords</p>
-                       <input 
-                         type="text" 
-                         placeholder="Hotel name, address, amenities..." 
-                         value={searchQuery}
-                         onChange={(e) => setSearchQuery(e.target.value)}
-                         className="w-full font-bold text-sm text-slate-900 bg-transparent outline-none placeholder:text-slate-400 h-full py-2 md:py-0"
-                       />
-                    </div>
-                    {searchQuery && (
-                      <button onClick={() => setSearchQuery('')} className="p-1 text-slate-400 hover:text-slate-600 bg-slate-100 rounded-full"><X size={14}/></button>
-                    )}
+                {/* 1. Keyword Search */}
+                <div className="flex-[1.2] w-full flex items-center px-4 md:px-6 h-16 md:h-14 hover:bg-slate-50 rounded-full transition-colors relative group">
+                  <Search className="text-[#0065eb] shrink-0 mr-3" size={20} />
+                  <div className="flex-1 flex flex-col justify-center overflow-hidden">
+                    <p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">Search Keywords</p>
+                    <input 
+                      type="text" 
+                      placeholder="Hotel name, amenities..." 
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full font-bold text-sm text-slate-900 bg-transparent outline-none placeholder:text-slate-300 truncate"
+                    />
                   </div>
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery('')} className="p-1 text-slate-400 hover:text-slate-600 bg-slate-100 rounded-full absolute right-4"><X size={14}/></button>
+                  )}
                 </div>
 
-                {/* Location Selector Trigger */}
+                <div className="hidden md:block w-[1px] h-10 bg-slate-200 shrink-0 mx-1"></div>
+                <div className="w-full h-[1px] bg-slate-100 md:hidden my-1"></div>
+
+                {/* 2. Location Dropdown */}
                 <div className="flex-1 w-full relative">
-                  <button onClick={() => setIsLocationModalOpen(true)} className="w-full h-14 md:h-full flex items-center gap-3 px-5 bg-slate-50/50 rounded-[2rem] hover:bg-white transition-all text-left">
-                    <MapPin className="text-[#0065eb] shrink-0" size={20} />
-                    <div className="flex-1 overflow-hidden">
-                       <p className="text-[9px] font-black uppercase text-slate-400 hidden md:block">Destination</p>
-                       <span className="font-bold text-sm text-slate-900 truncate block">
-                         {selectedLocation ? `${selectedLocation.city}${selectedLocation.district ? `, ${selectedLocation.district}` : ''}` : 'Anywhere'}
-                       </span>
+                  <div className="w-full flex items-center px-4 md:px-6 h-16 md:h-14 hover:bg-slate-50 rounded-full transition-colors text-left group relative">
+                    <div className="flex-1 flex items-center cursor-pointer" onClick={() => setIsLocationModalOpen(true)}>
+                      <MapPin className="text-[#0065eb] shrink-0 mr-3" size={20} />
+                      <div className="flex-1 flex flex-col justify-center overflow-hidden">
+                        <p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">Location</p>
+                        <span className="font-bold text-sm text-slate-900 truncate pr-6">
+                          {selectedLocation ? `${selectedLocation.city}${selectedLocation.district ? `, ${selectedLocation.district}` : ''}` : 'Any Location'}
+                        </span>
+                      </div>
                     </div>
-                    <ChevronDown size={14} className="text-slate-400" />
-                  </button>
-                  
+                    {selectedLocation ? (
+                      <button onClick={(e) => { e.stopPropagation(); setSelectedLocation(null); }} className="absolute right-4 p-1.5 bg-slate-200 hover:bg-slate-300 rounded-full text-slate-600 z-10 transition-colors">
+                        <X size={14} />
+                      </button>
+                    ) : (
+                      <ChevronDown size={14} className="absolute right-4 text-slate-400 group-hover:text-slate-600 pointer-events-none" />
+                    )}
+                  </div>
                   <LocationSelectorModal 
                     isOpen={isLocationModalOpen}
                     onClose={() => setIsLocationModalOpen(false)}
@@ -391,15 +399,18 @@ export default function HotelsUI({ featuredHotels = [], allHotels = [] }: Hotels
                   />
                 </div>
 
-                {/* Hotel Type Selector */}
+                <div className="hidden md:block w-[1px] h-10 bg-slate-200 shrink-0 mx-1"></div>
+                <div className="w-full h-[1px] bg-slate-100 md:hidden my-1"></div>
+
+                {/* 3. Hotel Type Selector */}
                 <div className="flex-1 w-full relative" ref={typeRef}>
-                  <button onClick={() => setIsTypeDropdownOpen(!isTypeDropdownOpen)} className="w-full h-14 md:h-full flex items-center gap-3 px-5 bg-slate-50/50 rounded-[2rem] hover:bg-white transition-all text-left">
-                    <Briefcase className="text-orange-500 shrink-0" size={20} />
-                    <div className="flex-1 overflow-hidden">
-                      <p className="text-[9px] font-black uppercase text-slate-400 hidden md:block">Hotel Type</p>
-                      <span className="font-bold text-sm text-slate-900 truncate block">{searchType || 'Any Type'}</span>
+                  <button onClick={() => setIsTypeDropdownOpen(!isTypeDropdownOpen)} className="w-full flex items-center px-4 md:px-6 h-16 md:h-14 hover:bg-slate-50 rounded-full transition-colors text-left group">
+                    <Briefcase className="text-[#0065eb] shrink-0 mr-3" size={20} />
+                    <div className="flex-1 flex flex-col justify-center overflow-hidden">
+                      <p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">Hotel Type</p>
+                      <span className="font-bold text-sm text-slate-900 truncate">{searchType || 'Any Type'}</span>
                     </div>
-                    <ChevronDown size={14} className="text-slate-400" />
+                    <ChevronDown size={14} className="text-slate-400 group-hover:text-slate-600" />
                   </button>
                   {isTypeDropdownOpen && (
                     <div className="absolute top-full left-0 mt-3 w-full bg-white rounded-[1.5rem] shadow-2xl p-2 z-[9999] max-h-60 overflow-y-auto custom-scrollbar border border-slate-100">
@@ -409,14 +420,13 @@ export default function HotelsUI({ featuredHotels = [], allHotels = [] }: Hotels
                   )}
                 </div>
 
-                {/* Action Buttons */}
-                <div className="w-full md:w-auto flex gap-2 h-14 md:h-full">
-                  <button onClick={() => setIsFilterOpen(true)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 w-14 md:w-16 rounded-[2rem] flex items-center justify-center transition-all shrink-0" title="Advanced Filters">
-                    <SlidersHorizontal size={20} className="text-[#0065eb]" />
+                {/* 4. Action Buttons */}
+                <div className="flex items-center gap-2 pl-2 md:pl-4 pr-1 md:pr-1 w-full md:w-auto mt-2 md:mt-0 pb-1 md:pb-0 shrink-0">
+                  <button onClick={() => setIsFilterOpen(true)} className="w-14 md:w-12 h-14 md:h-12 flex items-center justify-center rounded-full border border-slate-200 hover:border-blue-200 hover:bg-blue-50 text-blue-600 transition-all bg-white shadow-sm" title="Advanced Filters">
+                    <SlidersHorizontal size={18} />
                   </button>
-                  <button className="flex-1 md:w-32 bg-[#0065eb] hover:bg-[#0052c1] text-white rounded-[2rem] font-black text-sm flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-blue-500/30">
-                    <Search size={18} />
-                    <span className="hidden md:inline">Search</span>
+                  <button className="flex-1 md:w-32 h-14 md:h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-black text-sm uppercase tracking-widest transition-all shadow-lg hover:shadow-blue-500/40 flex items-center justify-center gap-2">
+                    Search
                   </button>
                 </div>
 

@@ -351,16 +351,24 @@ export default function PropertiesUI({
 
                   {/* 2. Location Dropdown */}
                   <div className="flex-1 w-full relative">
-                    <button onClick={() => setIsLocationModalOpen(true)} className="w-full flex items-center px-4 md:px-6 h-16 md:h-14 hover:bg-slate-50 rounded-full transition-colors text-left group">
-                      <MapPin className="text-blue-500 shrink-0 mr-3" size={20} />
-                      <div className="flex-1 flex flex-col justify-center overflow-hidden">
-                        <p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">Location</p>
-                        <span className="font-bold text-sm text-slate-900 truncate">
-                          {selectedLocation ? `${selectedLocation.city}${selectedLocation.district ? `, ${selectedLocation.district}` : ''}` : 'Any Location'}
-                        </span>
+                    <div className="w-full flex items-center px-4 md:px-6 h-16 md:h-14 hover:bg-slate-50 rounded-full transition-colors text-left group relative">
+                      <div className="flex-1 flex items-center cursor-pointer" onClick={() => setIsLocationModalOpen(true)}>
+                        <MapPin className="text-blue-500 shrink-0 mr-3" size={20} />
+                        <div className="flex-1 flex flex-col justify-center overflow-hidden">
+                          <p className="text-[9px] font-black uppercase text-slate-400 mb-0.5">Location</p>
+                          <span className="font-bold text-sm text-slate-900 truncate pr-6">
+                            {selectedLocation ? `${selectedLocation.city}${selectedLocation.district ? `, ${selectedLocation.district}` : ''}` : 'Any Location'}
+                          </span>
+                        </div>
                       </div>
-                      <ChevronDown size={14} className="text-slate-400 group-hover:text-slate-600" />
-                    </button>
+                      {selectedLocation ? (
+                        <button onClick={(e) => { e.stopPropagation(); setSelectedLocation(null); }} className="absolute right-4 p-1.5 bg-slate-200 hover:bg-slate-300 rounded-full text-slate-600 z-10 transition-colors">
+                          <X size={14} />
+                        </button>
+                      ) : (
+                        <ChevronDown size={14} className="absolute right-4 text-slate-400 group-hover:text-slate-600 pointer-events-none" />
+                      )}
+                    </div>
                     <LocationSelectorModal 
                       isOpen={isLocationModalOpen}
                       onClose={() => setIsLocationModalOpen(false)}

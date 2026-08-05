@@ -10,9 +10,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'All fields are required.' }, { status: 400 });
     }
 
-    // Insert a new record into the 'notFound' table
+    // Insert a new record into the 'contacts' table
     const { error } = await supabase
-      .from('notFound')
+      .from('contacts')
       .insert([
         {
           name,

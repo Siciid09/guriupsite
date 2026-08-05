@@ -189,8 +189,12 @@ export async function GET(request: Request) {
         }
       }
 
+      // Deep Location Sync (matches Hargeisa searches correctly whether it's in City or Area)
       if (city && city !== 'All Cities' && city !== 'All') {
-        if (p.location?.city?.toLowerCase() !== city.toLowerCase()) return false;
+        const cLow = city.toLowerCase();
+        const propCity = p.location?.city?.toLowerCase() || '';
+        const propArea = p.location?.area?.toLowerCase() || '';
+        if (!propCity.includes(cLow) && !propArea.includes(cLow)) return false;
       }
       if (area && area !== 'All Areas') {
         if (p.location?.area?.toLowerCase() !== area.toLowerCase()) return false;

@@ -272,7 +272,7 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
         description: description.trim(),
         pricePerNight: parseInt(pricePerNight) || 0,
         roomsCount: parseInt(roomsCount) || 0,
-        rating: parseFloat(rating) || 3,
+        rating: isEditing ? undefined : 0, // Public reviews dictate this
         images: finalImageUrls,
         videoUrl: videoUrl.trim(),
         
@@ -356,13 +356,12 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
             <Input label="URL Slug *" value={slug} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setSlug(e.target.value); setSlugEdited(true); }} required />
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-               <div>
+               <div className="md:col-span-2">
                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Hotel Type *</label>
                  <select value={type} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setType(e.target.value)} className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-blue-500 transition-all">
                    {HOTEL_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                  </select>
                </div>
-               <Input label="Star Rating" type="number" min="1" max="5" value={rating} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRating(e.target.value)} />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { Settings } from 'lucide-react';
 
 // --- ICONS ---
 const Icons = {
@@ -255,10 +256,15 @@ export default function AgentProfileView() {
           </div>
         )}
 
-        <div className="absolute top-28 left-6 z-20">
-            <Link href="/agents" className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:bg-white hover:text-black transition-all">
+        <div className="absolute top-28 left-6 z-20 flex flex-col gap-3">
+            <Link href="/agents" className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:bg-white hover:text-black transition-all shadow-lg">
                 <Icons.BackArrow />
             </Link>
+            {currentUser?.uid === agent.userid && (
+                <Link href="/dashboard/agent?tab=settings" className="flex items-center gap-2 bg-white/20 backdrop-blur-md px-4 py-2 rounded-full text-white font-bold hover:bg-white hover:text-black transition-all shadow-lg border border-white/20 w-fit">
+                    <Settings size={16} /> Edit Profile
+                </Link>
+            )}
         </div>
       </div>
 
