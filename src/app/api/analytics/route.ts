@@ -32,7 +32,7 @@ export async function GET(request: Request) {
   }
 
   // Fetch the requester's role to allow system admins to view any dashboard
-  const { data: userRoleData } = await supabaseAdmin.from('users').select('role').or(`id.eq.${uid},_id.eq.${uid}`).single();
+  const { data: userRoleData } = await supabaseAdmin.from('users').select('role').or(`id.eq.${uid},_id.eq.${uid}`).maybeSingle();
   const isAdmin = userRoleData?.role === 'admin' || userRoleData?.role === 'sadmin';
 
   const { searchParams } = new URL(request.url);
@@ -175,14 +175,14 @@ export async function GET(request: Request) {
     if (hotelId) {
       // 🛡️ GATEKEEPER: Ensure the requester actually owns this hotel
       if (!isAdmin) {
-        const { data: hotelCheck } = await supabaseAdmin.from('hotels').select('hotelAdminId, ownerId').eq('_id', hotelId).single();
+        const { data: hotelCheck } = await supabaseAdmin.from('hotels').select('hotelAdminId, ownerId').or(`id.eq.${hotelId},_id.eq.${hotelId}`).maybeSingle();
         if (!hotelCheck || (hotelCheck.hotelAdminId !== uid && hotelCheck.ownerId !== uid)) {
            return NextResponse.json({ error: 'Forbidden. You do not own this hotel dashboard.' }, { status: 403 });
         }
       }
 
       const [bookingsRes, eventsRes] = await Promise.all([
-        supabaseAdmin.from('bookings').select('*').eq('hotelId', hotelId),
+        supabaseAdmin.from('bookings').select('*').or(`hotelId.eq.${hotelId},hotel_id.eq.${hotelId}`),
         supabaseAdmin.from('analytics_events').select('*').eq('hotelId', hotelId)
       ]);
 
@@ -191,7 +191,7 @@ export async function GET(request: Request) {
       const bookingList = bookingsRes.data || [];
       const monthlyRevenue = bookingList
         .filter((b) => ['confirmed', 'paid', 'checked-in', 'checked-out'].includes(b.status))
-        .reduce((sum, b) => sum + (Number(b.totalAmount) || 0), 0);
+        .reduce((sum, b) => sum + (Number(b.totalAmount || b.totalPrice) || 0), 0);
 
       const pendingBookings = bookingList.filter((b) => b.status === 'pending').length;
 
@@ -223,29 +223,33 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { eventType, propertyId, hotelId, agentId } = body;
+    const eventType = body.eventType || body.type;
+    const { propertyId, hotelId, agentId } = body;
 
-    if (!eventType) return NextResponse.json({ success: false, error: 'eventType required' }, { status: 400 });
+    if (!eventType) return NextResponse.json({ success: true });
 
-    const { error: insertError } = await supabaseAdmin.from('analytics_events').insert([{
-      eventType,
-      propertyId: propertyId || null,
-      hotelId: hotelId || null,
-      agentId: agentId || null,
-      createdAt: new Date().toISOString(),
-    }]);
+    try {
+      await supabaseAdmin.from('analytics_events').insert([{
+        eventType,
+        propertyId: propertyId || null,
+        hotelId: hotelId || null,
+        agentId: agentId || null,
+        createdAt: new Date().toISOString(),
+      }]);
+    } catch (err) {
+      console.warn('Analytics logging warning:', err);
+    }
 
-    if (insertError) throw new Error(insertError.message);
-
-    if (eventType === 'view_property' && propertyId) {
-      const { data: property } = await supabaseAdmin.from('property').select('views').eq('id', propertyId).single(); 
+    if ((eventType === 'view_property' || eventType === 'view') && propertyId) {
+      const { data: property } = await supabaseAdmin.from('property').select('views').or(`id.eq.${propertyId},_id.eq.${propertyId}`).maybeSingle(); 
       if (property) {
-        await supabaseAdmin.from('property').update({ views: (Number(property.views) || 0) + 1 }).eq('id', propertyId); 
+        await supabaseAdmin.from('property').update({ views: (Number(property.views) || 0) + 1 }).or(`id.eq.${propertyId},_id.eq.${propertyId}`); 
       }
     }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    console.error('Analytics POST Error:', error);
+    return NextResponse.json({ success: true });
   }
 }

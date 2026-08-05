@@ -239,12 +239,12 @@ function DashboardContent() {
 
   bookings.forEach(b => {
     if (!b.checkIn || !b.checkOut) return;
-    const checkInDate = b.checkIn.toDate();
-    const checkOutDate = b.checkOut.toDate();
+    const checkInDate = new Date(b.checkIn as any);
+    const checkOutDate = new Date(b.checkOut as any);
     
     // Revenue (only confirmed/checked-in/paid)
     if (['confirmed', 'checked-in', 'checked-out'].includes(b.status)) {
-       if (b.createdAt.toDate().getMonth() === today.getMonth()) monthlyRevenue += (b.totalPrice || 0);
+       if (b.createdAt && new Date(b.createdAt as any).getMonth() === today.getMonth()) monthlyRevenue += (b.totalPrice || 0);
     }
     // Arrivals
     if (checkInDate.toDateString() === today.toDateString() && ['pending', 'confirmed'].includes(b.status)) todayArrivals++;
@@ -344,7 +344,7 @@ function DashboardContent() {
                         <div key={b.id} className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 gap-4">
                            <div className="flex flex-col">
                               <span className="font-bold text-slate-900">{b.guestName || 'Guest'}</span>
-                              <span className="text-xs text-slate-500 font-medium">{b.roomName} • {format(b.checkIn.toDate(), 'MMM d')} - {format(b.checkOut.toDate(), 'MMM d')}</span>
+                              <span className="text-xs text-slate-500 font-medium">{b.roomName} • {format(new Date(b.checkIn as any), 'MMM d')} - {format(new Date(b.checkOut as any), 'MMM d')}</span>
                            </div>
                            <div className="flex items-center gap-4 justify-between w-full md:w-auto border-t md:border-none border-slate-200 pt-3 md:pt-0">
                               <span className="font-black text-[#0065eb]">${b.totalPrice}</span>
@@ -398,7 +398,7 @@ function DashboardContent() {
                            </div>
                            <div>
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Dates</p>
-                              <p className="font-bold text-sm">{format(b.checkIn.toDate(), 'MMM d')} - {format(b.checkOut.toDate(), 'MMM d')}</p>
+                              <p className="font-bold text-sm">{format(new Date(b.checkIn as any), 'MMM d')} - {format(new Date(b.checkOut as any), 'MMM d')}</p>
                            </div>
                            <div className="col-span-2 md:col-span-1 text-right md:text-left">
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total</p>
@@ -438,17 +438,17 @@ function DashboardContent() {
                    <p className="text-slate-500 mb-8 max-w-md mx-auto">A simple visual overview of who is arriving and departing in the next 7 days.</p>
                    
                    <div className="space-y-4 max-w-2xl mx-auto text-left">
-                      {bookings.filter(b => ['confirmed', 'checked-in'].includes(b.status) && b.checkIn.toDate() >= new Date()).slice(0, 10).map(b => (
+                      {bookings.filter(b => ['confirmed', 'checked-in'].includes(b.status) && new Date(b.checkIn as any) >= new Date()).slice(0, 10).map(b => (
                          <div key={b.id} className="flex items-center gap-4 relative pl-6 border-l-2 border-[#0065eb] pb-4">
                             <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-white border-4 border-[#0065eb]"></div>
                             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex-1 flex justify-between items-center">
                                <div>
-                                  <p className="font-bold text-[#0065eb]">{format(b.checkIn.toDate(), 'MMM do, yyyy')}</p>
+                                  <p className="font-bold text-[#0065eb]">{format(new Date(b.checkIn as any), 'MMM do, yyyy')}</p>
                                   <p className="font-black text-slate-900 text-lg">{b.guestName}</p>
                                </div>
                                <div className="text-right">
                                   <p className="text-xs font-bold text-slate-500">{b.roomName}</p>
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase">Check-out: {format(b.checkOut.toDate(), 'MMM do')}</p>
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase">Check-out: {format(new Date(b.checkOut as any), 'MMM do')}</p>
                                </div>
                             </div>
                          </div>
