@@ -133,17 +133,20 @@ export async function POST(request: Request) {
     }
 
     const uid = await getVerifiedUid(request);
-    if (!uid) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
-
     const payload = await request.json();
+
+    // Only block if an admin is manually adding a booking, otherwise allow guests
+    if (payload.source === 'admin_manual' && !uid) {
+      return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+    }
+
     const type = payload.type || 'bookings';
     const table = type === 'food_orders' ? 'room_service_orders' : 'bookings';
 
     delete payload.type;
 
-    // Standard logged-in users are permitted to create bookings.
     if (payload.source !== 'admin_manual') {
-      payload.userId = uid; 
+      payload.userId = uid || payload.userId || 'guest'; 
     }
     
     payload.status = payload.status || 'pending';

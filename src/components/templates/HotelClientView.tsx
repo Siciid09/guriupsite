@@ -8,7 +8,8 @@ import {
   Star, MapPin, ChevronLeft, ChevronRight, Share2, Heart, CheckCircle, 
   ArrowRight, X, Expand, MessageCircle, Phone, Calendar, Users, Minus, 
   Plus, MessageSquare, Download, Briefcase, Building2, ShieldCheck, Video,
-  Utensils, Clock, ShoppingBag 
+  Utensils, Clock, ShoppingBag, 
+  Loader2
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import SharedChatComponent from '@/components/sharedchat';
@@ -152,6 +153,7 @@ export default function HotelDetailPage() {
 
   // Booking Logic State
   const [showBookingModal, setShowBookingModal] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookingData, setBookingData] = useState({
     name: user?.displayName || '',
     phone: '',
@@ -202,15 +204,15 @@ export default function HotelDetailPage() {
 
           if (roomsRes.ok) {
             const rData = await roomsRes.json();
-            setRooms(Array.isArray(rData) ? rData : []);
+            setRooms(Array.isArray(rData) ? rData : (rData.rooms || rData.data || []));
           }
           if (reviewsRes.ok) {
             const revData = await reviewsRes.json();
-            setReviews(Array.isArray(revData) ? revData : []);
+            setReviews(Array.isArray(revData) ? revData : (revData.reviews || revData.data || []));
           }
           if (restaurantsRes.ok) {
             const restData = await restaurantsRes.json();
-            setRestaurants(Array.isArray(restData) ? restData : []);
+            setRestaurants(Array.isArray(restData) ? restData : (restData.restaurants || restData.data || []));
           }
           if (similarRes.ok) {
             const simData = await similarRes.json();
@@ -244,15 +246,27 @@ export default function HotelDetailPage() {
 
   const confirmBooking = async () => {
     if (!hotel) return;
+
+    // Strict Validation
+    if (!bookingData.name.trim() || !bookingData.phone.trim()) {
+      alert("Please provide your Full Name and Phone Number.");
+      return;
+    }
+    if (rooms.length > 0 && !bookingData.roomId) {
+      alert("Please select a room.");
+      return;
+    }
+
+    setIsSubmitting(true);
     const hotelId = hotel._id || hotel.id;
 
     try {
       const idToken = user ? await user.getIdToken() : '';
-      await fetch('/api/bookings', {
+      const res = await fetch('/api/bookings', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}` 
+          ...(idToken ? { 'Authorization': `Bearer ${idToken}` } : {}) 
         },
         body: JSON.stringify({
           hotelId,
@@ -263,8 +277,11 @@ export default function HotelDetailPage() {
           source: 'whatsapp_redirect'
         })
       });
+      if (!res.ok) console.error("Database save error", await res.text());
     } catch (e) {
       console.error("Booking save error", e);
+    } finally {
+      setIsSubmitting(false);
     }
 
     const selectedRoom = rooms.find(r => (r._id || r.id) === bookingData.roomId);
@@ -704,12 +721,12 @@ export default function HotelDetailPage() {
             <div className="p-8 overflow-y-auto custom-scrollbar space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2 block">Full Name</label>
-                  <input type="text" value={bookingData.name} onChange={(e) => handleBookingChange('name', e.target.value)} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" placeholder="Your Name" />
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2 block">Full Name *</label>
+                  <input required type="text" value={bookingData.name} onChange={(e) => handleBookingChange('name', e.target.value)} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" placeholder="Your Name" />
                 </div>
                 <div className="col-span-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2 block">Phone Number</label>
-                  <input type="tel" value={bookingData.phone} onChange={(e) => handleBookingChange('phone', e.target.value)} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" placeholder="+252..." />
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2 block">Phone Number *</label>
+                  <input required type="tel" value={bookingData.phone} onChange={(e) => handleBookingChange('phone', e.target.value)} className="w-full p-4 bg-slate-50 rounded-xl border-none font-bold text-sm focus:ring-2 focus:ring-[#0065eb]" placeholder="+252..." />
                 </div>
               </div>
               <div>
@@ -745,8 +762,8 @@ export default function HotelDetailPage() {
               </div>
             </div>
             <div className="p-6 border-t border-slate-100 bg-white">
-              <button onClick={confirmBooking} className="w-full py-4 bg-[#25D366] hover:bg-[#1dbf57] text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg shadow-green-500/20 transition-all flex items-center justify-center gap-2">
-                <MessageCircle size={20} /> Confirm via WhatsApp
+              <button disabled={isSubmitting} onClick={confirmBooking} className="w-full py-4 bg-[#25D366] hover:bg-[#1dbf57] text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg shadow-green-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-70">
+                {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <MessageCircle size={20} />} Confirm via WhatsApp
               </button>
             </div>
           </div>

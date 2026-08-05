@@ -28,6 +28,7 @@ import HotelAnalytics from '@/components/hotelstats';
 // ============================================================================
 interface HotelData {
   id: string;
+  _id?: string;
   name: string;
   type: string;
   description: string;
@@ -142,7 +143,8 @@ function DashboardContent() {
         const bRes = await fetch(`/api/bookings?hotelId=${hotelId}`, { headers: { Authorization: `Bearer ${idToken}` } });
         if (bRes.ok) {
            const bJson = await bRes.json();
-           setBookings(bJson.bookings || bJson.data || []); // Safety fallback
+           // FIX: Properly handle raw arrays returned from the API
+           setBookings(Array.isArray(bJson) ? bJson : (bJson.bookings || bJson.data || []));
         }
         
         // Fetch Rooms
@@ -174,7 +176,7 @@ function DashboardContent() {
 
   const updateBookingStatus = async (id: string, newStatus: string) => {
     try {
-      if (!currentUser) return;
+      if (!currentUser || !hotel) return;
       const idToken = await currentUser.getIdToken();
       const res = await fetch('/api/bookings', {
         method: 'PATCH',
@@ -182,7 +184,8 @@ function DashboardContent() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`
         },
-        body: JSON.stringify({ id, status: newStatus })
+        // FIX: Send the hotelId to pass the API security gatekeeper
+        body: JSON.stringify({ id, hotelId: hotel.id || hotel._id, status: newStatus })
       });
       if (!res.ok) throw new Error("Failed");
       
