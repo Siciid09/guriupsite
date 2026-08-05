@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { auth } from '../../lib/firebase'; 
+// 🚨 CRITICAL FIX: Replaced the broken relative path with the absolute alias
+import { auth } from '@/app/lib/firebase'; 
 import { Mail, Lock, Loader2, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
@@ -93,7 +94,7 @@ export default function LoginPage() {
 
       const data = await response.json();
       const userData = data.user;
-         
+          
       if (userData.isBanned === true) {
         await auth.signOut();
         setError('This account has been disabled.');
@@ -206,7 +207,7 @@ export default function LoginPage() {
             </svg>
             <span>Continue with Google</span>
           </button>
-
+          
           <p className="text-center text-white/60 mt-8 text-sm font-medium">
             New to GuriUp?{' '}
             <Link href="/signup" className="text-white font-bold hover:underline transition-all">Create an account</Link>
