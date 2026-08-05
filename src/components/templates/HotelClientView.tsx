@@ -140,20 +140,20 @@ export default function HotelDetailPage() {
       fetch('/api/analytics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventType: 'view_hotel', hotelId, platform: 'web' }) // 🛡️ FIX: Changed 'type' to 'eventType'
-      }).catch(console.error);
+        body: JSON.stringify({ type: 'view_hotel', hotelId, platform: 'web' }) 
+      }).catch(() => {});
     }
   }, [hotel]);
 
   // ✅ ANALYTICS: Track Clicks via API
-  const trackClick = (eventType: string) => {
+  const trackClick = (type: string) => {
     if (!hotel) return;
     const hotelId = hotel._id || hotel.id;
     fetch('/api/analytics', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventType, hotelId, platform: 'web' }) // 🛡️ FIX: Changed 'type' to 'eventType'
-    }).catch(console.error);
+      body: JSON.stringify({ type, hotelId, platform: 'web' }) 
+    }).catch(() => {});
   };
 
   // Booking Logic State
@@ -651,101 +651,7 @@ export default function HotelDetailPage() {
                     {reviews.length > 0 ? reviews.map(review => {
                       const revId = review.id || review._id;
                       return (
-                        <div key={revId} className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                          <div className="flex justify-between items-start mb-2">
-                            <div>
-                              <h5 className="font-bold text-slate-900 text-sm">{review.userName || 'Guest'}</h5>
-                              {review.createdAt && <p className="text-[10px] text-slate-400 mt-0.5">{new Date(review.createdAt).toLocaleDateString()}</p>}
-                            </div>
-                            <div className="flex text-yellow-400">
-                               {[...Array(review.rating || 5)].map((_, i) => <Star key={i} size={12} className="fill-current"/>)}
-                            </div>
-                          </div>
-                          <p className="text-slate-600 text-sm leading-relaxed">"{review.comment}"</p>
-                        </div>
-                      );
-                    }) : <p className="text-slate-400 text-sm font-bold text-center py-6">No reviews yet. Be the first!</p>}
-                  </div>
-                </div>
-              )}{activeTab === 'Reviews' && (
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  <form onSubmit={submitReview} className="mb-8 bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm">
-                    <h4 className="font-black text-slate-900 text-sm uppercase tracking-wider mb-4">Leave a Review</h4>
-                    <div className="flex items-center gap-2 mb-4">
-                      {[1, 2, 3, 4, 5].map(star => (
-                        <Star 
-                          key={star} 
-                          size={24} 
-                          onClick={() => setReviewData(prev => ({ ...prev, rating: star }))}
-                          className={`cursor-pointer transition-colors ${reviewData.rating >= star ? 'fill-yellow-400 text-yellow-400' : 'text-slate-300'}`} 
-                        />
-                      ))}
-                    </div>
-                    <textarea 
-                      required 
-                      value={reviewData.comment} 
-                      onChange={(e) => setReviewData(prev => ({ ...prev, comment: e.target.value }))}
-                      placeholder="Share your experience..." 
-                      className="w-full p-4 rounded-xl border-none font-medium text-sm focus:ring-2 focus:ring-[#0065eb] mb-4 bg-white shadow-sm"
-                      rows={3}
-                    />
-                    <button disabled={isSubmittingReview} type="submit" className="px-6 py-3 bg-[#0065eb] hover:bg-[#0052c1] text-white rounded-xl font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-70">
-                      {isSubmittingReview ? <Loader2 className="animate-spin" size={16} /> : 'Submit Review'}
-                    </button>
-                  </form>
-
-                  <div className="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
-                    {reviews.length > 0 ? reviews.map(review => {
-                      const revId = review.id || review._id;
-                      return (
-                        <div key={revId} className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                          <div className="flex justify-between items-start mb-2">
-                            <div>
-                              <h5 className="font-bold text-slate-900 text-sm">{review.userName || 'Guest'}</h5>
-                              {review.createdAt && <p className="text-[10px] text-slate-400 mt-0.5">{new Date(review.createdAt).toLocaleDateString()}</p>}
-                            </div>
-                            <div className="flex text-yellow-400">
-                               {[...Array(review.rating || 5)].map((_, i) => <Star key={i} size={12} className="fill-current"/>)}
-                            </div>
-                          </div>
-                          <p className="text-slate-600 text-sm leading-relaxed">"{review.comment}"</p>
-                        </div>
-                      );
-                    }) : <p className="text-slate-400 text-sm font-bold text-center py-6">No reviews yet. Be the first!</p>}
-                  </div>
-                </div>
-              )}{activeTab === 'Reviews' && (
-                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  <form onSubmit={submitReview} className="mb-8 bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm">
-                    <h4 className="font-black text-slate-900 text-sm uppercase tracking-wider mb-4">Leave a Review</h4>
-                    <div className="flex items-center gap-2 mb-4">
-                      {[1, 2, 3, 4, 5].map(star => (
-                        <Star 
-                          key={star} 
-                          size={24} 
-                          onClick={() => setReviewData(prev => ({ ...prev, rating: star }))}
-                          className={`cursor-pointer transition-colors ${reviewData.rating >= star ? 'fill-yellow-400 text-yellow-400' : 'text-slate-300'}`} 
-                        />
-                      ))}
-                    </div>
-                    <textarea 
-                      required 
-                      value={reviewData.comment} 
-                      onChange={(e) => setReviewData(prev => ({ ...prev, comment: e.target.value }))}
-                      placeholder="Share your experience..." 
-                      className="w-full p-4 rounded-xl border-none font-medium text-sm focus:ring-2 focus:ring-[#0065eb] mb-4 bg-white shadow-sm"
-                      rows={3}
-                    />
-                    <button disabled={isSubmittingReview} type="submit" className="px-6 py-3 bg-[#0065eb] hover:bg-[#0052c1] text-white rounded-xl font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-70">
-                      {isSubmittingReview ? <Loader2 className="animate-spin" size={16} /> : 'Submit Review'}
-                    </button>
-                  </form>
-
-                  <div className="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
-                    {reviews.length > 0 ? reviews.map(review => {
-                      const revId = review.id || review._id;
-                      return (
-                        <div key={revId} className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                        <div key={revId} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
                           <div className="flex justify-between items-start mb-2">
                             <div>
                               <h5 className="font-bold text-slate-900 text-sm">{review.userName || 'Guest'}</h5>

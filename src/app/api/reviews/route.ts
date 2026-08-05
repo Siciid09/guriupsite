@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     
     let query = supabaseAdmin.from('hotel_reviews').select('*');
     if (hotelId && hotelId !== 'undefined') {
-      query = query.eq('hotelId', hotelId);
+      query = query.eq('hotel_id', hotelId); // Matches exact DB column
     }
     
     const { data, error } = await query.order('createdAt', { ascending: false });
@@ -70,7 +70,7 @@ export async function POST(request: Request) {
 
     if (finalTargetType === 'hotel') {
       tableName = 'hotel_reviews';
-      payload.hotelId = finalTargetId;
+      payload.hotel_id = finalTargetId; // Matches exact DB column
     } else if (finalTargetType === 'agent') {
       tableName = 'agent_reviews';
       payload.agentId = finalTargetId;
@@ -84,9 +84,10 @@ export async function POST(request: Request) {
 
     if (error) {
       // Fallback for schema discrepancies
-      if (tableName === 'agent_reviews') {
+      if (tableName === 'agent_reviews' || tableName === 'hotel_reviews') {
          const fallbackPayload = { ...payload, targetId: finalTargetId, targetType: finalTargetType };
          delete fallbackPayload.agentId;
+         delete fallbackPayload.hotel_id; // Deletes the snake_case key for the fallback table
          const { error: fallbackError } = await supabaseAdmin.from('reviews').insert([fallbackPayload]);
          if (fallbackError) throw fallbackError;
       } else {
