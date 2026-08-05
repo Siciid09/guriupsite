@@ -61,6 +61,8 @@ export async function POST(request: Request) {
 
     let tableName = 'reviews'; 
     const payload: any = {
+      _id: crypto.randomUUID(), // Fixes primary key database crash
+      id: crypto.randomUUID(),
       userId: decodedToken.uid,
       userName: decodedToken.name || 'Verified User',
       rating: Number(rating),

@@ -106,15 +106,24 @@ export async function GET(request: Request) {
           return NextResponse.json({ error: 'Forbidden. You do not own this hotel.' }, { status: 403 });
         }
       }
-      query = query.eq('hotelId', hotelId);
+      // Food orders might use hotel_id instead of hotelId in some schemas
+      if (type === 'food_orders') {
+         query = query.or(`hotelId.eq.${hotelId},hotel_id.eq.${hotelId}`);
+      } else {
+         query = query.eq('hotelId', hotelId);
+      }
     } else {
       return NextResponse.json({ error: 'Missing parameters. Provide userId or hotelId.' }, { status: 400 });
     }
 
     const { data, error } = await query.order('createdAt', { ascending: false });
     
-    if (error) throw error;
-    return NextResponse.json(data);
+    if (error) {
+      // Graceful fallback if room_service_orders table doesn't exist yet to prevent 500 crash
+      if (type === 'food_orders') return NextResponse.json([]);
+      throw error;
+    }
+    return NextResponse.json(data || []);
 
   } catch (error: any) {
     console.error('Bookings GET Error:', error);

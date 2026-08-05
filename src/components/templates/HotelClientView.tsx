@@ -347,8 +347,8 @@ export default function HotelDetailPage() {
     
     // 🛡️ CRITICAL FIX: Safe fallback bindings for room properties
     const roomName = selectedRoom ? (selectedRoom.roomName || selectedRoom.roomTypeName) : 'Standard Room';
-    const roomPrice = selectedRoom?.basePrice || selectedRoom?.pricePerNight || selectedRoom?.price || hotel.pricePerNight;
-    const totalPrice = roomPrice * bookingData.roomCount;
+    const roomPrice = Number(selectedRoom?.basePrice || selectedRoom?.pricePerNight || selectedRoom?.price || hotel.pricePerNight || 0);
+    const totalPrice = roomPrice * Number(bookingData.roomCount || 1);
 
     const message = `Hello, I would like to book a stay at *${hotel.name}*.\n\n` +
       `👤 *Name:* ${bookingData.name}\n` +
@@ -658,7 +658,7 @@ export default function HotelDetailPage() {
                               {review.createdAt && <p className="text-[10px] text-slate-400 mt-0.5">{new Date(review.createdAt).toLocaleDateString()}</p>}
                             </div>
                             <div className="flex text-yellow-400">
-                               {[...Array(review.rating || 5)].map((_, i) => <Star key={i} size={12} className="fill-current"/>)}
+                               {[...Array(Number(review.rating) || 5)].map((_, i) => <Star key={i} size={12} className="fill-current"/>)}
                             </div>
                           </div>
                           <p className="text-slate-600 text-sm leading-relaxed">"{review.comment}"</p>
