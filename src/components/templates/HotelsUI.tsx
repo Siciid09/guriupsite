@@ -11,7 +11,8 @@ import {
   Utensils, Car, Dumbbell, Wind, ChevronDown, Sparkles, 
   Heart, Briefcase, AlertCircle, Tv, Waves, Shield, 
   Bed, PhoneCall, Zap, Clock, BatteryCharging, Compass, ExternalLink,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight,
+  Camera
 } from 'lucide-react';
 import MapUI from './mapui';
 
@@ -521,8 +522,41 @@ const HotelCard = ({ hotel, onShare, isFavorite, onToggleFavorite }: any) => {
   const locationText = typeof hotel.location === 'string' ? hotel.location : `${hotel.location?.area || ''}, ${hotel.location?.city || ''}`;
   const ratingVal = Number(hotel.rating || 4.5).toFixed(1);
   const reviewCount = hotel.reviewCount || Math.floor(Math.random() * 80) + 12;
-
   const price = hotel.pricePerNight || hotel.price || hotel.displayPrice || 0;
+
+  // CAROUSEL STATE
+  const images = hotel.images?.length ? hotel.images : ['https://placehold.co/600x400'];
+  const [imgIdx, setImgIdx] = useState(0);
+  const [showCounter, setShowCounter] = useState(false);
+
+  const nextImg = (e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    setImgIdx((prev) => (prev + 1) % images.length);
+    setShowCounter(true);
+  };
+
+  const prevImg = (e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    setImgIdx((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+    setShowCounter(true);
+  };
+
+  useEffect(() => {
+    if (showCounter) {
+      const timer = setTimeout(() => setShowCounter(false), 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [showCounter]);
+
+  useEffect(() => {
+    if (images.length > 1) {
+      const randomOffset = Math.floor(Math.random() * 2000);
+      const timer = setInterval(() => {
+        setImgIdx((prev) => (prev + 1) % images.length);
+      }, 4000 + randomOffset);
+      return () => clearInterval(timer);
+    }
+  }, [images.length]);
 
   return (
     <div className="group relative bg-white/90 backdrop-blur-md rounded-[2rem] overflow-hidden border border-blue-500/20 shadow-[0_8px_30px_rgba(0,0,0,0.04)] hover:shadow-[0_20px_40px_rgba(0,101,235,0.12)] hover:-translate-y-1.5 transition-all duration-500 flex flex-col h-full">
@@ -535,9 +569,28 @@ const HotelCard = ({ hotel, onShare, isFavorite, onToggleFavorite }: any) => {
       <Link href={`/hotels/${hotel.slug || hotel.id || hotel._id}`} className="block flex-1 flex flex-col">
         {/* REDUCED HEIGHT: h-48 md:h-52 instead of h-72 */}
         <div className="h-48 md:h-52 overflow-hidden relative bg-slate-200 m-2 rounded-[1.5rem]">
-          <Image src={hotel.images?.[0] || 'https://placehold.co/600x400'} alt={hotel.name || hotel.title} fill className="object-cover transition-transform duration-700 group-hover:scale-110" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-80" />
-          {isPro && <div className="absolute bottom-3 left-3 bg-blue-600/90 backdrop-blur-md text-white px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-lg flex items-center gap-1.5"><ShieldCheck size={12} /> Verified</div>}
+          <Image src={images[imgIdx]} alt={hotel.name || hotel.title} fill className="object-cover transition-transform duration-700 group-hover:scale-105" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-90 z-0" />
+          {isPro && <div className="absolute bottom-3 left-3 bg-blue-600/90 backdrop-blur-md text-white px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-lg flex items-center gap-1.5 z-20"><ShieldCheck size={12} /> Verified</div>}
+          
+          {/* CAROUSEL ARROWS */}
+          {images.length > 1 && (
+            <div className="absolute inset-y-0 left-0 right-0 flex items-center justify-between px-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+               <button onClick={prevImg} className="w-6 h-6 bg-white/50 hover:bg-white rounded-full flex items-center justify-center text-slate-800 backdrop-blur-sm transition-colors shadow-sm">
+                 <ChevronLeft size={14}/>
+               </button>
+               <button onClick={nextImg} className="w-6 h-6 bg-white/50 hover:bg-white rounded-full flex items-center justify-center text-slate-800 backdrop-blur-sm transition-colors shadow-sm">
+                 <ChevronRight size={14}/>
+               </button>
+            </div>
+          )}
+
+          {/* IMAGE COUNTER */}
+          {images.length > 1 && (
+            <div className={`absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-[9px] font-black px-2 py-1 rounded-md z-10 transition-opacity duration-300 flex items-center gap-1.5 ${showCounter ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+               <Camera size={10} /> {imgIdx + 1} / {images.length}
+            </div>
+          )}
         </div>
         
         {/* COMPACT PADDING: p-5 instead of p-7 */}
@@ -594,18 +647,71 @@ const HotelListCard = ({ hotel, onShare, isFavorite, onToggleFavorite }: any) =>
   const locationText = typeof hotel.location === 'string' ? hotel.location : hotel.location?.city;
   const ratingVal = Number(hotel.rating || 4.5).toFixed(1);
   const reviewCount = hotel.reviewCount || Math.floor(Math.random() * 50) + 8;
-
   const price = hotel.pricePerNight || hotel.price || hotel.displayPrice || 0;
+
+  // CAROUSEL STATE
+  const images = hotel.images?.length ? hotel.images : ['https://placehold.co/600x400'];
+  const [imgIdx, setImgIdx] = useState(0);
+  const [showCounter, setShowCounter] = useState(false);
+
+  const nextImg = (e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    setImgIdx((prev) => (prev + 1) % images.length);
+    setShowCounter(true);
+  };
+
+  const prevImg = (e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    setImgIdx((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+    setShowCounter(true);
+  };
+
+  useEffect(() => {
+    if (showCounter) {
+      const timer = setTimeout(() => setShowCounter(false), 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [showCounter]);
+
+  useEffect(() => {
+    if (images.length > 1) {
+      const randomOffset = Math.floor(Math.random() * 2000);
+      const timer = setInterval(() => {
+        setImgIdx((prev) => (prev + 1) % images.length);
+      }, 4000 + randomOffset);
+      return () => clearInterval(timer);
+    }
+  }, [images.length]);
 
   return (
     <div className="group relative bg-white rounded-[2rem] border border-slate-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 p-3.5 flex flex-col justify-between">
       <Link href={`/hotels/${hotel.slug || hotel.id || hotel._id}`} className="block flex-1 flex flex-col">
         <div className="h-52 rounded-[1.5rem] overflow-hidden relative mb-4 bg-slate-200">
-          <Image src={hotel.images?.[0] || 'https://placehold.co/600x400'} alt={hotel.name || hotel.title} fill className="object-cover transition-transform duration-500 group-hover:scale-105" />
-          <div className="absolute top-3 right-3 flex gap-2">
+          <Image src={images[imgIdx]} alt={hotel.name || hotel.title} fill className="object-cover transition-transform duration-500 group-hover:scale-105" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-90 z-0" />
+          <div className="absolute top-3 right-3 flex gap-2 z-20">
                <button onClick={(e) => onToggleFavorite(e, hotel.id || hotel._id)} className={`p-2 rounded-full backdrop-blur-md shadow-md ${isFavorite ? 'bg-red-500 text-white' : 'bg-white/80 text-slate-700 hover:bg-white hover:text-red-500'}`}><Heart size={14} className={isFavorite ? 'fill-white' : ''}/></button>
                <button onClick={(e) => { e.preventDefault(); onShare(e, hotel.slug || hotel.id || hotel._id); }} className="bg-white/80 hover:bg-white text-slate-700 hover:text-slate-900 p-2 rounded-full backdrop-blur-md shadow-md"><Share2 size={14} /></button>
           </div>
+          
+          {/* CAROUSEL ARROWS */}
+          {images.length > 1 && (
+            <div className="absolute inset-y-0 left-0 right-0 flex items-center justify-between px-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+               <button onClick={prevImg} className="w-6 h-6 bg-white/50 hover:bg-white rounded-full flex items-center justify-center text-slate-800 backdrop-blur-sm transition-colors shadow-sm">
+                 <ChevronLeft size={14}/>
+               </button>
+               <button onClick={nextImg} className="w-6 h-6 bg-white/50 hover:bg-white rounded-full flex items-center justify-center text-slate-800 backdrop-blur-sm transition-colors shadow-sm">
+                 <ChevronRight size={14}/>
+               </button>
+            </div>
+          )}
+
+          {/* IMAGE COUNTER */}
+          {images.length > 1 && (
+            <div className={`absolute bottom-3 left-3 bg-black/60 backdrop-blur-md text-white text-[9px] font-black px-2 py-1 rounded-md z-10 transition-opacity duration-300 flex items-center gap-1.5 ${showCounter ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+               <Camera size={10} /> {imgIdx + 1} / {images.length}
+            </div>
+          )}
         </div>
         <div className="px-2 flex-1 flex flex-col justify-between">
           <div>

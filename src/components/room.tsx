@@ -298,13 +298,25 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
       if (!roomName || !basePrice) throw new Error("Room Name and Base Price are required.");
       if (existingImages.length === 0 && newImages.length === 0) throw new Error("Please upload at least one image.");
 
+      // STRICT FREE PLAN ENFORCEMENT: Enforce max 1 image before upload loop
+      let allowedNewImages = newImages;
+      if (!isPro) {
+        const remainingSlots = Math.max(0, limits.maxImages - existingImages.length);
+        allowedNewImages = newImages.slice(0, remainingSlots);
+      }
+
       // 1. Upload New Images directly to Firebase Storage
       let finalImageUrls = [...existingImages];
-      for (const img of newImages) {
+      for (const img of allowedNewImages) {
         const fileRef = ref(storage, `hotel_rooms/${Date.now()}_${img.file.name.replace(/[^a-zA-Z0-9.]/g, '')}`);
         await uploadBytes(fileRef, img.file);
         const downloadUrl = await getDownloadURL(fileRef);
         finalImageUrls.push(downloadUrl);
+      }
+
+      // Final safety cap for free users
+      if (!isPro && finalImageUrls.length > limits.maxImages) {
+        finalImageUrls = finalImageUrls.slice(0, limits.maxImages);
       }
 
       // 2. Clean Amenities (remove false)

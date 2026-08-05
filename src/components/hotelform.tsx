@@ -251,13 +251,25 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
         throw new Error("Please add at least one hotel photo.");
       }
 
+      // STRICT FREE PLAN ENFORCEMENT: Enforce max 1 image before upload loop
+      let allowedNewImages = newImages;
+      if (!isPro) {
+        const remainingSlots = Math.max(0, 1 - existingImages.length);
+        allowedNewImages = newImages.slice(0, remainingSlots);
+      }
+
       // Upload new image files directly to Firebase Storage
       let finalImageUrls = [...existingImages];
-      for (const img of newImages) {
+      for (const img of allowedNewImages) {
         const fileRef = ref(storage, `hotel_images/${Date.now()}_${img.file.name.replace(/[^a-zA-Z0-9.]/g, '')}`);
         await uploadBytes(fileRef, img.file);
         const downloadUrl = await getDownloadURL(fileRef);
         finalImageUrls.push(downloadUrl);
+      }
+
+      // Final safety cap for free users
+      if (!isPro && finalImageUrls.length > 1) {
+        finalImageUrls = finalImageUrls.slice(0, 1);
       }
 
       const cleanedAmenities = Object.fromEntries(

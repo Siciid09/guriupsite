@@ -542,6 +542,18 @@ function PropertyCard({ property, isFeatured = false, compact = false }: { prope
     }
   }, [showCounter]);
 
+  // AUTO-SLIDER LOGIC
+  useEffect(() => {
+    if (images.length > 1) {
+      // Add a slight random offset so the cards don't all flip at the exact same millisecond
+      const randomOffset = Math.floor(Math.random() * 2000);
+      const timer = setInterval(() => {
+        setImgIdx((prev) => (prev + 1) % images.length);
+      }, 4000 + randomOffset);
+      return () => clearInterval(timer);
+    }
+  }, [images.length]);
+
   const formatPrice = (price: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(price);
   const isVerified = property.agentVerified || property.agentPlanTier === 'pro' || property.agentPlanTier === 'premium';
   const displayPrice = (property.hasDiscount && (property.discountPrice || 0) > 0) ? property.discountPrice : property.price;
