@@ -19,6 +19,8 @@ interface Hotel {
   _id?: string;
   id: string;
   slug?: string;
+  hotelAdminId?: string;
+  ownerId?: string;
   name: string;
   description: string;
   pricePerNight: number;
@@ -134,23 +136,23 @@ export default function HotelDetailPage() {
   useEffect(() => {
     if (hotel && !hasTrackedView.current) {
       hasTrackedView.current = true;
-      const hotelId = hotel.id || hotel._id;
+      const hotelId = hotel._id || hotel.id;
       fetch('/api/analytics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'view_hotel', hotelId, platform: 'web' })
+        body: JSON.stringify({ eventType: 'view_hotel', hotelId, platform: 'web' }) // 🛡️ FIX: Changed 'type' to 'eventType'
       }).catch(console.error);
     }
   }, [hotel]);
 
   // ✅ ANALYTICS: Track Clicks via API
-  const trackClick = (type: string) => {
+  const trackClick = (eventType: string) => {
     if (!hotel) return;
-    const hotelId = hotel.id || hotel._id;
+    const hotelId = hotel._id || hotel.id;
     fetch('/api/analytics', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, hotelId, platform: 'web' })
+      body: JSON.stringify({ eventType, hotelId, platform: 'web' }) // 🛡️ FIX: Changed 'type' to 'eventType'
     }).catch(console.error);
   };
 
@@ -209,7 +211,9 @@ export default function HotelDetailPage() {
 
           if (roomsRes.ok) {
             const rData = await roomsRes.json();
-            setRooms(Array.isArray(rData) ? rData : (rData.rooms || rData.data || []));
+            const fetchedRooms = Array.isArray(rData) ? rData : (rData.rooms || rData.data || []);
+            // 🛡️ CRITICAL FIX: Only show Live/Available rooms to the public
+            setRooms(fetchedRooms.filter((r: any) => r.status !== 'draft' && r.status !== 'Hidden'));
           }
           if (reviewsRes.ok) {
             const revData = await reviewsRes.json();
@@ -362,7 +366,7 @@ export default function HotelDetailPage() {
           {/* --- LEFT SIDE: GALLERY (65%) --- */}
           <div className="w-full lg:w-[65%] space-y-4">
             <div className="relative h-[300px] md:h-[500px] w-full rounded-[2.5rem] overflow-hidden group bg-slate-900 shadow-2xl">
-              <Image src={hotel.images?.[currentImg] || '/placeholder.jpg'} alt={hotel.name} fill className="object-cover transition-transform duration-700 group-hover:scale-105" priority />
+              <Image src={hotel.images?.[currentImg] && hotel.images[currentImg].trim() !== '' ? hotel.images[currentImg] : '/placeholder.jpg'} alt={hotel.name} fill className="object-cover transition-transform duration-700 group-hover:scale-105" priority />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60"></div>
               <button onClick={() => router.back()} className="absolute top-6 left-6 p-3 bg-white/10 backdrop-blur-md rounded-full text-white hover:bg-white hover:text-black transition-all border border-white/10 z-20">
                 <ChevronLeft size={20} />
@@ -385,7 +389,7 @@ export default function HotelDetailPage() {
             <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
               {(hotel.images || []).slice(0, 8).map((img, idx) => (
                 <div key={idx} onClick={() => idx === 7 ? setShowGalleryModal(true) : setCurrentImg(idx)} className={`relative aspect-square rounded-2xl overflow-hidden cursor-pointer transition-all ${currentImg === idx ? 'ring-2 ring-[#0065eb] ring-offset-2' : 'hover:opacity-80'}`}>
-                  <Image src={img || '/placeholder.jpg'} alt="" fill className="object-cover" />
+                  <Image src={img && img.trim() !== '' ? img : '/placeholder.jpg'} alt="" fill className="object-cover" />
                   {idx === 7 && (hotel.images?.length || 0) > 8 && (
                     <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white font-black text-sm">
                       +{(hotel.images?.length || 0) - 7}
@@ -483,7 +487,7 @@ export default function HotelDetailPage() {
                     return (
                       <div key={roomId} onClick={() => { setBookingData(prev => ({...prev, roomId: roomId as string})); setShowBookingModal(true); }} className="group border border-slate-100 rounded-2xl p-3 hover:border-[#0065eb] transition-all cursor-pointer flex gap-3">
                         <div className="w-20 h-20 bg-slate-200 rounded-xl overflow-hidden relative shrink-0">
-                          <Image src={room.images?.[0] || hotel.images?.[0] || '/placeholder.jpg'} alt="" fill className="object-cover" />
+                          <Image src={(room.images?.[0] && room.images[0].trim() !== '') ? room.images[0] : (hotel.images?.[0] && hotel.images[0].trim() !== '' ? hotel.images[0] : '/placeholder.jpg')} alt="" fill className="object-cover" />
                         </div>
                         <div className="flex-1 flex flex-col justify-center">
                           <h4 className="font-bold text-slate-900 text-sm">{rName}</h4>
@@ -514,7 +518,7 @@ export default function HotelDetailPage() {
                       <div key={restId} className="space-y-4 border-b border-slate-100 pb-8 last:border-none">
                         {/* Banner Card */}
                         <div className="relative h-[200px] w-full rounded-2xl overflow-hidden shadow-md">
-                          <Image src={heroImg} alt={rest.name} fill className="object-cover" />
+                          <Image src={heroImg && heroImg.trim() !== '' ? heroImg : '/placeholder.jpg'} alt={rest.name} fill className="object-cover" />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
                           <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end">
                             <div>
@@ -540,7 +544,7 @@ export default function HotelDetailPage() {
                               <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100 hover:border-blue-200 transition-all">
                                 <div className="flex items-center gap-3">
                                   <div className="w-16 h-16 rounded-xl bg-slate-200 overflow-hidden relative shrink-0">
-                                    <Image src={item.imageUrl || heroImg} alt={item.name} fill className="object-cover" />
+                                    <Image src={(item.imageUrl && item.imageUrl.trim() !== '') ? item.imageUrl : (heroImg && heroImg.trim() !== '' ? heroImg : '/placeholder.jpg')} alt={item.name} fill className="object-cover" />
                                   </div>
                                   <div>
                                     <h5 className="font-bold text-slate-900 text-sm">{item.name}</h5>
@@ -587,7 +591,7 @@ export default function HotelDetailPage() {
                 <div className="grid grid-cols-3 gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
                   {(hotel.images || []).map((img, i) => (
                     <div key={i} className="relative aspect-square rounded-xl overflow-hidden bg-slate-200">
-                      <Image src={img || '/placeholder.jpg'} alt="" fill className="object-cover" />
+                      <Image src={img && img.trim() !== '' ? img : '/placeholder.jpg'} alt="" fill className="object-cover" />
                     </div>
                   ))}
                 </div>
@@ -649,7 +653,7 @@ export default function HotelDetailPage() {
           <div className="w-full lg:w-[65%] relative rounded-[2.5rem] overflow-hidden bg-[#0a0c10] min-h-[400px] flex items-center p-8 lg:p-12 order-1">
             <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-[#0065eb]/20 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/3"></div>
             <div className="absolute bottom-0 left-0 w-[200px] h-[200px] bg-purple-600/20 rounded-full blur-[80px] translate-y-1/3 -translate-x-1/4"></div>
-            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 brightness-100 contrast-150 mix-blend-overlay"></div>
+            <div className="absolute inset-0 bg-black opacity-20 mix-blend-overlay"></div>
             <div className="relative z-10 w-full grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
               <div>
                 <span className="inline-block px-3 py-1 rounded-full bg-white/10 border border-white/10 text-blue-400 text-[9px] font-black uppercase tracking-widest mb-4 w-fit backdrop-blur-md">GuriUp Ecosystem</span>
@@ -695,7 +699,7 @@ export default function HotelDetailPage() {
                 return (
                   <Link key={simId} href={`/hotels/${sim.slug || simId}`} className="flex items-center gap-4 p-3 hover:bg-slate-50 rounded-3xl transition-colors group border border-transparent hover:border-slate-100">
                     <div className="w-16 h-16 rounded-2xl bg-slate-200 overflow-hidden relative shrink-0">
-                      <Image src={sim.images?.[0] || '/placeholder.jpg'} alt="" fill className="object-cover" />
+                      <Image src={(sim.images?.[0] && sim.images[0].trim() !== '') ? sim.images[0] : '/placeholder.jpg'} alt="" fill className="object-cover" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <h5 className="font-bold text-slate-900 text-sm truncate group-hover:text-[#0065eb] transition-colors">{sim.name}</h5>
@@ -798,7 +802,7 @@ export default function HotelDetailPage() {
             <div className="p-8 overflow-y-auto custom-scrollbar space-y-6">
               <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl">
                 <div className="w-20 h-20 rounded-xl bg-slate-200 overflow-hidden relative shrink-0">
-                  <Image src={selectedFood.item.imageUrl || hotel.images?.[0] || '/placeholder.jpg'} alt="" fill className="object-cover" />
+                  <Image src={(selectedFood.item.imageUrl && selectedFood.item.imageUrl.trim() !== '') ? selectedFood.item.imageUrl : (hotel.images?.[0] && hotel.images[0].trim() !== '' ? hotel.images[0] : '/placeholder.jpg')} alt="" fill className="object-cover" />
                 </div>
                 <div>
                   <h4 className="font-bold text-slate-900 text-base">{selectedFood.item.name}</h4>
@@ -895,7 +899,14 @@ export default function HotelDetailPage() {
       )}
 
       {isChatOpen && (
-        <SharedChatComponent isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} recipientId={hotel._id || hotel.id} recipientName={hotel.name} />
+        <SharedChatComponent 
+          isOpen={isChatOpen} 
+          onClose={() => setIsChatOpen(false)} 
+          recipientId={hotel.hotelAdminId || hotel.ownerId || hotel._id || hotel.id || ''} 
+          recipientName={hotel.name} 
+          propertyId={hotel.id || hotel._id || ''} 
+          propertyTitle={hotel.name} 
+        />
       )}
     </div>
   );

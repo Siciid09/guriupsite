@@ -99,7 +99,7 @@ export async function POST(request: Request) {
     if (entity === 'menu_item') {
       const { data, error } = await supabaseAdmin
         .from('menu_items')
-        .insert([{ ...dataPayload, hotelId, isAvailable: dataPayload.isAvailable ?? true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }])
+        .insert([{ ...dataPayload, _id: crypto.randomUUID(), hotelId, isAvailable: dataPayload.isAvailable ?? true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }])
         .select()
         .single();
       if (error) throw error;
@@ -108,7 +108,7 @@ export async function POST(request: Request) {
 
     const { data, error } = await supabaseAdmin
       .from('restaurants')
-      .insert([{ ...dataPayload, hotelId, status: dataPayload.status || 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }])
+      .insert([{ ...dataPayload, _id: crypto.randomUUID(), hotelId, status: dataPayload.status || 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }])
       .select()
       .single();
     if (error) throw error;

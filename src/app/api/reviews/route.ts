@@ -14,6 +14,32 @@ async function verifyAuth(request: Request) {
   }
 }
 
+// GET: Fetch Reviews (Public)
+export async function GET(request: Request) {
+  try {
+    if (!supabaseAdmin) return NextResponse.json({ error: 'Server error: Admin client missing.' }, { status: 500 });
+    const { searchParams } = new URL(request.url);
+    const hotelId = searchParams.get('hotelId');
+    
+    let query = supabaseAdmin.from('hotel_reviews').select('*');
+    if (hotelId && hotelId !== 'undefined') {
+      query = query.eq('hotelId', hotelId);
+    }
+    
+    const { data, error } = await query.order('createdAt', { ascending: false });
+    
+    // Fallback to standard reviews table if hotel_reviews fails
+    if (error) {
+       const fallback = await supabaseAdmin.from('reviews').select('*').eq('targetId', hotelId || '').order('createdAt', { ascending: false });
+       return NextResponse.json(fallback.data || []);
+    }
+    
+    return NextResponse.json(data || []);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
 // POST: Create Review (Requires Auth)
 export async function POST(request: Request) {
   try {

@@ -22,60 +22,52 @@ const Icons = {
     <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
       <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
     </svg>
-  ),
-
-  // --- OFFICIAL APPLE ICON (Bitten Apple) ---
-  AppleLogo: () => (
-    <svg viewBox="0 0 384 512" fill="white" className="w-6 h-6">
-       <path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-53.7-88-50.3-30.2 2.5-57.7 24.6-76.7 24.6-23.6 0-50.7-23.8-74.6-24.1-61.7.5-102 49.5-102 115.5 0 62.6 17 143.3 61.3 206.2 27.5 38.6 52.8 54.3 79.5 54.3 22.3 0 53-15.3 87.7-15.3 32.7 0 56.1 15.3 87.1 15.3 30.6 0 54.8-28.7 81.6-66 14.7-20.7 27.9-46.1 37-65.2-46.7-24.3-70.3-72.9-70.3-109.8zM242.1 123.4c21.2-30.6 15.1-66.2 14.5-69.7-27.5 2.5-61.9 19.3-80.3 54.3-13.6 25.6-11.3 58.7-11.3 58.7 30 2 63.8-16.1 77.1-43.3z" />
-    </svg>
   )
 };
 
 const Footer = () => {
   return (
-    // Moved content UP (-translate-y-16)
-    <footer className="bg-white pt-16 pb-12 px-6 border-t border-gray-100 -translate-y-16 relative z-10">
+    <footer className="bg-white pt-20 pb-10 px-6 mt-10 rounded-t-[3rem] shadow-[0_-15px_40px_-15px_rgba(0,0,0,0.05)] border-t border-slate-100 relative z-10 font-sans">
       
-      <div className="max-w-[1600px] mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 mb-14">
+      <div className="max-w-[1400px] mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 mb-16">
           
-          {/* BRAND COLUMN */}
+          {/* ================= BRAND COLUMN ================= */}
           <div className="lg:col-span-4 flex flex-col items-start">
-            <div className="flex items-center gap-3 mb-5">
+            <div className="flex items-center gap-3 mb-6">
               <img
                 src="/android-chrome-512x512.png"
                 alt="GuriUp Logo"
-                className="h-10 w-auto"
+                className="h-12 w-auto"
               />
-              <span className="text-2xl font-black text-slate-900 tracking-tight">
+              <span className="text-3xl font-black text-slate-900 tracking-tight">
                 GuriUp.
               </span>
             </div>
 
-            <p className="text-gray-500 text-sm leading-relaxed mb-7 max-w-sm font-medium">
+            <p className="text-slate-500 text-sm leading-relaxed mb-8 max-w-sm font-medium">
               The Horn of Africa’s premier digital real estate and hospitality ecosystem. We
               connect people with places through a seamless, secure, and trusted
               platform—making it easier to discover, book, buy, and invest with confidence.
             </p>
 
-            <div className="flex gap-4">
-              <a href="#" className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-[#1877F2] hover:text-white transition-all duration-300">
+            <div className="flex gap-3">
+              <a href="#" className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 hover:bg-[#1877F2] hover:text-white hover:-translate-y-1 hover:shadow-lg hover:shadow-blue-500/20 transition-all duration-300">
                 <Icons.Facebook />
               </a>
-              <a href="#" className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-black hover:text-white transition-all duration-300">
+              <a href="#" className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 hover:bg-black hover:text-white hover:-translate-y-1 hover:shadow-lg transition-all duration-300">
                 <Icons.Twitter />
               </a>
-              <a href="#" className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-[#E1306C] hover:text-white transition-all duration-300">
+              <a href="#" className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 hover:bg-[#E1306C] hover:text-white hover:-translate-y-1 hover:shadow-lg hover:shadow-pink-500/20 transition-all duration-300">
                 <Icons.Instagram />
               </a>
-              <a href="#" className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-[#0077B5] hover:text-white transition-all duration-300">
+              <a href="#" className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 hover:bg-[#0077B5] hover:text-white hover:-translate-y-1 hover:shadow-lg hover:shadow-blue-500/20 transition-all duration-300">
                 <Icons.Linkedin />
               </a>
             </div>
           </div>
 
-          {/* LINKS COLUMNS */}
+          {/* ================= LINKS COLUMNS ================= */}
           <div className="lg:col-span-2">
             <h4 className="font-black text-slate-900 mb-6 uppercase tracking-widest text-xs">
               Company
@@ -83,7 +75,7 @@ const Footer = () => {
             <ul className="space-y-4">
               {["About Us", "Careers", "Our Team", "Blog", "Press"].map((item) => (
                 <li key={item}>
-                  <Link href="#" className="text-gray-500 font-bold text-sm hover:text-[#0065eb] transition-colors inline-block hover:translate-x-1 duration-200">
+                  <Link href="#" className="text-slate-500 font-bold text-sm hover:text-[#0065eb] transition-colors inline-block hover:translate-x-1.5 duration-300">
                     {item}
                   </Link>
                 </li>
@@ -98,7 +90,7 @@ const Footer = () => {
             <ul className="space-y-4">
               {["Properties", "Hotels", "Agents", "Locations", "Map View"].map((item) => (
                 <li key={item}>
-                  <Link href="#" className="text-gray-500 font-bold text-sm hover:text-[#0065eb] transition-colors inline-block hover:translate-x-1 duration-200">
+                  <Link href="#" className="text-slate-500 font-bold text-sm hover:text-[#0065eb] transition-colors inline-block hover:translate-x-1.5 duration-300">
                     {item}
                   </Link>
                 </li>
@@ -113,7 +105,7 @@ const Footer = () => {
             <ul className="space-y-4">
               {["Help Center", "Terms of Service", "Privacy Policy", "Cookie Policy", "Contact Us"].map((item) => (
                 <li key={item}>
-                  <Link href="#" className="text-gray-500 font-bold text-sm hover:text-[#0065eb] transition-colors inline-block hover:translate-x-1 duration-200">
+                  <Link href="#" className="text-slate-500 font-bold text-sm hover:text-[#0065eb] transition-colors inline-block hover:translate-x-1.5 duration-300">
                     {item}
                   </Link>
                 </li>
@@ -121,46 +113,47 @@ const Footer = () => {
             </ul>
           </div>
 
-          {/* APP DOWNLOAD */}
+          {/* ================= APP DOWNLOAD ================= */}
           <div className="lg:col-span-2">
             <h4 className="font-black text-slate-900 mb-6 uppercase tracking-widest text-xs">
               Get the App
             </h4>
 
-            {/* 1. MOVED LEFT: Added -translate-x-4
-               2. SMALLER SIZE: w-[160px] h-[52px]
-               3. REAL APPLE ICON
-            */}
-            <div className="flex flex-col gap-3 -translate-x-4">
+            <div className="flex flex-col gap-4">
               
-              {/* App Store Button */}
+              {/* Modern App Store Button with Required Image Link */}
               <a
                 href="https://apps.hiigsitech.com/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-[160px] h-[50px] bg-black rounded-xl flex items-center justify-start px-3 gap-3 hover:opacity-80 transition-opacity"
+                className="w-[170px] h-[54px] bg-slate-900 rounded-2xl flex items-center justify-center px-4 gap-3 hover:bg-black hover:scale-105 hover:shadow-xl hover:shadow-slate-900/20 transition-all duration-300 group border border-slate-800"
               >
-                <div className="pb-1"><Icons.AppleLogo /></div>
+                <img 
+                   src="https://static.vecteezy.com/system/resources/thumbnails/070/730/255/small/computer-logo-white-phone-icon-in-transparent-background-free-png.png" 
+                   alt="Apple Store" 
+                   className="w-7 h-7 object-contain group-hover:-translate-y-0.5 transition-transform" 
+                />
                 <div className="flex flex-col items-start leading-none">
-                   <span className="text-[9px] text-white font-medium">Download on the</span>
-                   <span className="text-[15px] text-white font-bold tracking-wide">App Store</span>
+                   <span className="text-[10px] text-slate-300 font-medium tracking-wide">Download on the</span>
+                   <span className="text-[16px] text-white font-bold tracking-tight mt-0.5">App Store</span>
                 </div>
               </a>
 
-              {/* Google Play Button */}
+              {/* Modern Google Play Button with Required Local Image Link */}
               <a
                 href="https://apps.hiigsitech.com/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-[160px] h-[50px] bg-black rounded-xl flex items-center justify-start px-3 gap-3 hover:opacity-80 transition-opacity"
+                className="w-[170px] h-[54px] bg-slate-900 rounded-2xl flex items-center justify-center px-4 gap-3 hover:bg-black hover:scale-105 hover:shadow-xl hover:shadow-slate-900/20 transition-all duration-300 group border border-slate-800"
               >
-                {/* Custom Play Store Shape */}
-                <svg className="w-7 h-7" viewBox="0 0 24 24">
-                   <path fill="#FFFFFF" d="M3,20.5V3.5C3,2.91 3.34,2.39 3.84,2.15L13.69,12L3.84,21.85C3.34,21.6 3,21.09 3,20.5M16.81,15.12L6.05,21.34L14.54,12.85L16.81,15.12M20.16,10.81C20.5,11.08 20.75,11.5 20.75,12C20.75,12.5 20.53,12.92 20.16,13.19L17.89,14.5L15.39,12L17.89,9.5L20.16,10.81M6.05,2.66L16.81,8.88L14.54,11.15L6.05,2.66Z" />
-                </svg>
+                <img 
+                   src="/images/play.png" 
+                   alt="Google Play" 
+                   className="w-6 h-6 object-contain group-hover:-translate-y-0.5 transition-transform" 
+                />
                 <div className="flex flex-col items-start leading-none">
-                   <span className="text-[9px] text-white font-medium uppercase">Get it on</span>
-                   <span className="text-[15px] text-white font-bold tracking-wide">Google Play</span>
+                   <span className="text-[10px] text-slate-300 font-medium uppercase tracking-wide">Get it on</span>
+                   <span className="text-[16px] text-white font-bold tracking-tight mt-0.5">Google Play</span>
                 </div>
               </a>
 
@@ -168,9 +161,9 @@ const Footer = () => {
           </div>
         </div>
 
-        {/* BOTTOM BAR */}
-        <div className="border-t border-gray-100 pt-7 flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-gray-400 font-bold text-xs">
+        {/* ================= BOTTOM BAR ================= */}
+        <div className="border-t border-slate-100 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
+          <p className="text-slate-400 font-bold text-xs tracking-wide">
             © 2026 GuriUp Inc. All rights reserved.
           </p>
 
@@ -178,7 +171,7 @@ const Footer = () => {
             href="https://hiigsitech.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs font-bold text-gray-500 hover:text-[#0065eb] transition-colors cursor-pointer"
+            className="text-xs font-bold text-slate-400 hover:text-[#0065eb] transition-colors cursor-pointer tracking-wide"
           >
             Developed by HiigsiTech
           </a>

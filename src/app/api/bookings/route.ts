@@ -149,6 +149,9 @@ export async function POST(request: Request) {
       payload.userId = uid || payload.userId || 'guest'; 
     }
     
+    payload._id = crypto.randomUUID(); // 🛡️ CRITICAL FIX: Satisfy NOT NULL constraint
+    delete payload.id; // Prevent Supabase conflicts
+
     payload.status = payload.status || 'pending';
     payload.createdAt = new Date().toISOString();
     payload.updatedAt = new Date().toISOString();

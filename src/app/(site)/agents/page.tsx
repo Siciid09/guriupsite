@@ -1,24 +1,24 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { useAuth } from '@/hooks/useAuth'; // Ensure you have this hook
-import { button } from 'framer-motion/client';
+import { motion, AnimatePresence } from 'framer-motion';
+import type { Variants } from 'framer-motion';
+import { useAuth } from '@/hooks/useAuth';
+import LocationSelectorModal, { LocationResult } from '@/components/LocationSelectorModal';
+import { 
+  Search, MapPin, Filter, X, ChevronDown, CheckCircle2, 
+  Phone, MessageCircle, Briefcase, Star, Award, SlidersHorizontal, 
+  ShieldCheck
+} from 'lucide-react';
 
-// --- ICONS ---
+// --- CUSTOM BRAND ICONS ---
 const Icons = {
   Verified: () => <svg className="w-3 h-3 text-white fill-current" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" /></svg>,
-  Search: () => <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>,
-  Phone: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>,
   Whatsapp: () => <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.588-5.946 0-6.556 5.332-11.891 11.891-11.891 3.181 0 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.481 8.403 0 6.556-5.332 11.891-11.891 11.891-2.003 0-3.976-.505-5.717-1.46l-6.276 1.678zm6.29-4.15l.349.21c1.47.882 3.167 1.347 4.914 1.347 5.176 0 9.39-4.214 9.39-9.39 0-2.505-.974-4.86-2.744-6.628-1.77-1.77-4.122-2.744-6.628-2.744-5.176 0-9.39 4.214-9.39 9.39 0 1.83.533 3.613 1.54 5.143l.235.357-1.01 3.687 3.744-.982z" /></svg>,
-  Lock: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>,
-  Location: () => <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
-  Star: () => <svg className="w-3 h-3 text-amber-400 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>,
-  StarFilled: () => <svg className="w-3 h-3 text-white fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>,
   Rocket: () => <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>,
   Loader: () => <svg className="animate-spin h-5 w-5 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>,
-  Briefcase: () => <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>,
   Upgrade: () => <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
 };
 
@@ -39,27 +39,58 @@ interface Agent {
   location: string;
 }
 
-const ITEMS_PER_PAGE = 22; 
+const ITEMS_PER_PAGE = 24; 
 
-const AgentsPage = () => {
+// --- ANIMATION VARIANTS ---
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.05 } }
+};
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 30, scale: 0.95 },
+  show: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring' as any, stiffness: 100, damping: 15 } }
+};
+
+export default function AgentsPage() {
   const router = useRouter();
-  const { user } = useAuth(); // Assuming your auth hook provides the logged-in user object
+  const { user } = useAuth(); 
   
   // --- STATE ---
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [offset, setOffset] = useState(0); // Swapped lastVisible for offset logic
+  const [offset, setOffset] = useState(0); 
   const [hasMore, setHasMore] = useState(true);
   
+  // Advanced Filter State
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedLocation, setSelectedLocation] = useState<LocationResult | null>(null);
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [selectedSpecialty, setSelectedSpecialty] = useState<string>('All');
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
+  
   const [showRestrictedModal, setShowRestrictedModal] = useState(false);
+  const [isSpecialtyDropdownOpen, setIsSpecialtyDropdownOpen] = useState(false);
   
   // Current Agent State for Hero Button
   const [currentAgentProfile, setCurrentAgentProfile] = useState<Agent | null>(null);
   const [checkingAgentStatus, setCheckingAgentStatus] = useState(false);
+  const specialtyRef = useRef<HTMLDivElement>(null);
 
-  // --- 1. FETCH AGENTS LOGIC (VIA API) ---
+  const ALL_SPECIALTIES = ['All', 'Residential', 'Commercial', 'Luxury', 'Land', 'Rentals', 'Investments'];
+
+  // Handle outside click for dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (specialtyRef.current && !specialtyRef.current.contains(event.target as Node)) {
+        setIsSpecialtyDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // --- 1. FETCH AGENTS LOGIC ---
   const fetchAgents = async (isInitial = true) => {
     try {
       if (isInitial) {
@@ -70,13 +101,9 @@ const AgentsPage = () => {
       }
       
       const currentOffset = isInitial ? 0 : offset;
-      
-      // Fetch directly from our new normalized Supabase API route
       const res = await fetch(`/api/agents?limit=${ITEMS_PER_PAGE}&offset=${currentOffset}`);
       
-      if (!res.ok) {
-        throw new Error('Failed to fetch agents');
-      }
+      if (!res.ok) throw new Error('Failed to fetch agents');
 
       const data = await res.json();
       
@@ -85,8 +112,6 @@ const AgentsPage = () => {
       } else {
         setAgents(prev => {
           const combined = [...prev, ...(data.agents || [])];
-          // Keep the sorting logic on the client side just to be absolutely sure 
-          // the highest listings remain on top when appending new pages.
           return combined.sort((a, b) => b.totalListings - a.totalListings);
         });
       }
@@ -106,312 +131,401 @@ const AgentsPage = () => {
     fetchAgents(true);
   }, []);
 
-  // --- 2. CHECK CURRENT USER AGENT STATUS (VIA API) ---
+  // --- 2. CHECK CURRENT USER AGENT STATUS ---
   useEffect(() => {
     const checkStatus = async () => {
       if (!user?.uid) {
         setCurrentAgentProfile(null);
         return;
       }
-      
       setCheckingAgentStatus(true);
       try {
-        // Query the API using the user's ID
         const res = await fetch(`/api/agents?id=${user.uid}`);
-        
         if (res.ok) {
            const data = await res.json();
            setCurrentAgentProfile(data as Agent);
         } else {
-           setCurrentAgentProfile(null); // User exists but is NOT an agent
+           setCurrentAgentProfile(null);
         }
       } catch (e) {
-        console.error("Error checking agent status", e);
         setCurrentAgentProfile(null);
       } finally {
         setCheckingAgentStatus(false);
       }
     };
-    
     checkStatus();
   }, [user]);
 
+  // --- 3. SUPER ADVANCED FILTERING LOGIC ---
+  const filteredAgents = useMemo(() => {
+    return agents.filter(agent => {
+      // 1. Omnisearch (Name, Agency, Phone, Location, Specialties)
+      let matchesSearch = true;
+      if (searchTerm.trim() !== '') {
+        const q = searchTerm.toLowerCase().trim();
+        matchesSearch = 
+          (agent.name && agent.name.toLowerCase().includes(q)) ||
+          (agent.agencyName && agent.agencyName.toLowerCase().includes(q)) ||
+          (agent.phone && agent.phone.includes(q)) ||
+          (agent.location && agent.location.toLowerCase().includes(q)) ||
+          (agent.specialties && agent.specialties.some(s => s.toLowerCase().includes(q)));
+      }
 
-  const filteredAgents = agents.filter(agent => 
-    agent.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    agent.agencyName.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+      // 2. Strict Location Filter (From Modal)
+      let matchesLocation = true;
+      if (selectedLocation?.city) {
+        const targetCity = selectedLocation.city.toLowerCase();
+        const targetDistrict = selectedLocation.district?.toLowerCase();
+        const agentLoc = agent.location?.toLowerCase() || '';
+        
+        matchesLocation = agentLoc.includes(targetCity);
+        if (matchesLocation && targetDistrict) {
+          matchesLocation = agentLoc.includes(targetDistrict);
+        }
+      }
 
- const handleContactClick = (e: React.MouseEvent, agent: Agent, type: 'call' | 'whatsapp') => {
+      // 3. Specialty Dropdown Filter
+      let matchesSpecialty = true;
+      if (selectedSpecialty !== 'All') {
+        matchesSpecialty = agent.specialties?.includes(selectedSpecialty) || false;
+      }
+
+      // 4. Verified Only Toggle
+      let matchesVerified = true;
+      if (verifiedOnly) {
+        matchesVerified = agent.isVerified === true;
+      }
+
+      return matchesSearch && matchesLocation && matchesSpecialty && matchesVerified;
+    });
+  }, [agents, searchTerm, selectedLocation, selectedSpecialty, verifiedOnly]);
+
+  // --- CONTACT LOGIC ---
+  const handleContactClick = (e: React.MouseEvent, agent: Agent, type: 'call' | 'whatsapp') => {
     e.stopPropagation(); 
     e.preventDefault();
 
-    // SILENT INTERCEPT: Verified uses their number, Free uses your custom number
-    const targetPhone = agent.isVerified && agent.phone ? agent.phone : '+252653227084';
+    if (!agent.isVerified) {
+      setShowRestrictedModal(true);
+      return;
+    }
 
+    const targetPhone = agent.phone || '+252653227084';
     if (type === 'call') {
       window.open(`tel:${targetPhone}`);
     } else {
-      const cleanPhone = targetPhone.replace(/[^0-9]/g, '');
+      let cleanPhone = targetPhone.replace(/[^0-9]/g, '');
+      if (cleanPhone.startsWith('63') && cleanPhone.length === 9) cleanPhone = '252' + cleanPhone;
       window.open(`https://wa.me/${cleanPhone}`, '_blank');
     }
   };
 
-  // --- HERO BUTTON RENDERER ---
+  // --- HERO BUTTON ---
   const renderHeroButton = () => {
-    if (checkingAgentStatus) {
-      return (
-        <button disabled className="bg-white/20 text-white px-8 py-4 rounded-xl font-bold flex items-center gap-2">
-           <Icons.Loader /> Checking Status...
-        </button>
-      );
-    }
-
-    // 1. Not Logged In -> Register Now
-    if (!user) {
-      return (
-        <a 
-          href="https://guriup.hiigsitech.com/signup?role=reagent" 
-          target="_blank"
-          rel="noopener noreferrer"
-          className="bg-white text-[#0065eb] px-8 py-4 rounded-xl font-black text-sm hover:bg-blue-50 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-0.5 flex items-center gap-2"
-        >
-          <Icons.Rocket />
-          Register Now
-        </a>
-      );
-    }
-
-    // 2. Logged In BUT Not an Agent (Or Free Agent) -> Upgrade
+    if (checkingAgentStatus) return <button disabled className="bg-white/20 text-white px-8 py-4 rounded-full font-bold flex items-center gap-2 backdrop-blur-md"><Icons.Loader /> Checking...</button>;
+    if (!user) return <a href="https://guriup.hiigsitech.com/signup?role=reagent" target="_blank" rel="noopener noreferrer" className="bg-white text-[#0065eb] px-8 py-4 rounded-full font-black text-sm hover:bg-blue-50 transition-all shadow-2xl hover:-translate-y-1 flex items-center gap-2"><Icons.Rocket /> Register Now</a>;
     const isPro = currentAgentProfile && ['pro', 'premium'].includes(currentAgentProfile.planTier);
-    
-    if (!isPro) {
-       return (
-         <button 
-            // Changed this to point to your new pricing/subscription page!
-            onClick={() => router.push('/pricing')} 
-            className="bg-gradient-to-r from-amber-400 to-amber-500 text-white px-8 py-4 rounded-xl font-black text-sm hover:shadow-2xl hover:-translate-y-0.5 transition-all flex items-center gap-2 shadow-lg shadow-amber-500/30"
-         >
-           <Icons.Upgrade />
-           Upgrade to Premium
-         </button>
-       );
-    }
+    if (!isPro) return <button onClick={() => router.push('/pricing')} className="bg-gradient-to-r from-amber-400 to-amber-500 text-amber-950 px-8 py-4 rounded-full font-black text-sm hover:shadow-2xl hover:-translate-y-1 transition-all flex items-center gap-2 shadow-lg shadow-amber-500/30"><Icons.Upgrade /> Upgrade to Pro</button>;
+    return <button onClick={() => router.push('/dashboard/agent')} className="bg-white text-slate-900 px-8 py-4 rounded-full font-black text-sm hover:bg-slate-50 transition-all shadow-2xl hover:-translate-y-1 flex items-center gap-2"><Briefcase size={18} /> Manage Profile</button>;
+  };
 
-    // 3. Logged In AND Pro Agent -> Manage Agent
-    return (
-       <button 
-          onClick={() => router.push('/dashboard/agent')}
-          className="bg-white text-slate-900 px-8 py-4 rounded-xl font-black text-sm hover:bg-slate-50 transition-all shadow-xl hover:-translate-y-0.5 flex items-center gap-2"
-       >
-         <Icons.Briefcase />
-         Manage Your Agent
-       </button>
-    );
+  const handleResetFilters = () => {
+    setSearchTerm('');
+    setSelectedLocation(null);
+    setSelectedSpecialty('All');
+    setVerifiedOnly(false);
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] font-sans text-slate-900 pb-20">
+    <div className="min-h-screen bg-[#FAFBFC] font-sans text-slate-900 pb-24 selection:bg-blue-200">
       
-      {/* ================= HERO WALL ================= */}
-      <div className="relative w-full pt-16 pb-16">
-        <div className="absolute inset-0 z-0">
+      {/* ================= SUPER MODERN HERO WALL ================= */}
+      <section className="relative w-full h-[65vh] min-h-[550px] flex items-center justify-center mb-32">
+        <div className="absolute inset-0 z-0 overflow-hidden rounded-b-[4rem]">
             <Image 
-                src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2000" 
-                alt="Real Estate Background" 
+                src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?q=80&w=2000" 
+                alt="Luxury Real Estate" 
                 fill
-                className="object-cover"
+                className="object-cover scale-105 animate-[slowPan_20s_ease-in-out_infinite_alternate]"
                 priority
             />
-            <div className="absolute inset-0 bg-slate-900/80"></div>
+            <div className="absolute inset-0 bg-gradient-to-b from-slate-900/90 via-slate-900/60 to-slate-900/90 mix-blend-multiply"></div>
         </div>
-        <div className="relative z-10 px-6">
-          <div className="max-w-7xl mx-auto">
-            <div className="bg-gradient-to-r from-[#0065eb]/90 to-[#004bb5]/90 backdrop-blur-md rounded-[24px] p-6 md:p-10 flex flex-col md:flex-row items-center justify-between shadow-2xl shadow-blue-900/30 relative overflow-hidden border border-white/10">
-              <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
-              <div className="relative z-10 flex-1 text-center md:text-left mb-6 md:mb-0">
-                <div className="flex items-center justify-center md:justify-start gap-2 mb-3">
-                  <span className="bg-white/20 backdrop-blur-sm text-white text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest border border-white/20">Join GuriUp</span>
+        
+        <div className="relative z-10 px-6 w-full max-w-[1400px] flex flex-col items-center text-center -mt-16">
+           <span className="bg-white/10 backdrop-blur-md text-blue-200 text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-[0.2em] border border-white/20 mb-6 shadow-2xl">
+             GuriUp Elite Network
+           </span>
+           <h1 className="text-5xl md:text-7xl lg:text-[5.5rem] font-black text-white mb-6 leading-[1.05] tracking-tighter drop-shadow-2xl">
+              Connect with <br/> <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-[#0065eb]">Top Agents.</span>
+           </h1>
+           <p className="text-slate-300 text-sm md:text-lg font-medium max-w-2xl mx-auto mb-10 leading-relaxed">
+              Discover verified real estate professionals ready to help you buy, sell, or rent your perfect property in the Horn of Africa.
+           </p>
+           {renderHeroButton()}
+        </div>
+
+        {/* ================= FLOATING GLASSMORPHISM FILTER BAR ================= */}
+        <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 w-[95%] max-w-[1200px] z-30">
+          <div className="bg-white/90 backdrop-blur-2xl p-3 md:p-4 rounded-[2rem] shadow-[0_30px_60px_-15px_rgba(0,101,235,0.15)] border border-white flex flex-col md:flex-row items-center gap-3">
+             
+             {/* 1. Global Search */}
+             <div className="flex-[1.5] w-full relative group">
+                <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none text-[#0065eb]">
+                   <Search size={20} />
                 </div>
-                <h2 className="text-2xl md:text-4xl font-black text-white mb-3 leading-tight">Grow Your Real Estate Business</h2>
-                <p className="text-blue-100 text-sm md:text-lg font-medium max-w-xl leading-relaxed">
-                  Get listed as a Verified Agent, access advanced analytics, and reach thousands of potential buyers daily.
-                </p>
-              </div>
-              <div className="relative z-10 flex-shrink-0">
-                {renderHeroButton()}
-              </div>
-            </div>
+                <input 
+                  type="text" 
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Name, phone, or agency..." 
+                  className="w-full pl-14 pr-10 py-4 md:py-5 bg-slate-50/50 hover:bg-slate-100/50 border border-slate-100 rounded-[1.5rem] text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all placeholder:text-slate-400"
+                />
+                {searchTerm && (
+                  <button onClick={() => setSearchTerm('')} className="absolute inset-y-0 right-5 flex items-center text-slate-400 hover:text-slate-600">
+                    <X size={16}/>
+                  </button>
+                )}
+             </div>
+
+             <div className="hidden md:block w-[1px] h-12 bg-slate-200"></div>
+
+             {/* 2. Location Modal Trigger */}
+             <div className="flex-1 w-full">
+                <button 
+                  onClick={() => setIsLocationModalOpen(true)}
+                  className="w-full flex items-center justify-between px-5 py-4 md:py-5 bg-slate-50/50 hover:bg-slate-100/50 border border-slate-100 rounded-[1.5rem] transition-all group"
+                >
+                   <div className="flex items-center gap-3 overflow-hidden">
+                      <MapPin size={20} className="text-[#0065eb] shrink-0" />
+                      <div className="flex flex-col items-start text-left truncate">
+                         <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Location</span>
+                         <span className="text-sm font-bold text-slate-900 truncate w-full">
+                           {selectedLocation ? `${selectedLocation.city}${selectedLocation.district ? `, ${selectedLocation.district}` : ''}` : 'Anywhere'}
+                         </span>
+                      </div>
+                   </div>
+                   {selectedLocation ? (
+                     <div onClick={(e) => { e.stopPropagation(); setSelectedLocation(null); }} className="p-1 bg-slate-200 rounded-full hover:bg-slate-300 text-slate-600"><X size={12}/></div>
+                   ) : (
+                     <ChevronDown size={16} className="text-slate-400 group-hover:text-slate-600" />
+                   )}
+                </button>
+             </div>
+
+             <div className="hidden md:block w-[1px] h-12 bg-slate-200"></div>
+
+             {/* 3. Specialty Dropdown */}
+             <div className="flex-1 w-full relative" ref={specialtyRef}>
+                <button 
+                  onClick={() => setIsSpecialtyDropdownOpen(!isSpecialtyDropdownOpen)}
+                  className="w-full flex items-center justify-between px-5 py-4 md:py-5 bg-slate-50/50 hover:bg-slate-100/50 border border-slate-100 rounded-[1.5rem] transition-all group"
+                >
+                   <div className="flex items-center gap-3 overflow-hidden">
+                      <Briefcase size={20} className="text-[#0065eb] shrink-0" />
+                      <div className="flex flex-col items-start text-left truncate">
+                         <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Specialty</span>
+                         <span className="text-sm font-bold text-slate-900 truncate w-full">{selectedSpecialty}</span>
+                      </div>
+                   </div>
+                   <ChevronDown size={16} className="text-slate-400 group-hover:text-slate-600" />
+                </button>
+                
+                {isSpecialtyDropdownOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-3 bg-white rounded-[1.5rem] shadow-2xl p-2 z-[100] border border-slate-100 max-h-60 overflow-y-auto">
+                    {ALL_SPECIALTIES.map(spec => (
+                      <button 
+                        key={spec} 
+                        onClick={() => { setSelectedSpecialty(spec); setIsSpecialtyDropdownOpen(false); }}
+                        className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-colors ${selectedSpecialty === spec ? 'bg-[#0065eb] text-white' : 'hover:bg-slate-50 text-slate-700'}`}
+                      >
+                        {spec}
+                      </button>
+                    ))}
+                  </div>
+                )}
+             </div>
+
+             {/* 4. Verified Toggle & Reset */}
+             <div className="flex items-center justify-between w-full md:w-auto px-2 gap-4">
+                <label className="flex items-center gap-2 cursor-pointer group whitespace-nowrap">
+                   <div className="relative">
+                     <input type="checkbox" className="sr-only" checked={verifiedOnly} onChange={(e) => setVerifiedOnly(e.target.checked)} />
+                     <div className={`block w-12 h-7 rounded-full transition-colors ${verifiedOnly ? 'bg-[#0065eb]' : 'bg-slate-200'}`}></div>
+                     <div className={`absolute left-1 top-1 bg-white w-5 h-5 rounded-full transition-transform ${verifiedOnly ? 'transform translate-x-5 shadow-sm' : ''}`}></div>
+                   </div>
+                   <div className="flex flex-col">
+                     <span className="text-xs font-black text-slate-900">Verified</span>
+                     <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Only</span>
+                   </div>
+                </label>
+                
+                <button onClick={handleResetFilters} className="p-3 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-600 transition-colors" title="Reset Filters">
+                  <Filter size={18} />
+                </button>
+             </div>
+
           </div>
+        </div>
+      </section>
+
+      {/* Location Modal Integrator */}
+      <LocationSelectorModal 
+        isOpen={isLocationModalOpen}
+        onClose={() => setIsLocationModalOpen(false)}
+        onSelect={(res) => setSelectedLocation(res)}
+        lang="en"
+      />
+
+      {/* ================= RESULTS HEADER ================= */}
+      <div className="max-w-[1400px] mx-auto px-6 mb-8 flex justify-between items-end">
+        <div>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Agent Directory</h2>
+          <p className="text-sm font-bold text-slate-500 mt-1">Showing {filteredAgents.length} professionals</p>
         </div>
       </div>
 
-      {/* ================= PAGE HEADER (Elite Agents) ================= */}
-      <div className="bg-white border-b border-slate-100 relative shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            <div className="text-center md:text-left">
-              <h1 className="text-3xl font-black tracking-tight text-slate-900 relative inline-block">
-                Elite Agents
-                <span className="absolute -bottom-2 left-0 w-full h-[6px] bg-[#0065eb] rounded-full"></span>
-              </h1>
-              <p className="text-slate-500 font-medium text-sm mt-3">Connect with verified professionals.</p>
-            </div>
-            
-            <div className="relative w-full md:w-[400px] group">
-              <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-[#0065eb] transition-colors">
-                <Icons.Search />
-              </div>
-              <input 
-                type="text" 
-                placeholder="Search agents by name or agency..." 
-                className="w-full pl-12 pr-5 py-4 bg-white border-2 border-slate-100 shadow-sm rounded-full text-sm font-bold outline-none focus:ring-4 focus:ring-[#0065eb]/10 focus:border-[#0065eb] hover:border-blue-200 transition-all placeholder:text-slate-400"
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ================= AGENT GRID ================= */}
-      <div className="max-w-7xl mx-auto px-6 py-10">
+      {/* ================= AGENT GRID (FRAMER MOTION) ================= */}
+      <div className="max-w-[1400px] mx-auto px-6">
         {loading ? (
-           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-             {[1, 2, 3, 4, 5, 6].map((i) => (
-                 <div key={i} className="bg-white h-[340px] rounded-[32px] shadow-sm border border-slate-100 animate-pulse" />
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+             {[...Array(8)].map((_, i) => (
+                 <div key={i} className="bg-white h-[420px] rounded-[2.5rem] shadow-sm border border-slate-100 animate-pulse" />
              ))}
            </div>
         ) : filteredAgents.length > 0 ? (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+          <motion.div 
+            variants={containerVariants} 
+            initial="hidden" 
+            animate="show" 
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"
+          >
+            <AnimatePresence>
               {filteredAgents.map((agent) => (
-                <div 
-                  key={agent.id} 
+                <motion.div 
+                  key={agent.id}
+                  variants={itemVariants}
+                  layout
                   onClick={() => router.push(`/agents/${agent.slug || agent.id}`)}
-                  className={`group bg-white rounded-[32px] border shadow-sm transition-all duration-500 cursor-pointer overflow-hidden flex flex-col h-full hover:-translate-y-2 hover:scale-[1.02] hover:shadow-[0_20px_40px_-15px_rgba(0,101,235,0.2)]
-                    ${agent.isVerified ? 'border-blue-100/60 hover:border-blue-400/50' : 'border-slate-100 hover:border-slate-300'}
+                  className={`group relative bg-white rounded-[2.5rem] border shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-500 cursor-pointer overflow-hidden flex flex-col h-full hover:-translate-y-2 hover:shadow-[0_30px_60px_-15px_rgba(0,101,235,0.15)]
+                    ${agent.isVerified ? 'border-blue-500/20' : 'border-slate-100'}
                   `}
                 >
                   
-                  {/* --- COVER PHOTO --- */}
-                  <div className="h-32 bg-slate-100 relative overflow-hidden">
-                      {agent.coverPhoto && agent.coverPhoto.startsWith('http') ? (
-                          <Image src={agent.coverPhoto} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="Cover" fill />
-                      ) : (
-                          <div className="w-full h-full bg-gradient-to-r from-slate-200 to-slate-300" />
-                      )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent"></div>
+                  {/* --- TOP BANNER --- */}
+                  <div className="h-36 bg-slate-200 relative overflow-hidden">
+                      <Image 
+                        src={agent.coverPhoto || 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?q=80&w=800'} 
+                        alt="Cover" 
+                        fill 
+                        className="object-cover group-hover:scale-110 transition-transform duration-700" 
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent z-0"></div>
+                      
+                      {/* Location Pill on Cover */}
+                      <div className="absolute top-4 left-4 z-10 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center gap-1.5 border border-white/10 shadow-sm">
+                        <MapPin size={12} className="text-white" />
+                        <span className="text-[10px] font-black text-white uppercase tracking-widest">{agent.location || 'Somalia'}</span>
+                      </div>
                   </div>
 
                   {/* --- PROFILE CONTENT --- */}
-                  <div className="px-6 relative flex-1 flex flex-col">
-                      {/* Avatar Floating */}
-                      <div className="-mt-14 mb-3 flex justify-between items-end">
+                  <div className="px-6 relative flex-1 flex flex-col bg-white">
+                      
+                      {/* Floating Avatar & Ratings */}
+                      <div className="-mt-12 mb-4 flex justify-between items-end relative z-20">
                           <div className="relative group-hover:scale-105 transition-transform duration-500">
-                              {agent.isVerified && (
-                                  <div className="absolute inset-0 bg-blue-500 rounded-2xl blur-md opacity-30 group-hover:opacity-60 transition-opacity duration-500 animate-pulse"></div>
-                              )}
-                              <div className={`w-24 h-24 rounded-[20px] p-1 bg-white shadow-xl rotate-3 group-hover:rotate-0 transition-all duration-500 overflow-hidden relative z-10 ${agent.isVerified ? 'ring-4 ring-blue-50' : ''}`}>
+                              {agent.isVerified && <div className="absolute inset-0 bg-[#0065eb] rounded-[1.5rem] blur-lg opacity-40 group-hover:opacity-70 transition-opacity animate-pulse"></div>}
+                              <div className={`w-24 h-24 rounded-[1.5rem] p-1 bg-white shadow-xl overflow-hidden relative z-10 ${agent.isVerified ? 'ring-4 ring-blue-50' : 'ring-1 ring-slate-100'}`}>
                                   <Image 
-                                      src={agent.profileImageUrl || 'https://ui-avatars.com/api/?background=random&name=' + agent.name} 
+                                      src={agent.profileImageUrl || `https://ui-avatars.com/api/?background=f1f5f9&color=0065eb&name=${encodeURIComponent(agent.name)}`} 
                                       alt={agent.name} 
                                       fill
-                                      className="object-cover rounded-[14px] bg-slate-50"
+                                      className="object-cover rounded-[1.2rem] bg-slate-50"
                                   />
                               </div>
                               {agent.isVerified && (
-                                  <div className="absolute -right-3 -bottom-3 bg-gradient-to-br from-[#0065eb] to-blue-400 text-white p-2 rounded-xl border-[3px] border-white shadow-xl z-20 group-hover:rotate-12 transition-transform duration-300">
-                                      <Icons.Verified />
+                                  <div className="absolute -right-2 -bottom-2 bg-gradient-to-br from-[#0065eb] to-blue-400 text-white p-2 rounded-xl border-2 border-white shadow-lg z-20">
+                                      <CheckCircle2 size={14} className="fill-white text-[#0065eb]" />
                                   </div>
                               )}
                           </div>
                           
-                          {/* Rating Badge */}
-                          <div className="flex flex-col items-end gap-1 mb-1">
-                              <div className="flex items-center gap-1 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-100">
-                                  <Icons.Star />
-                                  <span className="text-xs font-black text-amber-700">{agent.averageRating.toFixed(1)}</span>
-                              </div>
+                          {/* Rating Pill */}
+                          <div className="flex items-center gap-1.5 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-100 shadow-sm">
+                              <Star size={12} className="text-amber-500 fill-amber-500" />
+                              <span className="text-xs font-black text-amber-700">{agent.averageRating?.toFixed(1) || '5.0'}</span>
                           </div>
                       </div>
 
-                      {/* Text Info */}
-                      <div className="mb-4">
-                          <div className="flex items-center gap-2 mb-1">
-                              <h3 className="text-xl font-bold text-slate-900 line-clamp-1">{agent.name}</h3>
-                              {agent.isVerified && (
-                                <span className="bg-blue-600 text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-1 shadow-sm">
-                                  <Icons.StarFilled /> Pro
-                                </span>
-                              )}
-                          </div>
-                          <p className="text-sm font-bold text-slate-400 mb-3 line-clamp-1">
-                              {agent.agencyName || "Independent Agent"}
+                      {/* Info block */}
+                      <div className="mb-6 flex-1">
+                          <h3 className="text-xl font-black text-slate-900 line-clamp-1 group-hover:text-[#0065eb] transition-colors">{agent.name}</h3>
+                          <p className="text-xs font-bold text-slate-400 mb-4 uppercase tracking-widest line-clamp-1">
+                              {agent.agencyName || "Independent Broker"}
                           </p>
                           
-                          <div className="flex justify-between items-center">
-                               {/* Specialties */}
-                               <div className="flex flex-wrap gap-1">
-                                  {agent.specialties.length > 0 ? (
-                                      agent.specialties.slice(0, 1).map((tag, idx) => (
-                                          <span key={idx} className="bg-slate-50 text-slate-600 text-[10px] font-bold px-2 py-1 rounded-md border border-slate-200 uppercase tracking-wide">
-                                              {tag}
-                                          </span>
-                                      ))
-                                  ) : (
-                                      <span className="bg-slate-50 text-slate-400 text-[10px] font-bold px-2 py-1 rounded-md border border-slate-100 uppercase tracking-wide">
-                                          Agent
-                                      </span>
-                                  )}
-                              </div>
+                          {/* Specialties */}
+                          <div className="flex flex-wrap gap-1.5 mb-5 h-[52px] overflow-hidden">
+                              {(agent.specialties?.length > 0 ? agent.specialties : ['Real Estate']).map((tag, idx) => (
+                                  <span key={idx} className="bg-slate-50 text-slate-600 text-[10px] font-bold px-2.5 py-1.5 rounded-lg border border-slate-100">
+                                      {tag}
+                                  </span>
+                              ))}
+                          </div>
 
-                              {/* Total Listings Count */}
-                              <div className="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-md">
-                                  {agent.totalListings} Listings
-                              </div>
+                          <div className="flex items-center gap-2 text-xs font-bold text-slate-500 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                             <Award size={16} className="text-[#0065eb]" />
+                             <span>{agent.totalListings || 0} Active Properties</span>
                           </div>
                       </div>
 
-                      {/* Action Buttons n */}
-                     <div className="mt-auto pb-6 pt-5 border-t border-slate-50/50 grid grid-cols-2 gap-3">
+                      {/* Action Buttons */}
+                     <div className="mt-auto pb-6 border-t border-slate-100 pt-5 grid grid-cols-2 gap-3 relative z-20">
                           <button 
                               onClick={(e) => handleContactClick(e, agent, 'call')}
-                              className="py-3.5 rounded-2xl font-black flex items-center justify-center gap-2 text-xs transition-all bg-slate-50 text-slate-700 hover:bg-slate-900 hover:text-white hover:shadow-xl hover:shadow-slate-900/20 active:scale-95"
+                              className="py-3.5 rounded-2xl font-black flex items-center justify-center gap-2 text-xs transition-all bg-white border-2 border-slate-100 text-slate-700 hover:border-slate-900 hover:bg-slate-900 hover:text-white shadow-sm hover:shadow-xl hover:shadow-slate-900/20 active:scale-95"
                           >
-                              <Icons.Phone /> Call
+                              <Phone size={14} /> Call
                           </button>
 
                           <button 
                               onClick={(e) => handleContactClick(e, agent, 'whatsapp')}
-                              className="py-3.5 rounded-2xl font-black flex items-center justify-center gap-2 text-xs transition-all bg-gradient-to-r from-[#25D366] to-[#1fa851] text-white shadow-lg shadow-green-500/30 hover:shadow-green-500/50 hover:-translate-y-0.5 active:scale-95"
+                              className="py-3.5 rounded-2xl font-black flex items-center justify-center gap-2 text-xs transition-all bg-[#25D366] text-white shadow-lg shadow-green-500/20 hover:bg-[#1fa851] hover:shadow-green-500/40 hover:-translate-y-0.5 active:scale-95"
                           >
-                              <Icons.Whatsapp /> WhatsApp
+                              <MessageCircle size={14} /> WhatsApp
                           </button>
                       </div>
                   </div>
-                </div>
+                </motion.div>
               ))}
-            </div>
-
-            {hasMore && !searchTerm && (
-              <div className="mt-12 text-center">
-                <button 
-                  onClick={() => fetchAgents(false)} 
-                  disabled={loadingMore}
-                  className="bg-white border-2 border-slate-200 text-slate-900 px-10 py-4 rounded-full font-black text-xs uppercase tracking-widest hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all disabled:opacity-50 flex items-center gap-2 mx-auto"
-                >
-                  {loadingMore ? <Icons.Loader /> : 'Load More Agents'}
-                </button>
-              </div>
-            )}
-          </>
+            </AnimatePresence>
+          </motion.div>
         ) : (
-          <div className="flex flex-col items-center justify-center py-32 text-center">
-            <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-6 text-slate-300">
-                <Icons.Search />
+          /* Empty State */
+          <div className="flex flex-col items-center justify-center py-20 bg-white rounded-[3rem] border border-slate-100 border-dashed text-center max-w-3xl mx-auto shadow-sm">
+            <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-6 text-slate-300">
+                <Search size={40} />
             </div>
-            <h3 className="text-2xl font-black text-slate-900 mb-2">No agents found</h3>
-            <p className="text-slate-500 max-w-md mx-auto">We couldn't find any active agents. Try adjusting your search.</p>
+            <h3 className="text-3xl font-black text-slate-900 mb-3">No agents found</h3>
+            <p className="text-slate-500 font-medium mb-8">We couldn't find any professionals matching your exact criteria.</p>
+            <button onClick={handleResetFilters} className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-sm hover:bg-blue-600 transition-colors shadow-xl">
+               Clear All Filters
+            </button>
+          </div>
+        )}
+
+        {/* Load More */}
+        {hasMore && filteredAgents.length > 0 && (
+          <div className="mt-16 text-center">
+            <button 
+              onClick={() => fetchAgents(false)} 
+              disabled={loadingMore}
+              className="bg-white border border-slate-200 text-slate-900 px-10 py-5 rounded-[2rem] font-black text-xs uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-all shadow-xl hover:shadow-2xl disabled:opacity-50 flex items-center gap-3 mx-auto"
+            >
+              {loadingMore ? <div className="w-5 h-5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div> : <SlidersHorizontal size={18} />}
+              {loadingMore ? 'Loading Database...' : 'Load More Professionals'}
+            </button>
           </div>
         )}
       </div>
@@ -420,24 +534,30 @@ const AgentsPage = () => {
       {showRestrictedModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setShowRestrictedModal(false)}></div>
-          <div className="bg-white rounded-[40px] p-8 max-w-sm w-full relative z-10 shadow-2xl animate-in zoom-in-95 duration-200 border border-white/20">
-            <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6 text-red-500 shadow-inner">
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          <div className="bg-white rounded-[2.5rem] p-8 md:p-10 max-w-md w-full relative z-10 shadow-2xl animate-in zoom-in-95 duration-200 border border-slate-100">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
+            <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6 text-red-500 shadow-inner relative z-10">
+              <ShieldCheck size={32} />
             </div>
-            <h3 className="text-2xl font-black text-center text-slate-900 mb-3">Restricted Access</h3>
-            <p className="text-slate-500 text-center text-sm font-medium mb-8 leading-relaxed">
-              This agent is unverified. Direct contact details are hidden for your safety. Please use the secure In-App Chat on their profile.
+            <h3 className="text-2xl font-black text-center text-slate-900 mb-3 relative z-10">Protected Contact</h3>
+            <p className="text-slate-500 text-center text-sm font-medium mb-8 leading-relaxed relative z-10">
+              Direct phone numbers are hidden for unverified agents to protect your security. Please contact them through their profile page.
             </p>
-            <div className="space-y-3">
-              <button onClick={() => setShowRestrictedModal(false)} className="w-full bg-[#0065eb] hover:bg-[#0052c1] text-white py-4 rounded-2xl font-bold transition-all shadow-xl shadow-blue-500/20 active:scale-95">Go to Profile</button>
-              <button onClick={() => setShowRestrictedModal(false)} className="w-full py-4 font-bold text-slate-400 hover:text-slate-900 transition-colors">Cancel</button>
+            <div className="space-y-3 relative z-10">
+              <button onClick={() => setShowRestrictedModal(false)} className="w-full bg-[#0065eb] hover:bg-[#0052c1] text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-xl shadow-blue-500/20 active:scale-95">Go to Profile</button>
+              <button onClick={() => setShowRestrictedModal(false)} className="w-full py-4 font-black text-slate-400 text-sm uppercase tracking-widest hover:text-slate-900 transition-colors">Cancel</button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Global CSS for Background Animation */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes slowPan {
+          0% { object-position: top center; }
+          100% { object-position: bottom center; }
+        }
+      `}} />
     </div>
   );
-};
-
-export default AgentsPage;
+}
