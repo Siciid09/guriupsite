@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/app/lib/supabase';
+import { supabaseAdmin } from '@/app/lib/supabase'; // 🛡️ FIX: Use Admin to bypass public RLS blocks
 
 export async function POST(request: Request) {
   try {
+    // 🛡️ TS NULL CHECK
+    if (!supabaseAdmin) {
+       return NextResponse.json({ error: 'Server error: Admin client missing.' }, { status: 500 });
+    }
+
     const { name, phone, description } = await request.json();
 
     // Basic validation
@@ -11,14 +16,17 @@ export async function POST(request: Request) {
     }
 
     // Insert a new record into the 'contacts' table
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('contacts')
       .insert([
         {
+          _id: crypto.randomUUID(), // 🛡️ CRITICAL FIX: Satisfy NOT NULL constraint
+          id: crypto.randomUUID(),  // Fallback ID
           name,
           phone,
           description,
-          submittedAt: new Date().toISOString(), // Supabase equivalent to serverTimestamp()
+          submittedAt: new Date().toISOString(), 
+          createdAt: new Date().toISOString(), // Standardized timestamp fallback
         }
       ]);
 

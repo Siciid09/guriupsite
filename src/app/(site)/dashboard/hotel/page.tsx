@@ -167,58 +167,40 @@ function DashboardContent() {
         }
 
         // Chats Listener (Keep Firebase Realtime for Messages)
-        // 🛡️ CRITICAL FIX: Removed orderBy to prevent silent index failures, added fallback listener for hotel.id
-        const qChats = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid));
-        const qChatsHotel = query(collection(db, 'chats'), where('participants', 'array-contains', hotelId));
+        // 🛡️ CRITICAL FIX: Match Flutter query exactly to bypass permission denied errors
+        const qChats = query(collection(db, 'chats'), where('hotelId', '==', hotelId));
 
-        let userChats: Chat[] = [];
-        let hotelChats: Chat[] = [];
-
-        const combineAndSortChats = () => {
-           const combined = [...userChats, ...hotelChats];
-           // Remove duplicates in case a chat matches both
-           const unique = Array.from(new Map(combined.map(item => [item.id, item])).values());
-           unique.sort((a, b) => {
+        const unsubChats = onSnapshot(qChats, (cSnap) => {
+           const processed = cSnap.docs.map(d => {
+             const data = d.data();
+             const isMe = data.lastSenderId === user.uid || data.lastSenderId === hotelId || data.senderId === hotelId;
+             
+             // Dynamic Fallbacks to match Flutter Payload Structure
+             const unread = data[`unreadCount_${user.uid}`] || data[`unreadCount_${hotelId}`] || data.unreadCount || 0;
+             let recId = data.guestId || data.userId;
+             if (!recId && Array.isArray(data.participants)) {
+                 recId = data.participants.find((pid: string) => pid !== user.uid && pid !== hotelId);
+             }
+             
+             return {
+               id: d.id,
+               lastMessage: isMe ? `You: ${data.lastMessage || 'Sent a message'}` : (data.lastMessage || 'Sent a message'),
+               participantName: data.guestName || data.customerName || data.userName || data.otherUserName || 'Guest',
+               unreadCount: isMe ? 0 : unread, 
+               updatedAt: data.lastMessageTime || data.updatedAt || new Date(),
+               recipientId: recId || 'unknown'
+             } as any;
+           }).sort((a, b) => {
               const timeA = a.updatedAt?.toDate ? a.updatedAt.toDate().getTime() : new Date(a.updatedAt as any).getTime();
               const timeB = b.updatedAt?.toDate ? b.updatedAt.toDate().getTime() : new Date(b.updatedAt as any).getTime();
               return (timeB || 0) - (timeA || 0);
            });
-           setChats(unique);
-        };
-
-        const processChats = (docs: any[]) => {
-           return docs.map(d => {
-             const data = d.data();
-             const parts = d.id.split('_');
-             
-             // Extract the other person's ID so the popup knows who to talk to
-             const recId = parts.find((pid: string) => pid !== user.uid && pid !== hotelId) || 'unknown';
-             const isMe = data.lastSenderId === user.uid;
-             const unread = data.unreadCount?.[user.uid] || data.unreadCount?.[hotelId] || 0;
-             
-             return {
-               id: d.id,
-               lastMessage: isMe ? `You: ${data.lastMessage || 'Sent an attachment'}` : (data.lastMessage || 'Sent a message'),
-               participantName: data.otherUserName || data.userName || data.senderName || data.guestName || data.recipientName || 'Guest User',
-               unreadCount: isMe ? 0 : unread, // Hide unread number if I sent the last message
-               updatedAt: data.updatedAt || data.lastMessageTime || new Date(),
-               recipientId: recId
-             } as any;
-           });
-        };
-
-        const unsubChats1 = onSnapshot(qChats, (cSnap) => {
-           userChats = processChats(cSnap.docs);
-           combineAndSortChats();
-        });
-
-        const unsubChats2 = onSnapshot(qChatsHotel, (cSnap) => {
-           hotelChats = processChats(cSnap.docs);
-           combineAndSortChats();
+           
+           setChats(processed);
         });
 
         setLoading(false);
-        return () => { unsubChats1(); unsubChats2(); };
+        return () => unsubChats();
       } else {
         setNeedsSetup(true);
         setLoading(false);
