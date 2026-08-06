@@ -145,16 +145,23 @@ function DashboardContent() {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
 
-  const cancelUserBooking = async (id: string) => {
+  const cancelUserBooking = async (bookingObj: any) => {
     if (!currentUser) return;
     try {
+      const targetId = bookingObj.id || bookingObj._id;
+      const targetHotel = bookingObj.hotelId || bookingObj.hotel_id;
+
       const idToken = await currentUser.getIdToken();
       const res = await fetch('/api/bookings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
-        body: JSON.stringify({ id, status: 'cancelled', hotelId: (selectedBooking as any)?.hotelId || 'unknown' }) // hotelId required by secure API
+        body: JSON.stringify({ id: targetId, status: 'cancelled', hotelId: targetHotel })
       });
-      if (res.ok) setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'cancelled' } : b));
+      if (res.ok) {
+         setBookings(prev => prev.map(b => (b.id === targetId || (b as any)._id === targetId) ? { ...b, status: 'cancelled' as any } : b));
+      } else {
+         alert("Failed to cancel booking.");
+      }
       setSelectedBooking(null);
     } catch(e) { console.error(e); }
   };
@@ -264,25 +271,31 @@ function DashboardContent() {
   };
 
   const subscribeToChats = (uid: string) => {
-    // 🛡️ CRITICAL FIX: Removed orderBy to prevent silent Firestore composite index failures. Sort in memory instead.
     const q = query(collection(db, 'chats'), where('participants', 'array-contains', uid));
     return onSnapshot(q, (snap) => {
         const list = snap.docs.map(d => {
           const data = d.data();
-          const parts = d.id.split('_');
+          const isMe = data.lastSenderId === uid || data.senderId === uid;
           
-          // Extract the hotel/agent ID so the popup knows who to talk to
-          const recId = parts.find((pid: string) => pid !== uid) || 'unknown';
-          const isMe = data.lastSenderId === uid;
-          const unread = data.unreadCount?.[uid] || 0;
+          // Better unread fallback logic based on Flutter payload
+          const unread = data[`unreadCount_${uid}`] || data.unreadCount || 0;
+
+          // Safe extraction of recipient ID
+          let recId = data.hotelId;
+          if (!recId && Array.isArray(data.participants)) {
+              recId = data.participants.find((pid: string) => pid !== uid);
+          }
+
+          // Prioritize business/hotel names to stop "Support / Agent" duplicates
+          const pName = data.hotelName || data.businessName || data.recipientName || data.otherUserName || 'Hotel / Agent';
 
           return {
             id: d.id,
-            lastMessage: isMe ? `You: ${data.lastMessage || 'Sent an attachment'}` : (data.lastMessage || 'Sent a message'),
-            participantName: data.otherUserName || data.recipientName || data.hotelName || data.businessName || 'Support / Agent', 
-            unreadCount: isMe ? 0 : unread, // Hide unread number if I sent the last message
-            updatedAt: data.updatedAt || data.lastMessageTime || new Date(),
-            recipientId: recId
+            lastMessage: isMe ? `You: ${data.lastMessage || 'Sent a message'}` : (data.lastMessage || 'Sent a message'),
+            participantName: pName, 
+            unreadCount: isMe ? 0 : unread, 
+            updatedAt: data.lastMessageTime || data.updatedAt || new Date(),
+            recipientId: recId || 'unknown'
           } as any;
         }).sort((a, b) => {
            const timeA = a.updatedAt?.toDate ? a.updatedAt.toDate().getTime() : new Date(a.updatedAt as any).getTime();
@@ -720,7 +733,7 @@ function DashboardContent() {
                       </div>
                       <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
                          {(selectedBooking.status || selectedBooking.paymentStatus) !== 'cancelled' && (
-                            <button onClick={() => cancelUserBooking(selectedBooking.id)} className="w-full py-4 bg-red-100 text-red-600 hover:bg-red-200 rounded-2xl font-black text-sm uppercase tracking-widest transition-colors">
+                            <button onClick={() => cancelUserBooking(selectedBooking)} className="w-full py-4 bg-red-100 text-red-600 hover:bg-red-200 rounded-2xl font-black text-sm uppercase tracking-widest transition-colors">
                               Cancel Reservation
                             </button>
                          )}

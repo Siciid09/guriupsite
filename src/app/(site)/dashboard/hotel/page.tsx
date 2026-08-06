@@ -261,9 +261,12 @@ function DashboardContent() {
     }
   };
 
-  const updateBookingStatus = async (id: string, newStatus: string) => {
+  const updateBookingStatus = async (bookingObj: any, newStatus: string) => {
     try {
       if (!currentUser || !hotel) return;
+      const targetId = bookingObj.id || bookingObj._id;
+      const targetHotel = bookingObj.hotelId || bookingObj.hotel_id || hotel.id || hotel._id;
+
       const idToken = await currentUser.getIdToken();
       const res = await fetch('/api/bookings', {
         method: 'PATCH',
@@ -271,13 +274,12 @@ function DashboardContent() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`
         },
-        // FIX: Send the hotelId to pass the API security gatekeeper
-        body: JSON.stringify({ id, hotelId: hotel.id || hotel._id, status: newStatus })
+        body: JSON.stringify({ id: targetId, hotelId: targetHotel, status: newStatus })
       });
       if (!res.ok) throw new Error("Failed");
       
       // Optimistic update
-      setBookings(prev => prev.map(b => b.id === id ? { ...b, status: newStatus as any } : b));
+      setBookings(prev => prev.map(b => (b.id === targetId || (b as any)._id === targetId) ? { ...b, status: newStatus as any } : b));
     } catch (e) {
       alert("Failed to update status");
     }
@@ -468,13 +470,13 @@ function DashboardContent() {
                            <StatusBadge status={b.status} />
                            <div className="flex gap-2 mt-2">
                               {b.status === 'pending' && (
-                                 <><ActionButton icon={CheckCircle} color="bg-emerald-500 text-white" onClick={(e: any) => { e.stopPropagation(); updateBookingStatus(b.id, 'confirmed'); }}/><ActionButton icon={XCircle} color="bg-red-100 text-red-600" onClick={(e: any) => { e.stopPropagation(); updateBookingStatus(b.id, 'cancelled'); }}/></>
+                                 <><ActionButton icon={CheckCircle} color="bg-emerald-500 text-white" onClick={(e: any) => { e.stopPropagation(); updateBookingStatus(b, 'confirmed'); }}/><ActionButton icon={XCircle} color="bg-red-100 text-red-600" onClick={(e: any) => { e.stopPropagation(); updateBookingStatus(b, 'cancelled'); }}/></>
                               )}
                               {b.status === 'confirmed' && (
-                                 <><button onClick={(e) => { e.stopPropagation(); updateBookingStatus(b.id, 'checked-in'); }} className="text-xs font-bold bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-200 transition-colors">Mark Check-In</button><ActionButton icon={XCircle} color="bg-slate-100 text-slate-600" onClick={(e: any) => { e.stopPropagation(); updateBookingStatus(b.id, 'cancelled'); }}/></>
+                                 <><button onClick={(e) => { e.stopPropagation(); updateBookingStatus(b, 'checked-in'); }} className="text-xs font-bold bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-200 transition-colors">Mark Check-In</button><ActionButton icon={XCircle} color="bg-slate-100 text-slate-600" onClick={(e: any) => { e.stopPropagation(); updateBookingStatus(b, 'cancelled'); }}/></>
                               )}
                               {b.status === 'checked-in' && (
-                                 <button onClick={(e) => { e.stopPropagation(); updateBookingStatus(b.id, 'checked-out'); }} className="text-xs font-bold bg-orange-100 text-orange-700 px-3 py-1.5 rounded-lg hover:bg-orange-200 transition-colors">Mark Check-Out</button>
+                                 <button onClick={(e) => { e.stopPropagation(); updateBookingStatus(b, 'checked-out'); }} className="text-xs font-bold bg-orange-100 text-orange-700 px-3 py-1.5 rounded-lg hover:bg-orange-200 transition-colors">Mark Check-Out</button>
                               )}
                            </div>
                         </div>
@@ -749,12 +751,12 @@ function DashboardContent() {
                 </div>
                 <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
                    {selectedBooking.status !== 'cancelled' && (
-                      <button onClick={() => { updateBookingStatus(selectedBooking.id, 'cancelled'); setSelectedBooking(null); }} className="flex-1 py-4 bg-red-100 text-red-600 hover:bg-red-200 rounded-2xl font-black text-sm uppercase tracking-widest transition-colors">
+                      <button onClick={() => { updateBookingStatus(selectedBooking, 'cancelled'); setSelectedBooking(null); }} className="flex-1 py-4 bg-red-100 text-red-600 hover:bg-red-200 rounded-2xl font-black text-sm uppercase tracking-widest transition-colors">
                         Cancel Booking
                       </button>
                    )}
                    {selectedBooking.status === 'pending' && (
-                      <button onClick={() => { updateBookingStatus(selectedBooking.id, 'confirmed'); setSelectedBooking(null); }} className="flex-1 py-4 bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg shadow-emerald-500/20 rounded-2xl font-black text-sm uppercase tracking-widest transition-all">
+                      <button onClick={() => { updateBookingStatus(selectedBooking, 'confirmed'); setSelectedBooking(null); }} className="flex-1 py-4 bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg shadow-emerald-500/20 rounded-2xl font-black text-sm uppercase tracking-widest transition-all">
                         Confirm
                       </button>
                    )}

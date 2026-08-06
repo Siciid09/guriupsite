@@ -206,10 +206,6 @@ export async function PATCH(request: Request) {
     if (!uid) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
     const role = await getUserRoleStrict(uid);
-    if (role !== 'admin' && role !== 'hoadmin') {
-      return NextResponse.json({ error: 'Forbidden: Requires admin or hoadmin role.' }, { status: 403 });
-    }
-
     const body = await request.json();
     const { id, _id, bookingId, hotelId, type, ...updatePayload } = body;
     const targetId = id || _id || bookingId;
@@ -225,8 +221,15 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Both Booking ID and Hotel ID are required' }, { status: 400 });
     }
 
-    // Gatekeeper: Hoadmins can only modify bookings for their own hotel
-    if (role !== 'admin') {
+    // 🛡️ GATEKEEPER: Allow normal users to ONLY cancel their own bookings
+    if (role !== 'admin' && role !== 'hoadmin') {
+      if (updatePayload.status === 'cancelled') {
+        const { data: bCheck } = await supabaseAdmin.from('bookings').select('userId').or(`id.eq.${targetId},_id.eq.${targetId}`).maybeSingle();
+        if (!bCheck || bCheck.userId !== uid) return NextResponse.json({ error: 'Forbidden. Not your booking.' }, { status: 403 });
+      } else {
+        return NextResponse.json({ error: 'Forbidden: Requires admin or hoadmin role.' }, { status: 403 });
+      }
+    } else if (role !== 'admin') {
       const { data: hotelCheck, error: hotelError } = await supabaseAdmin
         .from('hotels')
         .select('hotelAdminId, ownerId')
