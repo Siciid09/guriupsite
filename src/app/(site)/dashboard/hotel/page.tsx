@@ -15,7 +15,8 @@ import {
   LayoutDashboard, Calendar as CalendarIcon, CalendarDays, MessageSquare, BedDouble, 
   Settings, Users, TrendingUp, DollarSign, CheckCircle, XCircle, 
   Plus, Edit3, Lock, MapPin, Building2, Phone, Globe, Wifi, Shield,
-  FileText, UserPlus, BellRing, LogOut, ArrowRightCircle, ArrowLeftCircle, AlertCircle, Loader2, Utensils, Trash2, Eye, EyeOff
+  FileText, UserPlus, BellRing, LogOut, ArrowRightCircle, ArrowLeftCircle, AlertCircle, Loader2, Utensils, Trash2, Eye, EyeOff,
+  X
 } from 'lucide-react';
 
 // --- IMPORT YOUR COMPLETED FORMS ---
@@ -23,6 +24,7 @@ import HotelForm from '../../../../components/hotelform';
 import AddEditRoom from '../../../../components/room'; 
 import HotelAnalytics from '@/components/hotelstats';
 import RestaurantManagement from '../../../../components/RestaurantManagement'; // Adjust path as needed
+import SharedChatComponent from '@/components/sharedchat';
 
 // ============================================================================
 // STRICT TYPES
@@ -115,6 +117,8 @@ function DashboardContent() {
   const [activeTab, setActiveTab] = useState<TabType>(tabParam || 'overview');
   const [resFilter, setResFilter] = useState<string>('all');
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [activeChat, setActiveChat] = useState<Chat | null>(null);
 
   // --- INITIALIZE & FETCH DATA ---
   useEffect(() => {
@@ -185,13 +189,21 @@ function DashboardContent() {
         const processChats = (docs: any[]) => {
            return docs.map(d => {
              const data = d.data();
+             const parts = d.id.split('_');
+             
+             // Extract the other person's ID so the popup knows who to talk to
+             const recId = parts.find((pid: string) => pid !== user.uid && pid !== hotelId) || 'unknown';
+             const isMe = data.lastSenderId === user.uid;
+             const unread = data.unreadCount?.[user.uid] || data.unreadCount?.[hotelId] || 0;
+             
              return {
                id: d.id,
-               lastMessage: data.lastMessage || 'Sent a message',
-               participantName: data.otherUserName || data.userName || data.senderName || data.recipientName || 'Guest User',
-               unreadCount: data.unreadCount?.[user.uid] || 0,
-               updatedAt: data.updatedAt || data.lastMessageTime || new Date()
-             } as Chat;
+               lastMessage: isMe ? `You: ${data.lastMessage || 'Sent an attachment'}` : (data.lastMessage || 'Sent a message'),
+               participantName: data.otherUserName || data.userName || data.senderName || data.guestName || data.recipientName || 'Guest User',
+               unreadCount: isMe ? 0 : unread, // Hide unread number if I sent the last message
+               updatedAt: data.updatedAt || data.lastMessageTime || new Date(),
+               recipientId: recId
+             } as any;
            });
         };
 
@@ -427,7 +439,7 @@ function DashboardContent() {
                {/* List */}
                <div className="space-y-4">
                   {filteredBookings.map(b => (
-                     <div key={b.id} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+                     <div key={b.id} onClick={() => setSelectedBooking(b)} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 cursor-pointer hover:shadow-md transition-shadow">
                         <div className="flex items-center gap-4">
                            <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-[#0065eb] font-bold text-lg">{b.guestName?.[0] || 'G'}</div>
                            <div>
@@ -443,11 +455,11 @@ function DashboardContent() {
                            </div>
                            <div>
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Dates</p>
-                              <p className="font-bold text-sm">{format(new Date(b.checkIn as any), 'MMM d')} - {format(new Date(b.checkOut as any), 'MMM d')}</p>
+                              <p className="font-bold text-sm">{b.checkIn ? format(new Date(b.checkIn as any), 'MMM d') : 'TBD'} - {b.checkOut ? format(new Date(b.checkOut as any), 'MMM d') : 'TBD'}</p>
                            </div>
                            <div className="col-span-2 md:col-span-1 text-right md:text-left">
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total</p>
-                              <p className="font-black text-lg text-[#0065eb]">${b.totalPrice}</p>
+                              <p className="font-black text-lg text-[#0065eb]">${b.totalPrice || (b as any).totalAmount || 0}</p>
                            </div>
                         </div>
 
@@ -456,13 +468,13 @@ function DashboardContent() {
                            <StatusBadge status={b.status} />
                            <div className="flex gap-2 mt-2">
                               {b.status === 'pending' && (
-                                 <><ActionButton icon={CheckCircle} color="bg-emerald-500 text-white" onClick={() => updateBookingStatus(b.id, 'confirmed')}/><ActionButton icon={XCircle} color="bg-red-100 text-red-600" onClick={() => updateBookingStatus(b.id, 'cancelled')}/></>
+                                 <><ActionButton icon={CheckCircle} color="bg-emerald-500 text-white" onClick={(e: any) => { e.stopPropagation(); updateBookingStatus(b.id, 'confirmed'); }}/><ActionButton icon={XCircle} color="bg-red-100 text-red-600" onClick={(e: any) => { e.stopPropagation(); updateBookingStatus(b.id, 'cancelled'); }}/></>
                               )}
                               {b.status === 'confirmed' && (
-                                 <><button onClick={() => updateBookingStatus(b.id, 'checked-in')} className="text-xs font-bold bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-200 transition-colors">Mark Check-In</button><ActionButton icon={XCircle} color="bg-slate-100 text-slate-600" onClick={() => updateBookingStatus(b.id, 'cancelled')}/></>
+                                 <><button onClick={(e) => { e.stopPropagation(); updateBookingStatus(b.id, 'checked-in'); }} className="text-xs font-bold bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-200 transition-colors">Mark Check-In</button><ActionButton icon={XCircle} color="bg-slate-100 text-slate-600" onClick={(e: any) => { e.stopPropagation(); updateBookingStatus(b.id, 'cancelled'); }}/></>
                               )}
                               {b.status === 'checked-in' && (
-                                 <button onClick={() => updateBookingStatus(b.id, 'checked-out')} className="text-xs font-bold bg-orange-100 text-orange-700 px-3 py-1.5 rounded-lg hover:bg-orange-200 transition-colors">Mark Check-Out</button>
+                                 <button onClick={(e) => { e.stopPropagation(); updateBookingStatus(b.id, 'checked-out'); }} className="text-xs font-bold bg-orange-100 text-orange-700 px-3 py-1.5 rounded-lg hover:bg-orange-200 transition-colors">Mark Check-Out</button>
                               )}
                            </div>
                         </div>
@@ -598,7 +610,7 @@ function DashboardContent() {
                 ) : (
                     <div className="divide-y divide-slate-100">
                         {chats.map(chat => (
-                            <div key={chat.id} onClick={() => router.push(`/dashboard/chat/${chat.id}`)} className="p-6 hover:bg-slate-50 transition-colors cursor-pointer flex flex-col sm:flex-row justify-between sm:items-center group gap-4">
+                            <div key={chat.id} onClick={() => setActiveChat(chat)} className="p-6 hover:bg-slate-50 transition-colors cursor-pointer flex flex-col sm:flex-row justify-between sm:items-center group gap-4">
                                 <div className="flex items-center gap-4">
                                     <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-[#0065eb] font-bold text-lg shadow-inner shrink-0">
                                         {chat.participantName?.[0] || 'G'}
@@ -693,6 +705,77 @@ function DashboardContent() {
           )}
 
         </AnimatePresence>
+
+        {/* BOOKING DETAILS MODAL */}
+        <AnimatePresence>
+          {selectedBooking && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedBooking(null)}></div>
+              <motion.div initial={{opacity: 0, scale: 0.95}} animate={{opacity: 1, scale: 1}} exit={{opacity: 0, scale: 0.95}} className="relative bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col">
+                <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                  <h2 className="text-xl font-black text-slate-900">Booking Details</h2>
+                  <button onClick={() => setSelectedBooking(null)} className="p-2 bg-white rounded-full shadow-sm hover:bg-slate-100 transition-colors"><X size={20} /></button>
+                </div>
+                <div className="p-8 space-y-6">
+                   <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-2xl">{selectedBooking.guestName?.[0] || 'G'}</div>
+                      <div>
+                         <h3 className="text-xl font-black text-slate-900">{selectedBooking.guestName}</h3>
+                         <p className="text-slate-500 font-bold flex items-center gap-2"><Phone size={14}/> {selectedBooking.guestPhone || 'No Phone'}</p>
+                      </div>
+                   </div>
+                   <div className="grid grid-cols-2 gap-4 bg-slate-50 p-6 rounded-3xl border border-slate-100">
+                      <div>
+                         <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Room / Property</p>
+                         <p className="font-bold text-slate-900">{selectedBooking.roomName || 'Standard'}</p>
+                      </div>
+                      <div>
+                         <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Status</p>
+                         <StatusBadge status={selectedBooking.status} />
+                      </div>
+                      <div>
+                         <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Check In</p>
+                         <p className="font-bold text-slate-900">{selectedBooking.checkIn ? new Date(selectedBooking.checkIn as any).toLocaleDateString() : 'N/A'}</p>
+                      </div>
+                      <div>
+                         <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Check Out</p>
+                         <p className="font-bold text-slate-900">{selectedBooking.checkOut ? new Date(selectedBooking.checkOut as any).toLocaleDateString() : 'N/A'}</p>
+                      </div>
+                   </div>
+                   <div className="flex justify-between items-center bg-blue-50 p-6 rounded-3xl">
+                      <span className="font-black text-blue-900">Total Amount</span>
+                      <span className="font-black text-2xl text-blue-600">${selectedBooking.totalPrice || (selectedBooking as any).totalAmount || 0}</span>
+                   </div>
+                </div>
+                <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
+                   {selectedBooking.status !== 'cancelled' && (
+                      <button onClick={() => { updateBookingStatus(selectedBooking.id, 'cancelled'); setSelectedBooking(null); }} className="flex-1 py-4 bg-red-100 text-red-600 hover:bg-red-200 rounded-2xl font-black text-sm uppercase tracking-widest transition-colors">
+                        Cancel Booking
+                      </button>
+                   )}
+                   {selectedBooking.status === 'pending' && (
+                      <button onClick={() => { updateBookingStatus(selectedBooking.id, 'confirmed'); setSelectedBooking(null); }} className="flex-1 py-4 bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg shadow-emerald-500/20 rounded-2xl font-black text-sm uppercase tracking-widest transition-all">
+                        Confirm
+                      </button>
+                   )}
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* CHAT MODAL */}
+        {activeChat && currentUser && hotel && (
+          <SharedChatComponent 
+            isOpen={true} 
+            onClose={() => setActiveChat(null)} 
+            recipientId={(activeChat as any).recipientId || 'unknown'} 
+            recipientName={activeChat.participantName} 
+            propertyId={hotel.id || hotel._id || ''}
+            propertyTitle={hotel.name}
+          />
+        )}
+
       </main>
 
       {/* ================= MOBILE BOTTOM NAVIGATION ================= */}

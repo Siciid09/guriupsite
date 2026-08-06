@@ -51,6 +51,8 @@ import {
 
 // IMPORTANT: Import your hotel form component here
 import HotelForm from '../../../components/hotelform'; 
+import SharedChatComponent from '@/components/sharedchat';
+import { X } from 'lucide-react';
 
 // --- TYPES ---
 interface UserData {
@@ -140,6 +142,22 @@ function DashboardContent() {
   // --- UI STATE ---
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({ name: '', phone: '' });
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [activeChat, setActiveChat] = useState<Chat | null>(null);
+
+  const cancelUserBooking = async (id: string) => {
+    if (!currentUser) return;
+    try {
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch('/api/bookings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+        body: JSON.stringify({ id, status: 'cancelled', hotelId: (selectedBooking as any)?.hotelId || 'unknown' }) // hotelId required by secure API
+      });
+      if (res.ok) setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'cancelled' } : b));
+      setSelectedBooking(null);
+    } catch(e) { console.error(e); }
+  };
 
   // =========================================================
   // 1. INITIAL FETCH & REAL-TIME LISTENERS
@@ -251,13 +269,21 @@ function DashboardContent() {
     return onSnapshot(q, (snap) => {
         const list = snap.docs.map(d => {
           const data = d.data();
+          const parts = d.id.split('_');
+          
+          // Extract the hotel/agent ID so the popup knows who to talk to
+          const recId = parts.find((pid: string) => pid !== uid) || 'unknown';
+          const isMe = data.lastSenderId === uid;
+          const unread = data.unreadCount?.[uid] || 0;
+
           return {
             id: d.id,
-            lastMessage: data.lastMessage || 'Sent a message',
-            participantName: data.otherUserName || data.recipientName || data.hotelName || 'Support / Agent', 
-            unreadCount: data.unreadCount?.[uid] || 0,
-            updatedAt: data.updatedAt || data.lastMessageTime || new Date()
-          } as Chat;
+            lastMessage: isMe ? `You: ${data.lastMessage || 'Sent an attachment'}` : (data.lastMessage || 'Sent a message'),
+            participantName: data.otherUserName || data.recipientName || data.hotelName || data.businessName || 'Support / Agent', 
+            unreadCount: isMe ? 0 : unread, // Hide unread number if I sent the last message
+            updatedAt: data.updatedAt || data.lastMessageTime || new Date(),
+            recipientId: recId
+          } as any;
         }).sort((a, b) => {
            const timeA = a.updatedAt?.toDate ? a.updatedAt.toDate().getTime() : new Date(a.updatedAt as any).getTime();
            const timeB = b.updatedAt?.toDate ? b.updatedAt.toDate().getTime() : new Date(b.updatedAt as any).getTime();
@@ -569,7 +595,7 @@ function DashboardContent() {
                       ) : (
                           <div className="divide-y divide-slate-100">
                               {chats.map(chat => (
-                                  <div key={chat.id} className="p-6 hover:bg-slate-50 transition-colors cursor-pointer flex justify-between items-center">
+                                  <div key={chat.id} onClick={() => setActiveChat(chat)} className="p-6 hover:bg-slate-50 transition-colors cursor-pointer flex justify-between items-center">
                                       <div className="flex items-center gap-4">
                                           <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-lg">
                                               {chat.participantName[0]}
@@ -654,6 +680,66 @@ function DashboardContent() {
                 )}
 
               </AnimatePresence>
+
+              {/* BOOKING DETAILS MODAL (USER) */}
+              <AnimatePresence>
+                {selectedBooking && (
+                  <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedBooking(null)}></div>
+                    <motion.div initial={{opacity: 0, scale: 0.95}} animate={{opacity: 1, scale: 1}} exit={{opacity: 0, scale: 0.95}} className="relative bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col z-10">
+                      <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                        <h2 className="text-xl font-black text-slate-900">Stay Details</h2>
+                        <button onClick={() => setSelectedBooking(null)} className="p-2 bg-white rounded-full shadow-sm hover:bg-slate-100 transition-colors"><X size={20} /></button>
+                      </div>
+                      <div className="p-8 space-y-6">
+                         <div className="flex items-center gap-4">
+                            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-2xl"><Building2 size={24}/></div>
+                            <div>
+                               <h3 className="text-xl font-black text-slate-900">{selectedBooking.hotelName || 'My Stay'}</h3>
+                               <p className="text-slate-500 font-bold text-sm">Room: {selectedBooking.roomName}</p>
+                            </div>
+                         </div>
+                         <div className="grid grid-cols-2 gap-4 bg-slate-50 p-6 rounded-3xl border border-slate-100">
+                            <div>
+                               <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Check In</p>
+                               <p className="font-bold text-slate-900">{selectedBooking.checkInDate ? new Date(selectedBooking.checkInDate).toLocaleDateString() : (selectedBooking as any).checkIn ? new Date((selectedBooking as any).checkIn).toLocaleDateString() : 'N/A'}</p>
+                            </div>
+                            <div>
+                               <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Check Out</p>
+                               <p className="font-bold text-slate-900">{selectedBooking.checkOutDate ? new Date(selectedBooking.checkOutDate).toLocaleDateString() : (selectedBooking as any).checkOut ? new Date((selectedBooking as any).checkOut).toLocaleDateString() : 'N/A'}</p>
+                            </div>
+                            <div className="col-span-2 mt-2">
+                               <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Reservation Status</p>
+                               <StatusBadge status={selectedBooking.status || selectedBooking.paymentStatus || 'pending'} />
+                            </div>
+                         </div>
+                         <div className="flex justify-between items-center bg-blue-50 p-6 rounded-3xl">
+                            <span className="font-black text-blue-900">Total Charged</span>
+                            <span className="font-black text-2xl text-blue-600">${selectedBooking.totalAmount || (selectedBooking as any).totalPrice || 0}</span>
+                         </div>
+                      </div>
+                      <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
+                         {(selectedBooking.status || selectedBooking.paymentStatus) !== 'cancelled' && (
+                            <button onClick={() => cancelUserBooking(selectedBooking.id)} className="w-full py-4 bg-red-100 text-red-600 hover:bg-red-200 rounded-2xl font-black text-sm uppercase tracking-widest transition-colors">
+                              Cancel Reservation
+                            </button>
+                         )}
+                      </div>
+                    </motion.div>
+                  </div>
+                )}
+              </AnimatePresence>
+
+              {/* CHAT MODAL (USER) */}
+              {activeChat && currentUser && (
+                <SharedChatComponent 
+                  isOpen={true} 
+                  onClose={() => setActiveChat(null)} 
+                  recipientId={(activeChat as any).recipientId || 'unknown'} 
+                  recipientName={activeChat.participantName} 
+                />
+              )}
+
           </div>
         </main>
       
