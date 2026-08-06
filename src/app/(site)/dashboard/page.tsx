@@ -246,18 +246,22 @@ function DashboardContent() {
   };
 
   const subscribeToChats = (uid: string) => {
-    const q = query(collection(db, 'chats'), where('participants', 'array-contains', uid), orderBy('updatedAt', 'desc'));
+    // 🛡️ CRITICAL FIX: Removed orderBy to prevent silent Firestore composite index failures. Sort in memory instead.
+    const q = query(collection(db, 'chats'), where('participants', 'array-contains', uid));
     return onSnapshot(q, (snap) => {
         const list = snap.docs.map(d => {
           const data = d.data();
-          // 🛡️ FIX: Safely map chat data to prevent empty names and unread counts
           return {
             id: d.id,
             lastMessage: data.lastMessage || 'Sent a message',
             participantName: data.otherUserName || data.recipientName || data.hotelName || 'Support / Agent', 
             unreadCount: data.unreadCount?.[uid] || 0,
-            updatedAt: data.updatedAt || data.lastMessageTime
+            updatedAt: data.updatedAt || data.lastMessageTime || new Date()
           } as Chat;
+        }).sort((a, b) => {
+           const timeA = a.updatedAt?.toDate ? a.updatedAt.toDate().getTime() : new Date(a.updatedAt as any).getTime();
+           const timeB = b.updatedAt?.toDate ? b.updatedAt.toDate().getTime() : new Date(b.updatedAt as any).getTime();
+           return (timeB || 0) - (timeA || 0);
         });
         setChats(list);
     });
@@ -522,7 +526,7 @@ function DashboardContent() {
                           <div className="flex items-center gap-8 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 pt-4 md:pt-0">
                              <StatusBadge status={booking.paymentStatus} />
                              <div className="text-right">
-                                <p className="text-2xl font-black text-slate-900">${booking.totalAmount}</p>
+                                <p className="text-2xl font-black text-slate-900">${booking.totalAmount || (booking as any).totalPrice || 0}</p>
                                 <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Total</p>
                              </div>
                           </div>
@@ -880,17 +884,19 @@ const InputGroup = ({ label, value, disabled, onChange }: any) => (
   </div>
 );
 
-const StatusBadge = ({ status }: { status: string }) => {
-   const styles = {
+const StatusBadge = ({ status }: { status?: string | null }) => {
+   const safeStatus = status || 'pending';
+   const styles: any = {
      paid: 'bg-emerald-500 text-white',
      confirmed: 'bg-emerald-500 text-white',
      pending: 'bg-amber-500 text-white',
      cancelled: 'bg-red-500 text-white'
-   }[status.toLowerCase()] || 'bg-slate-900 text-white';
+   };
+   const appliedStyle = styles[safeStatus.toLowerCase()] || 'bg-slate-900 text-white';
 
    return (
-     <span className={`${styles} px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md`}>
-       {status}
+     <span className={`${appliedStyle} px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md`}>
+       {safeStatus}
      </span>
    );
 };

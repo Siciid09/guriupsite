@@ -163,23 +163,50 @@ function DashboardContent() {
         }
 
         // Chats Listener (Keep Firebase Realtime for Messages)
-        const qChats = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid), orderBy('updatedAt', 'desc'));
-        const unsubChats = onSnapshot(qChats, (cSnap) => {
-           setChats(cSnap.docs.map(d => {
+        // 🛡️ CRITICAL FIX: Removed orderBy to prevent silent index failures, added fallback listener for hotel.id
+        const qChats = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid));
+        const qChatsHotel = query(collection(db, 'chats'), where('participants', 'array-contains', hotelId));
+
+        let userChats: Chat[] = [];
+        let hotelChats: Chat[] = [];
+
+        const combineAndSortChats = () => {
+           const combined = [...userChats, ...hotelChats];
+           // Remove duplicates in case a chat matches both
+           const unique = Array.from(new Map(combined.map(item => [item.id, item])).values());
+           unique.sort((a, b) => {
+              const timeA = a.updatedAt?.toDate ? a.updatedAt.toDate().getTime() : new Date(a.updatedAt as any).getTime();
+              const timeB = b.updatedAt?.toDate ? b.updatedAt.toDate().getTime() : new Date(b.updatedAt as any).getTime();
+              return (timeB || 0) - (timeA || 0);
+           });
+           setChats(unique);
+        };
+
+        const processChats = (docs: any[]) => {
+           return docs.map(d => {
              const data = d.data();
-             // 🛡️ FIX: Deep fallback check for user names and messages
              return {
                id: d.id,
                lastMessage: data.lastMessage || 'Sent a message',
                participantName: data.otherUserName || data.userName || data.senderName || data.recipientName || 'Guest User',
                unreadCount: data.unreadCount?.[user.uid] || 0,
-               updatedAt: data.updatedAt || data.lastMessageTime
+               updatedAt: data.updatedAt || data.lastMessageTime || new Date()
              } as Chat;
-           }));
+           });
+        };
+
+        const unsubChats1 = onSnapshot(qChats, (cSnap) => {
+           userChats = processChats(cSnap.docs);
+           combineAndSortChats();
+        });
+
+        const unsubChats2 = onSnapshot(qChatsHotel, (cSnap) => {
+           hotelChats = processChats(cSnap.docs);
+           combineAndSortChats();
         });
 
         setLoading(false);
-        return () => unsubChats();
+        return () => { unsubChats1(); unsubChats2(); };
       } else {
         setNeedsSetup(true);
         setLoading(false);
@@ -741,7 +768,8 @@ function InfoField({ label, value, icon: Icon }: any) {
    )
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status }: { status?: string | null }) {
+   const safeStatus = status || 'pending';
    const styles: any = {
      'pending': 'bg-amber-100 text-amber-700',
      'confirmed': 'bg-emerald-100 text-emerald-700',
@@ -750,8 +778,8 @@ function StatusBadge({ status }: { status: string }) {
      'cancelled': 'bg-red-100 text-red-700',
    };
    return (
-     <span className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest ${styles[status] || 'bg-slate-100 text-slate-900'}`}>
-       {status.replace('-', ' ')}
+     <span className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest ${styles[safeStatus.toLowerCase()] || 'bg-slate-100 text-slate-900'}`}>
+       {safeStatus.replace('-', ' ')}
      </span>
    );
 }
