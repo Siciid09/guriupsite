@@ -20,7 +20,7 @@ const PLAN_LIMITS = {
   free: { maxRooms: 3, maxImages: 1 },
   pro: { maxRooms: 9999, maxImages: 50 }
 };
-const PRO_AMENITIES = ['Entertainment', 'Views & Outdoor']; // Categories locked for free users
+const PRO_AMENITIES = ['Premium & Luxury', 'Entertainment', 'Views & Outdoor']; // Categories locked for free users
 
 const ROOM_CATEGORIES = ['Standard', 'Deluxe', 'Executive', 'Suite', 'Penthouse', 'Villa', 'Dormitory', 'Family'];
 const BED_TYPES = ['King', 'Queen', 'Double', 'Twin', 'Single', 'Bunk', 'Sofa Bed', 'Murphy Bed'];
@@ -28,14 +28,15 @@ const ROOM_STATUSES = ['Available', 'Occupied', 'Maintenance', 'Cleaning', 'Out 
 const CLEANING_STATUSES = ['Cleaned', 'Dirty', 'In-Progress', 'Inspected'];
 
 const AMENITIES_MAP: Record<string, string[]> = {
-  'Climate Control': ['AC', 'Central Heating', 'Portable Fan', 'Fireplace'],
+  'Climate Control & Comfort': ['AC', 'Central Heating', 'Portable Fan', 'Fireplace', 'Soundproofing', 'Blackout Curtains'],
+  'Premium & Luxury': ['Jacuzzi', 'Private Pool', 'Smart Room Controls'],
   'Entertainment': ['Smart TV', 'Cable/Satellite', 'Netflix/Streaming', 'Gaming Console', 'DVD Player'],
   'Connectivity': ['High-speed Wi-Fi', 'Ethernet Port', 'Telephone'],
-  'Bathroom': ['Ensuite', 'Shared Bathroom', 'Bathtub', 'Rain Shower', 'Bidet', 'Hairdryer', 'Bathrobe', 'Slippers', 'Toiletries'],
+  'Bathroom': ['Ensuite', 'Shared Bathroom', 'Bathtub', 'Rain Shower', 'Bidet', 'Hairdryer', 'Bathrobe', 'Slippers', 'Toiletries', 'Towels'],
   'Kitchen & Food': ['Minibar', 'Coffee/Tea Maker', 'Electric Kettle', 'Microwave', 'Toaster', 'Fridge', 'Full Kitchen', 'Dining Table'],
   'Work & Storage': ['Desk', 'Office Chair', 'Safe (Laptop size)', 'Wardrobe', 'Iron & Ironing Board'],
   'Views & Outdoor': ['Balcony', 'Terrace', 'City View', 'Sea View', 'Pool View', 'Garden View', 'No View'],
-  'Safety & Accessibility': ['Smoke Detector', 'Fire Extinguisher', 'First Aid Kit', 'Wheelchair Accessible', 'Grab bars in bathroom', 'Lowered counters']
+  'Safety & Accessibility': ['Smoke Detector', 'Fire Extinguisher', 'First Aid Kit', 'Wheelchair Accessible', 'Grab bars in bathroom', 'Lowered counters', 'Elevator Access', 'Ground Floor']
 };
 
 interface AddEditRoomProps {
@@ -81,8 +82,11 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
 
   // 3. Pricing & Rules
   const [basePrice, setBasePrice] = useState('');
+  const [discountPrice, setDiscountPrice] = useState('');
   const [weekendPrice, setWeekendPrice] = useState('');
   const [taxIncluded, setTaxIncluded] = useState(true);
+  const [taxes, setTaxes] = useState('');
+  const [cancellationPolicy, setCancellationPolicy] = useState('');
   const [depositRequired, setDepositRequired] = useState('');
   const [minStay, setMinStay] = useState('1');
   const [maxStay, setMaxStay] = useState('30');
@@ -169,8 +173,11 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
               setExtraBedCharge(data.extraBedCharge?.toString() || '0');
 
               setBasePrice(data.basePrice?.toString() || '');
+              setDiscountPrice(data.discountPrice?.toString() || '');
               setWeekendPrice(data.weekendPrice?.toString() || '');
               setTaxIncluded(data.taxIncluded ?? true);
+              setTaxes(data.taxes || '');
+              setCancellationPolicy(data.policies?.cancellation || data.cancellationPolicy || '');
               setDepositRequired(data.depositRequired?.toString() || '');
               setMinStay(data.minStay?.toString() || '1');
               setMaxStay(data.maxStay?.toString() || '30');
@@ -338,8 +345,10 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
         maxExtraBeds: Number(maxExtraBeds), 
         extraBedCharge: Number(extraBedCharge),
         basePrice: Number(basePrice), 
+        discountPrice: Number(discountPrice) || 0,
         weekendPrice: Number(weekendPrice) || Number(basePrice),
         taxIncluded, 
+        taxes, 
         depositRequired: Number(depositRequired) || 0,
         minStay: Number(minStay), 
         maxStay: Number(maxStay), 
@@ -353,6 +362,7 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
         fullDescription, 
         petsAllowed, 
         smokingAllowed,
+        policies: { cancellation: cancellationPolicy },
         roomStatus, 
         cleaningStatus, 
         cleaningDuration: Number(cleaningDuration),
@@ -472,14 +482,18 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
             3. PRICING & RULES
         ================================================================ */}
         <Section title="3. Pricing & Business Rules" icon={DollarSign}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
             <Input label="Base Price / Night ($) *" type="number" value={basePrice} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBasePrice(e.target.value)} required className="text-xl" />
+            <Input label="Discount Price ($)" type="number" value={discountPrice} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDiscountPrice(e.target.value)} placeholder="Promo price" />
             <Input label="Weekend Price ($)" type="number" value={weekendPrice} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWeekendPrice(e.target.value)} placeholder="Leave blank to use base" />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
             <Input label="Deposit Required ($ or %)" type="number" value={depositRequired} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDepositRequired(e.target.value)} placeholder="0" />
             <Input label="Minimum Stay (Nights)" type="number" value={minStay} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMinStay(e.target.value)} min="1" />
             <Input label="Maximum Stay (Nights)" type="number" value={maxStay} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMaxStay(e.target.value)} />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 pt-6 border-t border-slate-100">
+             <Input label="Taxes Details (String)" value={taxes} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTaxes(e.target.value)} placeholder="e.g. 10% VAT included" />
           </div>
           <div className="flex gap-8 border-t border-slate-100 pt-6">
             <Toggle label="Price Includes Taxes" checked={taxIncluded} onChange={setTaxIncluded} />
@@ -674,6 +688,14 @@ export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
                    placeholder="e.g. Guest prefers extra pillows..."
                  />
               </div>
+           </div>
+           <div className="mb-6">
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Cancellation Policy</label>
+              <Input 
+                value={cancellationPolicy} 
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCancellationPolicy(e.target.value)} 
+                placeholder="e.g. Free cancellation up to 24 hours before check-in." 
+              />
            </div>
            <div className="flex gap-8 border-t border-slate-100 pt-6">
               <Toggle label="Pets Allowed" checked={petsAllowed} onChange={setPetsAllowed} />

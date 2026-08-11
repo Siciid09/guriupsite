@@ -72,36 +72,49 @@ async function attachAdminData(hotels: any[]) {
     const adminId = h.hotelAdminId || h.ownerId || h.agentId;
     const adminData = adminId ? (adminMap.get(adminId) || {}) : {};
     const plan = (h.planTier || adminData.planTier || h.planTierAtUpload || 'free').toLowerCase();
-    
     const isVerified = isPaidTier(plan) || h.isPro === true || h.isVerified === true;
-    const rawPhone = adminData.whatsappNumber || adminData.phone || adminData.phoneNumber || h.phone || h.contactPhone || '';
+    const rawPhone = adminData.whatsappNumber || adminData.phone || adminData.phoneNumber || h.contact?.phoneCall || '';
 
-    // Safely parse location whether it's an object or a legacy string
     const locObj = typeof h.location === 'object' && h.location !== null ? h.location : {};
     const city = locObj.city || (typeof h.location === 'string' ? h.location : '') || h.city || 'Unknown City';
     const area = locObj.area || locObj.district || h.area || h.district || 'Unknown Area';
     const address = locObj.address || h.address || `${area}, ${city}`;
 
-    // Safely parse pricing
     const price = Number(h.pricePerNight || h.price || h.displayPrice) || 0;
 
     return {
       id: h._id || h.id,
       slug: h.slug || null,
       name: h.name || h.title || 'Untitled Hotel',
-      description: h.description || h.details || h.bio || '',
-      type: h.type || h.hotelType || 'Luxury Hotel',
+      description: h.description || h.details || '',
+      shortDescription: h.shortDescription || '',
+      type: h.type || h.hotelType || 'Hotel',
+      roomsCount: h.roomsCount || 0,
       rating: Number(h.rating) || 4.5,
       pricePerNight: price,
       displayPrice: price,
       images: Array.isArray(h.images) && h.images.length > 0 ? h.images : ['https://placehold.co/600x400?text=No+Hotel+Image'],
-      amenities: Array.isArray(h.amenities) ? h.amenities : [],
+      media: h.media || { logo: '', coverPhoto: '' },
+      amenities: typeof h.amenities === 'object' && h.amenities !== null && !Array.isArray(h.amenities) 
+                 ? Object.keys(h.amenities).filter(k => h.amenities[k]) 
+                 : Array.isArray(h.amenities) ? h.amenities : [],
       location: {
+        country: locObj.country || 'Somalia',
         city: city,
         area: area,
         address: address,
+        landmark: locObj.landmark || '',
         gpsCoordinates: locObj.gpsCoordinates || locObj.coordinates || null,
+        latDisplay: locObj.latDisplay || null,
+        lngDisplay: locObj.lngDisplay || null,
       },
+      contact: h.contact || {},
+      policies: h.policies || {},
+      cancellation: h.cancellation || {},
+      payments: h.payments || {},
+      guestInfo: h.guestInfo || {},
+      accessibility: h.accessibility || {},
+      settings: h.settings || {},
       ownerName: adminData.businessName || adminData.agencyName || adminData.name || h.ownerName || 'GuriUp Partner',
       planTier: plan,
       isPro: isVerified,

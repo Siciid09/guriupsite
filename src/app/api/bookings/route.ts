@@ -5,6 +5,12 @@ import { adminAuth } from '@/app/lib/firebase-admin';
 export const dynamic = 'force-dynamic';
 
 // =========================================================
+// UTILITY: UUID VALIDATOR (PREVENTS POSTGRES TYPE CRASHES)
+// =========================================================
+const isValidUUID = (id: string) => 
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+// =========================================================
 // SECURITY HELPER: VERIFY FIREBASE AUTH TOKEN
 // =========================================================
 async function getVerifiedUid(request: Request): Promise<string | null> {
@@ -73,10 +79,14 @@ export async function GET(request: Request) {
 
     // --- SCENARIO A: SINGLE BOOKING FETCH ---
     if (id) {
+      const queryFilter = isValidUUID(id) 
+        ? `id.eq.${id},_id.eq.${id}` 
+        : `_id.eq.${id}`;
+
       const { data, error } = await supabaseAdmin
         .from(table)
         .select('*')
-        .or(`id.eq.${id},_id.eq.${id}`) // Unified schema check
+        .or(queryFilter)
         .maybeSingle();
 
       if (error) throw error;
@@ -243,10 +253,14 @@ export async function PATCH(request: Request) {
 
     updatePayload.updatedAt = new Date().toISOString();
 
+    const queryFilter = isValidUUID(targetId) 
+      ? `id.eq.${targetId},_id.eq.${targetId}` 
+      : `_id.eq.${targetId}`;
+
     const { error } = await supabaseAdmin
       .from(table)
       .update(updatePayload)
-      .or(`id.eq.${targetId},_id.eq.${targetId}`)
+      .or(queryFilter)
       .eq('hotelId', hotelId);
 
     if (error) throw error;
@@ -305,10 +319,14 @@ export async function DELETE(request: Request) {
       }
     }
 
+    const queryFilter = isValidUUID(id) 
+      ? `id.eq.${id},_id.eq.${id}` 
+      : `_id.eq.${id}`;
+
     const { error } = await supabaseAdmin
       .from(table)
       .delete()
-      .or(`id.eq.${id},_id.eq.${id}`)
+      .or(queryFilter)
       .eq('hotelId', hotelId);
 
     if (error) throw error;
