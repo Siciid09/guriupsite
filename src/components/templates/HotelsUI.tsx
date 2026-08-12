@@ -15,6 +15,9 @@ import {
   Camera, RotateCcw
 } from 'lucide-react';
 import MapUI from './mapui';
+import { useAuth } from '@/hooks/useAuth';
+import { useSearchParams } from 'next/navigation';
+import Cities from './cities';
 
 // --- CARD AUTO & MANUAL IMAGE SLIDESHOW COMPONENT ---
 const CardImageSlider = ({ images = [], alt = '' }: { images: string[]; alt: string }) => {
@@ -101,6 +104,8 @@ interface HotelsUIProps {
   allHotels: Hotel[];
 }
 
+const FAVORITES_STORAGE_KEY = 'guriup_favorites';
+
 const AMENITIES_LIST = [
   'Wi-Fi', 'Swimming Pool', 'Gym', 'Restaurant', 
   'Parking', 'Air Conditioning', 'Free Breakfast',
@@ -143,6 +148,8 @@ const truncateWords = (text: string, maxWords: number = 15) => {
 //  MAIN COMPONENT
 // =======================================================================
 export default function HotelsUI({ featuredHotels = [], allHotels = [] }: HotelsUIProps) {
+  const { user } = useAuth();
+  const searchParams = useSearchParams();
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [showToast, setShowToast] = useState({ show: false, message: '' });
   const [favorites, setFavorites] = useState<string[]>([]);
@@ -152,7 +159,16 @@ export default function HotelsUI({ featuredHotels = [], allHotels = [] }: Hotels
   const [searchType, setSearchType] = useState('');
   
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState<LocationResult | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<LocationResult | null>(() => {
+    const cityParam = searchParams.get('city');
+    return cityParam ? { city: cityParam } : null;
+  });
+
+  // Listen to URL changes to update filter instantly
+  useEffect(() => {
+    const cityParam = searchParams.get('city');
+    if (cityParam) setSelectedLocation({ city: cityParam });
+  }, [searchParams]);
 
   const [isTypeDropdownOpen, setIsTypeDropdownOpen] = useState(false);
   const typeRef = useRef<HTMLDivElement>(null);
@@ -172,6 +188,39 @@ export default function HotelsUI({ featuredHotels = [], allHotels = [] }: Hotels
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Load favorites from localStorage immediately — works instantly, even for guests
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(FAVORITES_STORAGE_KEY);
+      if (stored) setFavorites(JSON.parse(stored));
+    } catch (err) {
+      console.error('Failed to read local favorites', err);
+    }
+  }, []);
+
+  // If logged in, merge with DB favorites — this is the source your dashboard should query
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const idToken = await user.getIdToken();
+        const res = await fetch('/api/favorites', {
+          headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const dbFavorites: string[] = data.favorites || [];
+        setFavorites(prev => {
+          const merged = Array.from(new Set([...prev, ...dbFavorites]));
+          try { localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(merged)); } catch {}
+          return merged;
+        });
+      } catch (err) {
+        console.error('Failed to sync favorites from server', err);
+      }
+    })();
+  }, [user]);
 
   const handleResetFilters = () => {
     setSearchQuery('');
@@ -273,13 +322,29 @@ export default function HotelsUI({ featuredHotels = [], allHotels = [] }: Hotels
     triggerToast('Link copied to clipboard!');
   };
 
-  const toggleFavorite = (e: React.MouseEvent, id: string) => {
+  const toggleFavorite = async (e: React.MouseEvent, id: string) => {
     e.preventDefault(); e.stopPropagation();
-    setFavorites(prev => {
-      const isFav = prev.includes(id);
-      triggerToast(isFav ? 'Removed from favorites' : 'Added to favorites');
-      return isFav ? prev.filter(favId => favId !== id) : [...prev, id];
-    });
+    const isFav = favorites.includes(id);
+    const updated = isFav ? favorites.filter(favId => favId !== id) : [...favorites, id];
+
+    // 1. Instant UI + localStorage (works offline / guest)
+    setFavorites(updated);
+    try { localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+    triggerToast(isFav ? 'Removed from favorites' : 'Added to favorites');
+
+    // 2. Persist to DB so the dashboard can read it
+    if (user) {
+      try {
+        const idToken = await user.getIdToken();
+        await fetch('/api/favorites', {
+          method: isFav ? 'DELETE' : 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+          body: JSON.stringify({ hotelId: id })
+        });
+      } catch (err) {
+        console.error('Failed to sync favorite to server', err);
+      }
+    }
   };
 
   const triggerToast = (msg: string) => {
@@ -304,6 +369,16 @@ export default function HotelsUI({ featuredHotels = [], allHotels = [] }: Hotels
         }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
+        @keyframes marquee-scroll {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .animate-marquee-scroll {
+          animation: marquee-scroll 40s linear infinite;
+        }
+        .animate-marquee-scroll:hover {
+          animation-play-state: paused;
+        }
       `}</style>
 
       {/* TOAST NOTIFICATION */}
@@ -402,15 +477,15 @@ export default function HotelsUI({ featuredHotels = [], allHotels = [] }: Hotels
       ) : (
         <>
           {/* ================= HERO SECTION ================= */}
-          <section className="relative h-[65vh] min-h-[600px] flex flex-col justify-center items-center text-center px-4">
+          <section className="relative md:h-[45vh] min-h-[580px] md:min-h-[420px] flex flex-col justify-center items-center text-center px-4 pb-12 md:pb-0">
             <div className="absolute inset-0 hero-bg"><div className="absolute inset-0 bg-black/80"></div></div>
-            <div className="relative z-20 max-w-[1400px] mx-auto w-full flex flex-col items-center pt-5">
-              <div className="mb-4 px-4 py-1.5 rounded-full bg-blue-900/40 backdrop-blur-md border border-white/20 shadow-2xl flex items-center gap-2">
-                <Sparkles size={14} className="text-blue-400" />
-                <span className="text-white text-[0.8rem] font-black uppercase tracking-[0.1em]">Hospitality Redefined</span>
+            <div className="relative z-40 max-w-[1400px] mx-auto w-full flex flex-col items-center pt-5 mt-8 md:mt-0">
+              <div className="mb-3 px-3 py-1 rounded-full bg-blue-900/40 backdrop-blur-md border border-white/20 shadow-2xl flex items-center gap-1.5">
+                <Sparkles size={12} className="text-blue-400" />
+                <span className="text-white text-[10px] md:text-xs font-black uppercase tracking-[0.1em]">Hospitality Redefined</span>
               </div>
-              <h1 className="text-white text-5xl md:text-7xl lg:text-8xl font-black mb-4 tracking-tight leading-[1.0]">Find Your <br /><span className="text-[#0065eb]">Perfect Stay</span></h1>
-              <p className="text-gray-300 text-xs md:text-sm font-bold uppercase tracking-widest mb-12 max-w-[900px]">Luxury hotels, resorts & suites across the Horn of Africa.</p>
+              <h1 className="text-white text-[7.5vw] sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-black mb-3 tracking-tight leading-[1.0] whitespace-nowrap">Find Your <span className="text-[#0065eb]">Perfect Stay</span></h1>
+              <p className="text-gray-300 text-[10px] md:text-xs font-bold uppercase tracking-widest mb-8 max-w-[800px]">Luxury hotels, resorts & suites across the Horn of Africa.</p>
 
               {/* Reset Filters Quick Action */}
               <div className="w-full max-w-5xl mx-auto flex justify-end mb-2 relative z-[9999]">
@@ -506,10 +581,40 @@ export default function HotelsUI({ featuredHotels = [], allHotels = [] }: Hotels
             </div>
           </section>
 
+          {/* ================= PREMIUM GLASSMORPHISM MARQUEE ================= */}
+          <div className="relative w-full border-b border-slate-200/60 bg-gradient-to-r from-blue-50/90 via-white/95 to-blue-50/90 backdrop-blur-xl shadow-[0_8px_30px_rgba(0,101,235,0.06)] z-30 overflow-hidden flex items-center h-12 md:h-14 -mt-4 md:-mt-6 rounded-b-[1.5rem] md:rounded-b-[2rem]">
+            {/* Left & Right gradient fades for smooth enter/exit of text */}
+            <div className="absolute inset-y-0 left-0 w-12 md:w-32 bg-gradient-to-r from-white to-transparent z-10 pointer-events-none"></div>
+            <div className="absolute inset-y-0 right-0 w-12 md:w-32 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none"></div>
+            
+            <div className="flex w-max animate-marquee-scroll items-center">
+              {/* Duplicate array for seamless infinite scrolling loop */}
+              {[...Array(2)].map((_, i) => (
+                <div key={i} className="flex items-center">
+                  {[
+                    "Verified Properties", "Real Guest Reviews", "Curated Stays", 
+                    "Trusted by Travelers", "Exceptional Hospitality", "Book with Confidence", 
+                    "Premium Stays", "Guest-Approved Hotels"
+                  ].map((word, idx) => (
+                    <div key={`${i}-${idx}`} className="flex items-center group cursor-default">
+                      <span className="text-[10px] md:text-[11px] font-black uppercase tracking-[0.2em] text-[#0065eb] whitespace-nowrap mx-6 md:mx-8">
+                        {word}
+                      </span>
+                      <Sparkles size={14} className="text-blue-300 group-hover:text-amber-400 transition-colors" />
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* POPULAR DESTINATIONS CAROUSEL */}
+          <Cities />
+
           {/* RECOMMENDED SECTION (MODERNIZED & PAGINATED) */}
-          <section className="py-16 md:py-20 bg-[#fafbfc] relative z-10 border-b border-slate-100">
-            <div className="max-w-[1400px] mx-auto px-6">
-              <div className="mb-10 flex flex-col md:flex-row items-start md:items-end justify-between gap-6">
+          <section className="pt-0 pb-8 md:pb-10 bg-[#fafbfc] relative z-10">
+            <div className="max-w-[1400px] mx-auto px-6 lg:px-12">
+              <div className="mb-6 md:mb-8 flex flex-col md:flex-row items-start md:items-end justify-between gap-6">
                 <div>
                   <h2 className="text-3xl md:text-4xl font-black text-slate-900 mb-2 tracking-tight title-underline">Recommended Stays</h2>
                   <p className="text-gray-500 font-medium mt-4">Verified partners with exclusive benefits and premium locations.</p>
@@ -520,7 +625,7 @@ export default function HotelsUI({ featuredHotels = [], allHotels = [] }: Hotels
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {currentFeatured.map((h, i) => (
-                      <HotelCard key={h.id || h._id || `feat-${i}`} hotel={h} onShare={handleShare} isFavorite={favorites.includes(h.id || '')} onToggleFavorite={toggleFavorite} />
+                      <HotelCard key={h.id || h._id || `feat-${i}`} hotel={h} onShare={handleShare} isFavorite={favorites.includes(h.id || h._id || '')} onToggleFavorite={toggleFavorite} />
                     ))}
                   </div>
 
@@ -551,7 +656,7 @@ export default function HotelsUI({ featuredHotels = [], allHotels = [] }: Hotels
           </section>
 
           {/* ALL LISTINGS */}
-          <section className="py-16 md:py-20 bg-white">
+          <section className="pt-6 pb-16 md:pt-8 md:pb-20 bg-white">
             <div className="max-w-[1400px] mx-auto px-6">
               <div className="flex items-center justify-between mb-10">
                 <div>
@@ -564,7 +669,7 @@ export default function HotelsUI({ featuredHotels = [], allHotels = [] }: Hotels
               {filteredAllHotels.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   {filteredAllHotels.map((h, i) => (
-                      <HotelListCard key={h.id || h._id || `all-${i}`} hotel={h} onShare={handleShare} isFavorite={favorites.includes(h.id || '')} onToggleFavorite={toggleFavorite} />
+                      <HotelListCard key={h.id || h._id || `all-${i}`} hotel={h} onShare={handleShare} isFavorite={favorites.includes(h.id || h._id || '')} onToggleFavorite={toggleFavorite} />
                   ))}
                 </div>
               ) : (
@@ -589,10 +694,13 @@ export default function HotelsUI({ featuredHotels = [], allHotels = [] }: Hotels
 // MODERNIZED FEATURED HOTEL CARD (Reduced Height & Premium Styling)
 const HotelCard = ({ hotel, onShare, isFavorite, onToggleFavorite }: any) => {
   const isPro = hotel.planTier === 'pro' || hotel.planTier === 'premium' || hotel.isPro;
-  const locationText = typeof hotel.location === 'string' ? hotel.location : `${hotel.location?.area || ''}, ${hotel.location?.city || ''}`;
+  const locationText = typeof hotel.location === 'string' 
+    ? hotel.location 
+    : [hotel.location?.city, hotel.location?.country].filter(Boolean).join(', ');
   const ratingVal = Number(hotel.rating || 4.5).toFixed(1);
-  const reviewCount = hotel.reviewCount || Math.floor(Math.random() * 80) + 12;
-  const price = hotel.pricePerNight || hotel.price || hotel.displayPrice || 0;
+  const reviewCount = hotel.reviewCount ?? 0;
+  const fromPrice = hotel.fromPrice ?? hotel.pricePerNight ?? hotel.price ?? hotel.displayPrice ?? 0;
+  const topAmenities = (hotel.amenities || []).slice(0, 3);
 
   return (
     <div className="group relative bg-white/90 backdrop-blur-md rounded-[2rem] overflow-hidden border border-blue-500/20 shadow-[0_8px_30px_rgba(0,0,0,0.04)] hover:shadow-[0_20px_40px_rgba(0,101,235,0.12)] hover:-translate-y-1.5 transition-all duration-500 flex flex-col h-full">
@@ -603,11 +711,38 @@ const HotelCard = ({ hotel, onShare, isFavorite, onToggleFavorite }: any) => {
        </div>
 
       <Link href={`/hotels/${hotel.slug || hotel.id || hotel._id}`} className="block flex-1 flex flex-col">
-        {/* REDUCED HEIGHT: h-48 md:h-52 instead of h-72 */}
-        <div className="h-48 md:h-52 overflow-hidden relative bg-slate-200 m-2 rounded-[1.5rem]">
-          <CardImageSlider images={hotel.images} alt={hotel.name || hotel.title} />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-90 z-0 pointer-events-none" />
-          {isPro && <div className="absolute bottom-3 left-3 bg-blue-600/90 backdrop-blur-md text-white px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-lg flex items-center gap-1.5 z-20"><ShieldCheck size={12} /> Verified</div>}
+        {/* Framed image: blue stroke lives on the OUTER wrapper with padding, so there's a white gap before the photo instead of the border sitting flush on it */}
+        <div className="h-48 md:h-52 m-2 rounded-[1.5rem] border border-[#0065eb] p-1 bg-white">
+          <div className="w-full h-full overflow-hidden relative bg-slate-200 rounded-[1.15rem]">
+            <CardImageSlider images={hotel.images} alt={hotel.name || hotel.title} />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-90 z-0 pointer-events-none" />
+
+            {/* Verified badge + top amenity icons, stacked top-left so they never collide */}
+            <div className="absolute top-3 left-3 z-20 flex flex-col items-start gap-2">
+              {isPro && (
+                <div className="bg-blue-600/90 backdrop-blur-md text-white px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-lg flex items-center gap-1.5">
+                  <ShieldCheck size={12} /> Verified
+                </div>
+              )}
+              {topAmenities.length > 0 && (
+                <div className="flex gap-1.5">
+                  {topAmenities.map((am: string, i: number) => (
+                    <div key={am || `icon-${i}`} title={am} className="w-7 h-7 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center text-white">
+                      {getAmenityIcon(am)}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Name + location — bigger, city + country, on the image */}
+            <div className="absolute bottom-3 left-3 right-3 z-20 pointer-events-none">
+              <h3 className="text-white text-lg font-black line-clamp-1 drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]">{hotel.name || hotel.title}</h3>
+              <p className="text-white/90 text-sm font-bold mt-1 flex items-center gap-1 min-w-0 drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]">
+                <MapPin size={15} className="shrink-0"/> <span className="truncate">{locationText}</span>
+              </p>
+            </div>
+          </div>
         </div>
         
         {/* COMPACT PADDING: p-5 instead of p-7 */}
@@ -616,15 +751,14 @@ const HotelCard = ({ hotel, onShare, isFavorite, onToggleFavorite }: any) => {
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[9px] font-black uppercase tracking-widest text-[#0065eb] bg-blue-50 px-2.5 py-1 rounded-full">{hotel.type || 'Luxury Hotel'}</span>
             </div>
-            <h3 className="text-lg font-black text-slate-900 line-clamp-1 group-hover:text-[#0065eb] transition-colors mb-1.5">{hotel.name || hotel.title}</h3>
-            <p className="text-slate-400 text-[11px] font-bold mb-3 flex items-center gap-1.5"><MapPin size={12} className="text-[#0065eb] shrink-0"/> {locationText}</p>
-            
+
             <p className="text-slate-500 text-[11px] font-medium leading-relaxed mb-4 line-clamp-2">
               {truncateWords(hotel.description, 15)}
             </p>
 
-            <div className="flex gap-2 mb-4 overflow-hidden">
-              {(hotel.amenities?.slice(0, 3) || []).map((am: string, i: number) => (
+            {/* Up to 6 amenities, wraps instead of clipping */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              {(hotel.amenities?.slice(0, 6) || []).map((am: string, i: number) => (
                 <div key={am || `am-${i}`} className="flex items-center gap-1 text-[9px] font-bold text-slate-600 bg-slate-50 border border-slate-100 px-2 py-1.5 rounded-lg whitespace-nowrap">
                   {getAmenityIcon(am)} {am}
                 </div>
@@ -641,16 +775,17 @@ const HotelCard = ({ hotel, onShare, isFavorite, onToggleFavorite }: any) => {
                   ))}
                 </div>
                 <span className="text-[11px] font-black text-slate-800">{ratingVal}</span>
-                <span className="text-[10px] font-bold text-slate-400">({reviewCount})</span>
+                <span className="text-[10px] font-bold text-slate-400">({reviewCount} review{reviewCount === 1 ? '' : 's'})</span>
               </div>
             </div>
 
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-2xl font-black text-slate-900 tracking-tight">${price}</span>
+                <span className="text-slate-400 text-[9px] font-bold uppercase block">From</span>
+                <span className="text-2xl font-black text-slate-900 tracking-tight">${fromPrice}</span>
                 <span className="text-slate-400 text-[10px] font-bold ml-1 uppercase">/ night</span>
               </div>
-              <div className="bg-slate-900 text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider group-hover:bg-[#0065eb] transition-colors shadow-lg shadow-slate-900/10">Book</div>
+              <div className="bg-slate-900 text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider group-hover:bg-[#0065eb] transition-colors shadow-lg shadow-slate-900/10">View Stay</div>
             </div>
           </div>
         </div>
@@ -661,29 +796,54 @@ const HotelCard = ({ hotel, onShare, isFavorite, onToggleFavorite }: any) => {
 
 const HotelListCard = ({ hotel, onShare, isFavorite, onToggleFavorite }: any) => {
   const isPro = hotel.planTier === 'pro' || hotel.planTier === 'premium' || hotel.isPro;
-  const locationText = typeof hotel.location === 'string' ? hotel.location : hotel.location?.city;
+  const locationText = typeof hotel.location === 'string' 
+    ? hotel.location 
+    : [hotel.location?.city, hotel.location?.country].filter(Boolean).join(', ');
   const ratingVal = Number(hotel.rating || 4.5).toFixed(1);
-  const reviewCount = hotel.reviewCount || Math.floor(Math.random() * 50) + 8;
-  const price = hotel.pricePerNight || hotel.price || hotel.displayPrice || 0;
+  const reviewCount = hotel.reviewCount ?? 0;
+  const fromPrice = hotel.fromPrice ?? hotel.pricePerNight ?? hotel.price ?? hotel.displayPrice ?? 0;
+  const topAmenities = (hotel.amenities || []).slice(0, 3);
 
   return (
     <div className="group relative bg-white rounded-[2rem] border border-slate-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 p-3.5 flex flex-col justify-between">
       <Link href={`/hotels/${hotel.slug || hotel.id || hotel._id}`} className="block flex-1 flex flex-col">
-        <div className="h-52 rounded-[1.5rem] overflow-hidden relative mb-4 bg-slate-200">
-          <CardImageSlider images={hotel.images} alt={hotel.name || hotel.title} />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-90 z-0 pointer-events-none" />
-          <div className="absolute top-3 right-3 flex gap-2 z-20">
-               <button onClick={(e) => onToggleFavorite(e, hotel.id || hotel._id)} className={`p-2 rounded-full backdrop-blur-md shadow-md ${isFavorite ? 'bg-red-500 text-white' : 'bg-white/80 text-slate-700 hover:bg-white hover:text-red-500'}`}><Heart size={14} className={isFavorite ? 'fill-white' : ''}/></button>
-               <button onClick={(e) => { e.preventDefault(); onShare(e, hotel.slug || hotel.id || hotel._id); }} className="bg-white/80 hover:bg-white text-slate-700 hover:text-slate-900 p-2 rounded-full backdrop-blur-md shadow-md"><Share2 size={14} /></button>
+        {/* Framed image: blue stroke on the outer wrapper, small white gap before the photo */}
+        <div className="h-52 rounded-[1.5rem] border border-[#0065eb] p-1 bg-white mb-4">
+          <div className="w-full h-full overflow-hidden relative bg-slate-200 rounded-[1.15rem]">
+            <CardImageSlider images={hotel.images} alt={hotel.name || hotel.title} />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-90 z-0 pointer-events-none" />
+            <div className="absolute top-3 right-3 flex gap-2 z-20">
+                 <button onClick={(e) => onToggleFavorite(e, hotel.id || hotel._id)} className={`p-2 rounded-full backdrop-blur-md shadow-md ${isFavorite ? 'bg-red-500 text-white' : 'bg-white/80 text-slate-700 hover:bg-white hover:text-red-500'}`}><Heart size={14} className={isFavorite ? 'fill-white' : ''}/></button>
+                 <button onClick={(e) => { e.preventDefault(); onShare(e, hotel.slug || hotel.id || hotel._id); }} className="bg-white/80 hover:bg-white text-slate-700 hover:text-slate-900 p-2 rounded-full backdrop-blur-md shadow-md"><Share2 size={14} /></button>
+            </div>
+
+            <div className="absolute top-3 left-3 z-20 flex flex-col items-start gap-2">
+              {isPro && (
+                <div className="bg-blue-600/90 backdrop-blur-md text-white px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider shadow-lg">
+                  Verified
+                </div>
+              )}
+              {topAmenities.length > 0 && (
+                <div className="flex gap-1.5">
+                  {topAmenities.map((am: string, i: number) => (
+                    <div key={am || `icon-${i}`} title={am} className="w-6 h-6 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center text-white">
+                      {getAmenityIcon(am)}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="absolute bottom-3 left-3 right-3 z-20 pointer-events-none">
+              <h3 className="text-white font-black text-base line-clamp-1 drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]">{hotel.name || hotel.title}</h3>
+              <p className="text-white/90 text-[13px] font-bold mt-1 flex items-center gap-1 min-w-0 drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]">
+                <MapPin size={14} className="shrink-0"/> <span className="truncate">{locationText}</span>
+              </p>
+            </div>
           </div>
         </div>
         <div className="px-2 flex-1 flex flex-col justify-between">
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              {isPro ? <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg uppercase tracking-wider">Verified</span> : <span className="text-[9px] font-black text-slate-400 bg-slate-100 px-2 py-1 rounded-lg uppercase tracking-wider">Standard</span>}
-            </div>
-            <h3 className="font-black text-[15px] text-slate-900 group-hover:text-[#0065eb] transition-colors line-clamp-1 mb-1">{hotel.name || hotel.title}</h3>
-            <p className="text-slate-400 text-[10px] font-bold mb-2 flex items-center gap-1"><MapPin size={10} className="text-[#0065eb]"/> {locationText}</p>
             <p className="text-slate-500 text-[11px] font-medium line-clamp-2 mb-4">{truncateWords(hotel.description, 12)}</p>
           </div>
 
@@ -695,12 +855,13 @@ const HotelListCard = ({ hotel, onShare, isFavorite, onToggleFavorite }: any) =>
                 ))}
               </div>
               <span className="text-[10px] font-black text-slate-800">{ratingVal}</span>
-              <span className="text-[9px] font-bold text-slate-400">({reviewCount})</span>
+              <span className="text-[9px] font-bold text-slate-400">({reviewCount} review{reviewCount === 1 ? '' : 's'})</span>
             </div>
 
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-slate-900 font-black text-lg">${price}</span>
+                <span className="text-slate-400 font-bold text-[9px] uppercase block">From</span>
+                <span className="text-slate-900 font-black text-lg">${fromPrice}</span>
                 <span className="text-slate-400 font-bold text-[10px] ml-1">/ night</span>
               </div>
               <span className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center text-slate-900 group-hover:bg-[#0065eb] group-hover:text-white transition-all shadow-sm"><ArrowRight size={14}/></span>

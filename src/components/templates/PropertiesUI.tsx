@@ -345,7 +345,7 @@ export default function PropertiesUI({
       ) : (
         <>
           {/* ================= RESTORED HERO SECTION (EXACT BACKGROUND) ================= */}
-          <section className="relative pt-[130px] pb-16 md:pb-24 flex flex-col items-center text-center px-4 md:px-6 hero-gradient z-20 overflow-hidden">
+          <section className="relative md:h-[45vh] min-h-[580px] md:min-h-[420px] flex flex-col justify-center items-center text-center px-4 md:px-6 hero-gradient z-40 overflow-hidden pb-12 md:pb-0">
             
             <div className="absolute inset-0 z-0">
               <Image 
@@ -357,12 +357,12 @@ export default function PropertiesUI({
               />
             </div>
             
-            <div className="relative z-10 w-full max-w-[1200px] flex flex-col items-center">
-              <span className="bg-blue-500/20 text-[#4F95FF] px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.25em] mb-6 md:mb-8 border border-blue-500/30 backdrop-blur-md">
+            <div className="relative z-40 w-full max-w-[1200px] flex flex-col items-center pt-5 mt-8 md:mt-0">
+              <span className="bg-blue-500/20 text-[#4F95FF] px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.25em] mb-4 md:mb-6 border border-blue-500/30 backdrop-blur-md">
                 Premium Real Estate
               </span>
               
-              <h1 className="text-5xl md:text-7xl lg:text-[6.5rem] font-black text-white mb-10 md:mb-12 leading-[1.05] tracking-tighter drop-shadow-2xl">
+              <h1 className="text-white text-[7.5vw] sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-black mb-8 md:mb-10 tracking-tight leading-[1.05] drop-shadow-2xl whitespace-nowrap">
                 Own Your <span className="text-[#4F95FF]">Future Space.</span>
               </h1>
               
@@ -488,7 +488,7 @@ export default function PropertiesUI({
           </section>
 
           {/* CATEGORY BUTTONS */}
-          <section className="py-10 max-w-[1300px] mx-auto px-4 relative z-0 mt-4 md:mt-8">
+          <section className="pt-6 pb-8 max-w-[1300px] mx-auto px-4 relative z-0">
             <div className="flex overflow-x-auto md:grid md:grid-cols-5 lg:grid-cols-10 gap-3 pb-4 md:pb-0 custom-scrollbar snap-x">
               {PROPERTY_CATEGORIES.map((item) => (
                 <button key={item.name} onClick={() => setSelectedCategory(item.name === selectedCategory ? 'All' : item.name)} className={`shrink-0 w-24 md:w-auto p-4 md:p-3 rounded-[1.75rem] md:rounded-[1.25rem] hover:-translate-y-1 transition-all duration-300 flex flex-col items-center justify-center gap-2 snap-center border ${selectedCategory === item.name ? 'bg-blue-600 text-white border-blue-600 shadow-xl shadow-blue-500/20' : 'bg-white text-slate-800 border-slate-100 hover:shadow-lg'}`}>
@@ -500,7 +500,7 @@ export default function PropertiesUI({
           </section>
 
           {/* FEATURED PROPERTIES */}
-          <section className="bg-blue-50/40 py-16 px-4 md:px-6 border-y border-blue-100/60">
+          <section className="bg-blue-50/40 pt-8 pb-12 px-4 md:px-6 border-y border-blue-100/60">
             <div className="max-w-[1400px] mx-auto">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                 <div>

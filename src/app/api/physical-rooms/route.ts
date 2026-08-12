@@ -141,6 +141,9 @@ export async function POST(request: Request) {
 // =========================================================
 // PATCH: UPDATE PHYSICAL ROOM (Strictly Secured)
 // =========================================================
+// =========================================================
+// PATCH: UPDATE PHYSICAL ROOM (Strictly Secured)
+// =========================================================
 export async function PATCH(request: Request) {
   try {
     if (!supabaseAdmin) {
@@ -158,7 +161,9 @@ export async function PATCH(request: Request) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id') || searchParams.get('_id');
     const body = await request.json();
-    const { hotelId, ...updateData } = body;
+    
+    // 🔥 THE FIX: Extract `id` and `_id` out so they don't end up in updateData
+    const { hotelId, id: bodyId, _id: body_Id, ...updateData } = body;
 
     if (!id || !hotelId) {
       return NextResponse.json({ error: 'Both Physical Room ID and Hotel ID are required.' }, { status: 400 });
@@ -179,7 +184,7 @@ export async function PATCH(request: Request) {
 
     const { error } = await supabaseAdmin
       .from('physical_rooms')
-      .update({ ...updateData, updatedAt: new Date().toISOString() })
+      .update({ ...updateData, updatedAt: new Date().toISOString() }) // updateData is now clean!
       .eq('_id', id)
       .eq('hotelId', hotelId);
 

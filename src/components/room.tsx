@@ -1,814 +1,899 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
-import { auth, storage } from '../app/lib/firebase'; // Keep Auth client-side only for token generation
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { 
-  DollarSign, Image as ImageIcon, 
-  Info, Users, Settings, Plus, X, Loader2, CheckCircle, 
-  Wifi, Trash2, Video, Globe, Tags, Lock, Star 
-} from 'lucide-react';
+import { auth, storage } from '@/app/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import {
+  BedDouble, Info, CheckCircle2, X, Plus, Trash2, 
+  Settings, DollarSign, Image as ImageIcon, Users,
+  List, ShieldCheck, Clock, Layers, Star, Video,
+  Globe, Loader2, Save, Map, Coffee, CheckSquare, Square,
+  ChevronDown
+} from 'lucide-react';
 
 // ============================================================================
-// CONSTANTS & SCHEMAS
+// CONSTANTS & OPTIONS
 // ============================================================================
 
-const PLAN_LIMITS = {
-  free: { maxRooms: 3, maxImages: 1 },
-  pro: { maxRooms: 9999, maxImages: 50 }
+const ROOM_CATEGORIES = [
+  'Standard Room', 'Superior Room', 'Deluxe Room', 'Executive Room', 
+  'Family Room', 'Junior Suite', 'Suite', 'Presidential Suite', 
+  'Villa', 'Apartment', 'Hostel / Dormitory', 'Other'
+];
+
+const BED_TYPES = [
+  'King', 'Queen', 'Double', 'Twin', 'Single', 
+  'Bunk Bed', 'Sofa Bed', 'California King', 'Super King', 'Crib / Cot', 'Extra Bed'
+];
+
+const EXTRA_BED_TYPES = ['Sofa Bed', 'Single Bed', 'Rollaway', 'Cot'];
+
+const DISCOUNT_LABELS = ['None', 'Sale', 'Special Offer', 'Promotional Rate', 'Early Bird', 'Last Minute'];
+
+const DEPOSIT_TYPES = ['No deposit', 'Fixed amount', 'Percentage'];
+
+const ROOM_VIEWS = [
+  'City View', 'Sea View', 'Ocean View', 'Garden View', 
+  'Pool View', 'Mountain View', 'Landmark View', 'Courtyard View', 'Street View', 'No View'
+];
+
+const OUTDOOR_SPACES = [
+  'No Outdoor Space', 'Balcony', 'Private Balcony', 'Terrace', 
+  'Private Terrace', 'Patio', 'Garden Access'
+];
+
+const BATHROOM_TYPES = ['Private Ensuite', 'Shared Bathroom', 'Private Bathroom', 'Accessible Bathroom'];
+
+const BATHROOM_FEATURES = [
+  'Shower', 'Rain Shower', 'Bathtub', 'Jacuzzi', 'Bidet', 
+  'Hairdryer', 'Towels', 'Toiletries', 'Bathrobe', 'Slippers'
+];
+
+const AMENITIES_CATEGORIES = {
+  'Climate & Comfort': ['Air Conditioning', 'Central Heating', 'Portable Fan', 'Fireplace', 'Soundproofing', 'Blackout Curtains'],
+  'Entertainment': ['Smart TV', 'TV', 'Cable / Satellite', 'Netflix / Streaming', 'Gaming Console', 'DVD Player', 'Bluetooth Speaker'],
+  'Connectivity': ['Free Wi-Fi', 'High-Speed Wi-Fi', 'Ethernet Port', 'Telephone', 'USB Charging Ports'],
+  'Kitchen & Refreshments': ['Minibar', 'Refrigerator', 'Coffee Maker', 'Tea / Coffee Facilities', 'Electric Kettle', 'Microwave', 'Toaster', 'Full Kitchen'],
+  'Work & Storage': ['Work Desk', 'Office Chair', 'Wardrobe', 'Safe', 'Laptop Safe', 'Iron & Ironing Board', 'Luggage Rack'],
+  'Accessibility': ['Wheelchair Accessible', 'Accessible Entrance', 'Accessible Bathroom', 'Grab Bars', 'Lowered Fixtures', 'Roll-in Shower'],
+  'Safety': ['Smoke Detector', 'Fire Extinguisher', 'Electronic Safe', 'Emergency Information']
 };
-const PRO_AMENITIES = ['Premium & Luxury', 'Entertainment', 'Views & Outdoor']; // Categories locked for free users
 
-const ROOM_CATEGORIES = ['Standard', 'Deluxe', 'Executive', 'Suite', 'Penthouse', 'Villa', 'Dormitory', 'Family'];
-const BED_TYPES = ['King', 'Queen', 'Double', 'Twin', 'Single', 'Bunk', 'Sofa Bed', 'Murphy Bed'];
-const ROOM_STATUSES = ['Available', 'Occupied', 'Maintenance', 'Cleaning', 'Out of Service'];
-const CLEANING_STATUSES = ['Cleaned', 'Dirty', 'In-Progress', 'Inspected'];
+const HIGHLIGHT_OPTIONS = [
+  'King Bed', 'Sea View', 'Private Balcony', 'Bathtub', 'High-Speed Wi-Fi', 
+  'Breakfast Available', 'Kitchenette', 'Pet Friendly', 'Soundproof', 'City Center View'
+];
 
-const AMENITIES_MAP: Record<string, string[]> = {
-  'Climate Control & Comfort': ['AC', 'Central Heating', 'Portable Fan', 'Fireplace', 'Soundproofing', 'Blackout Curtains'],
-  'Premium & Luxury': ['Jacuzzi', 'Private Pool', 'Smart Room Controls'],
-  'Entertainment': ['Smart TV', 'Cable/Satellite', 'Netflix/Streaming', 'Gaming Console', 'DVD Player'],
-  'Connectivity': ['High-speed Wi-Fi', 'Ethernet Port', 'Telephone'],
-  'Bathroom': ['Ensuite', 'Shared Bathroom', 'Bathtub', 'Rain Shower', 'Bidet', 'Hairdryer', 'Bathrobe', 'Slippers', 'Toiletries', 'Towels'],
-  'Kitchen & Food': ['Minibar', 'Coffee/Tea Maker', 'Electric Kettle', 'Microwave', 'Toaster', 'Fridge', 'Full Kitchen', 'Dining Table'],
-  'Work & Storage': ['Desk', 'Office Chair', 'Safe (Laptop size)', 'Wardrobe', 'Iron & Ironing Board'],
-  'Views & Outdoor': ['Balcony', 'Terrace', 'City View', 'Sea View', 'Pool View', 'Garden View', 'No View'],
-  'Safety & Accessibility': ['Smoke Detector', 'Fire Extinguisher', 'First Aid Kit', 'Wheelchair Accessible', 'Grab bars in bathroom', 'Lowered counters', 'Elevator Access', 'Ground Floor']
-};
+const CANCEL_POLICIES = [
+  'Free Cancellation', 'Free Cancellation Until a Specified Time', 
+  'Partially Refundable', 'Non-Refundable', 'Custom Policy'
+];
 
-interface AddEditRoomProps {
-  hotelId: string;
-  roomId?: string; // If null, we are in Add Mode
+// ============================================================================
+// TYPES & INTERFACES
+// ============================================================================
+
+interface BedConfig {
+  id: string;
+  type: string;
+  quantity: number;
 }
 
-// ============================================================================
-// MAIN COMPONENT
-// ============================================================================
-export default function AddEditRoom({ hotelId, roomId }: AddEditRoomProps) {
-  const router = useRouter();
-  const isEditing = !!roomId;
+interface RoomTypeFormData {
+  roomTypeName: string; roomCategory: string; headline: string; roomSize: string; description: string;
+  maxOccupancy: number; adults: number; children: number; infants: number;
+  beds: BedConfig[]; extraBedAvailable: boolean; extraBedType: string; maxExtraBeds: number; extraBedFee: number;
+  numberOfRooms: number; inventoryStatus: 'Draft' | 'Published' | 'Hidden' | 'Temporarily unavailable';
+  availableForBooking: boolean; allowMultiplePerBooking: boolean;
+  basePrice: number | ''; discountPrice: number | ''; discountLabel: string; weekendPrice: number | '';
+  useBasePriceOnWeekends: boolean; currency: string; minStay: number; maxStay: number;
+  minAdvanceNotice: number; maxAdvanceBooking: number; allowSameDay: boolean; depositType: string; depositAmount: number | '';
+  taxIncluded: boolean; taxType: string; taxRate: number | ''; serviceFee: number | ''; tourismFee: number | ''; otherFee: number | ''; pricingNotes: string;
+  views: string[]; outdoorSpaces: string[]; bathroomType: string; bathroomFeatures: string[];
+  amenities: string[]; customAmenities: string[]; highlights: string[];
+  images: string[]; videoUrl: string; tour360Url: string;
+  smokingPolicy: string; petPolicy: string; childrenPolicy: string; extraGuestsPolicy: string; partyPolicy: string; quietHours: string;
+  cancellationPolicy: string; cancellationTerms: string; bookingMethod: string; autoConfirm: boolean;
+  checkInType: string; customCheckIn: string; checkOutType: string; customCheckOut: string; roomRestrictions: string[];
+  internalCode: string; internalNotes: string; sortOrder: number; isFeatured: boolean; publicVisibility: string;
+}
 
+const INITIAL_DATA: RoomTypeFormData = {
+  roomTypeName: '', roomCategory: 'Standard Room', headline: '', roomSize: '', description: '',
+  maxOccupancy: 2, adults: 2, children: 0, infants: 0,
+  beds: [{ id: '1', type: 'King', quantity: 1 }],
+  extraBedAvailable: false, extraBedType: 'Rollaway', maxExtraBeds: 1, extraBedFee: 0,
+  numberOfRooms: 1, inventoryStatus: 'Published', availableForBooking: true, allowMultiplePerBooking: true,
+  basePrice: '', discountPrice: '', discountLabel: 'None', weekendPrice: '', useBasePriceOnWeekends: true,
+  currency: 'USD', minStay: 1, maxStay: 30, minAdvanceNotice: 0, maxAdvanceBooking: 365,
+  allowSameDay: true, depositType: 'No deposit', depositAmount: '',
+  taxIncluded: true, taxType: 'VAT', taxRate: '', serviceFee: '', tourismFee: '', otherFee: '', pricingNotes: '',
+  views: [], outdoorSpaces: [], bathroomType: 'Private Ensuite', bathroomFeatures: [],
+  amenities: [], customAmenities: [], highlights: [],
+  images: [], videoUrl: '', tour360Url: '',
+  smokingPolicy: 'Non-Smoking', petPolicy: 'Pets Not Allowed', childrenPolicy: 'Children Allowed',
+  extraGuestsPolicy: 'Not Allowed', partyPolicy: 'Not Allowed', quietHours: '',
+  cancellationPolicy: 'Free Cancellation', cancellationTerms: '', bookingMethod: 'Instant Booking', autoConfirm: true,
+  checkInType: 'Use Hotel Default', customCheckIn: '', checkOutType: 'Use Hotel Default', customCheckOut: '',
+  roomRestrictions: [], internalCode: '', internalNotes: '', sortOrder: 1, isFeatured: false, publicVisibility: 'Visible'
+};
+
+const InputStyles = "w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold text-slate-900 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/15 focus:border-blue-500 transition-all placeholder:text-slate-400";
+const SelectStyles = "w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold text-slate-900 outline-none focus:bg-white focus:ring-4 focus:ring-blue-500/15 focus:border-blue-500 transition-all appearance-none cursor-pointer pr-10";
+
+export default function AddEditRoomType({ hotelId, roomTypeId }: { hotelId: string; roomTypeId?: string }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const editId = roomTypeId || searchParams.get('id'); // Grabs ID from URL to fix blank edit screen
+  const isEditing = !!editId;
+
+  const [formData, setFormData] = useState<RoomTypeFormData>(INITIAL_DATA);
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // --- User Plan & Limits State ---
-  const [userPlan, setUserPlan] = useState<'free' | 'pro'>('free');
-  const [currentRoomCount, setCurrentRoomCount] = useState(0);
-  const [imageUrlInput, setImageUrlInput] = useState('');
-
-  // --- FORM STATE ---
-  // 1. Basic Info
-  const [roomName, setRoomName] = useState('');
-  const [roomNumber, setRoomNumber] = useState('');
-  const [internalId, setInternalId] = useState('');
-  const [category, setCategory] = useState('Standard');
-  const [floor, setFloor] = useState('');
-  const [wing, setWing] = useState('');
-  const [roomSize, setRoomSize] = useState('');
-
-  // 2. Capacity & Bedding
-  const [maxOccupancy, setMaxOccupancy] = useState('2');
-  const [adultLimit, setAdultLimit] = useState('2');
-  const [childrenLimit, setChildrenLimit] = useState('0');
-  const [infantLimit, setInfantLimit] = useState('0');
-  const [beds, setBeds] = useState<{ type: string; count: number }[]>([{ type: 'Queen', count: 1 }]);
-  const [allowExtraBed, setAllowExtraBed] = useState(false);
-  const [maxExtraBeds, setMaxExtraBeds] = useState('0');
-  const [extraBedCharge, setExtraBedCharge] = useState('0');
-
-  // 3. Pricing & Rules
-  const [basePrice, setBasePrice] = useState('');
-  const [discountPrice, setDiscountPrice] = useState('');
-  const [weekendPrice, setWeekendPrice] = useState('');
-  const [taxIncluded, setTaxIncluded] = useState(true);
-  const [taxes, setTaxes] = useState('');
-  const [cancellationPolicy, setCancellationPolicy] = useState('');
-  const [depositRequired, setDepositRequired] = useState('');
-  const [minStay, setMinStay] = useState('1');
-  const [maxStay, setMaxStay] = useState('30');
-  const [allowInstantBooking, setAllowInstantBooking] = useState(true);
-
-  // 4. Amenities & Tags
-  const [selectedAmenities, setSelectedAmenities] = useState<Record<string, boolean>>({});
-  const [customTags, setCustomTags] = useState<string[]>([]);
-  const [tagInput, setTagInput] = useState('');
-
-  // 5. Media
-  const [existingImages, setExistingImages] = useState<string[]>([]);
+  const [showSuccess, setShowSuccess] = useState(false);
+  
   const [newImages, setNewImages] = useState<{ file: File; preview: string }[]>([]);
-  const [videoUrl, setVideoUrl] = useState('');
-  const [tour360Url, setTour360Url] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 6. Descriptions & Rules
-  const [headline, setHeadline] = useState('');
-  const [fullDescription, setFullDescription] = useState('');
-  const [petsAllowed, setPetsAllowed] = useState(false);
-  const [smokingAllowed, setSmokingAllowed] = useState(false);
-
-  // 7. Operations (Internal)
-  const [roomStatus, setRoomStatus] = useState('Available');
-  const [cleaningStatus, setCleaningStatus] = useState('Cleaned');
-  const [cleaningDuration, setCleaningDuration] = useState('30');
-  const [maintenanceNotes, setMaintenanceNotes] = useState('');
-  const [housekeepingNotes, setHousekeepingNotes] = useState('');
-
-  // ============================================================================
-  // FETCH EXISTING DATA & USER PLAN VIA SECURE APIS
-  // ============================================================================
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        try {
-          const idToken = await user.getIdToken();
+    const loadData = async () => {
+      try {
+        const user = auth.currentUser;
+        if (!user) return;
+        const idToken = await user.getIdToken();
 
-          // 1. Fetch User Plan via API
-          const userRes = await fetch(`/api/users?uid=${user.uid}`, {
+        if (isEditing && editId) {
+          const res = await fetch(`/api/rooms?hotelId=${hotelId}&id=${editId}`, {
             headers: { 'Authorization': `Bearer ${idToken}` }
           });
-          const userData = await userRes.json();
-          if (userData.success || userData.user) {
-            const u = userData.user || userData;
-            setUserPlan(u.planTier === 'pro' || u.planTier === 'premium' || u.planTier === 'agent_pro' ? 'pro' : 'free');
-          }
+          const data = await res.json();
           
-          // 2. Fetch Room Count for Free Plan Limits if adding a new room
-          if (!isEditing && hotelId) {
-            const roomsRes = await fetch(`/api/rooms?hotelId=${hotelId}`, {
-              headers: { 'Authorization': `Bearer ${idToken}` }
-            });
-            const roomsData = await roomsRes.json();
-            const list = roomsData.success ? roomsData.rooms : (Array.isArray(roomsData) ? roomsData : []);
-            setCurrentRoomCount(list.length);
-          }
-
-          // 3. Fetch Room Data if Editing
-          if (isEditing && roomId && hotelId) {
-            const roomRes = await fetch(`/api/rooms?hotelId=${hotelId}&roomId=${roomId}`, {
-              headers: { 'Authorization': `Bearer ${idToken}` }
-            });
-            const roomDataJson = await roomRes.json();
-            const data = roomDataJson.room || roomDataJson;
-
-            if (data && (data.roomName || data._id || data.id)) {
-              setRoomName(data.roomName || '');
-              setRoomNumber(data.roomNumber || '');
-              setInternalId(data.internalId || '');
-              setCategory(data.category || 'Standard');
-              setFloor(data.floor || '');
-              setWing(data.wing || '');
-              setRoomSize(data.roomSize || '');
-
-              setMaxOccupancy(data.maxOccupancy?.toString() || '2');
-              setAdultLimit(data.adultLimit?.toString() || '2');
-              setChildrenLimit(data.childrenLimit?.toString() || '0');
-              setInfantLimit(data.infantLimit?.toString() || '0');
-              setBeds(data.beds || [{ type: 'Queen', count: 1 }]);
-              setAllowExtraBed(data.allowExtraBed || false);
-              setMaxExtraBeds(data.maxExtraBeds?.toString() || '0');
-              setExtraBedCharge(data.extraBedCharge?.toString() || '0');
-
-              setBasePrice(data.basePrice?.toString() || '');
-              setDiscountPrice(data.discountPrice?.toString() || '');
-              setWeekendPrice(data.weekendPrice?.toString() || '');
-              setTaxIncluded(data.taxIncluded ?? true);
-              setTaxes(data.taxes || '');
-              setCancellationPolicy(data.policies?.cancellation || data.cancellationPolicy || '');
-              setDepositRequired(data.depositRequired?.toString() || '');
-              setMinStay(data.minStay?.toString() || '1');
-              setMaxStay(data.maxStay?.toString() || '30');
-              setAllowInstantBooking(data.allowInstantBooking ?? true);
-
-              setSelectedAmenities(data.amenities || {});
-              setCustomTags(data.customTags || []);
-
-              setExistingImages(data.images || []);
-              setVideoUrl(data.videoUrl || '');
-              setTour360Url(data.tour360Url || '');
-
-              setHeadline(data.headline || '');
-              setFullDescription(data.fullDescription || '');
-              setPetsAllowed(data.petsAllowed || false);
-              setSmokingAllowed(data.smokingAllowed || false);
-
-              setRoomStatus(data.roomStatus || 'Available');
-              setCleaningStatus(data.cleaningStatus || 'Cleaned');
-              setCleaningDuration(data.cleaningDuration?.toString() || '30');
-              setMaintenanceNotes(data.maintenanceNotes || '');
-              setHousekeepingNotes(data.housekeepingNotes || '');
-            } else {
-              setError("Room not found.");
+          if (res.ok && data) {
+            // FIX 1: Safely extract the object if the API returns an array
+            const roomData = Array.isArray(data) ? data[0] : data;
+            
+            if (roomData) {
+              // FIX 2: Safely merge data and protect arrays so the UI doesn't crash if DB fields are null
+              setFormData(prev => ({ 
+                ...prev, 
+                ...roomData,
+                beds: roomData.beds || prev.beds,
+                images: roomData.images || [],
+                amenities: roomData.amenities || [],
+                views: roomData.views || [],
+                outdoorSpaces: roomData.outdoorSpaces || [],
+                bathroomFeatures: roomData.bathroomFeatures || [],
+                highlights: roomData.highlights || []
+              }));
             }
+          } else {
+            throw new Error(data.error || 'Failed to fetch room type data');
           }
-        } catch (err: any) {
-          console.error("Error fetching data via API", err);
-          setError("Failed to load room data.");
-        } finally {
-          setIsFetching(false);
         }
-      } else {
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
         setIsFetching(false);
       }
+    };
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) loadData();
+      else setIsFetching(false);
     });
-    
+
     return () => unsubscribe();
-  }, [hotelId, roomId, isEditing]);
+  }, [hotelId, roomTypeId, isEditing]);
 
-  const limits = PLAN_LIMITS[userPlan];
-  const isPro = userPlan === 'pro';
-  const totalImagesCount = existingImages.length + newImages.length;
+  const updateField = (field: keyof RoomTypeFormData, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
 
-  // ============================================================================
-  // HANDLERS
-  // ============================================================================
-  const handleDeleteImage = async (url: string, index: number) => {
-    try {
-      if (url.includes('firebasestorage.googleapis.com')) {
-        const fileRef = ref(storage, url);
-        await deleteObject(fileRef);
+  const toggleArrayItem = (field: keyof RoomTypeFormData, value: string) => {
+    setFormData(prev => {
+      const current = prev[field] as string[];
+      const exists = current.includes(value);
+      return { ...prev, [field]: exists ? current.filter(i => i !== value) : [...current, value] };
+    });
+  };
+
+  const handleHighlightToggle = (highlight: string) => {
+    setFormData(prev => {
+      const current = prev.highlights;
+      if (current.includes(highlight)) {
+        return { ...prev, highlights: current.filter(h => h !== highlight) };
       }
-    } catch (e) {
-      console.error("Failed to delete image from Firebase", e);
-    }
-    setExistingImages(existingImages.filter((_, idx) => idx !== index));
-  };
-  const handleAddBed = () => setBeds([...beds, { type: 'Single', count: 1 }]);
-  
-  const handleUpdateBed = (index: number, field: string, value: string | number) => {
-    const newBeds = [...beds];
-    newBeds[index] = { ...newBeds[index], [field]: value };
-    setBeds(newBeds);
-  };
-  
-  const handleRemoveBed = (index: number) => setBeds(beds.filter((_, i) => i !== index));
-
-  const handleAddTag = () => {
-    const val = tagInput.trim();
-    if (val && !customTags.includes(val)) {
-      setCustomTags([...customTags, val]);
-      setTagInput('');
-    }
-  };
-
-  const handleAddImageUrl = () => {
-    if (totalImagesCount >= limits.maxImages) {
-      alert(`Free plan limit reached (${limits.maxImages} image). Upgrade to Pro.`);
-      return;
-    }
-    if (imageUrlInput.trim() !== '') {
-      setExistingImages([...existingImages, imageUrlInput.trim()]);
-      setImageUrlInput('');
-    }
+      if (current.length >= 6) {
+        alert("You can only select up to 6 guest highlights.");
+        return prev;
+      }
+      return { ...prev, highlights: [...current, highlight] };
+    });
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (userPlan === 'free' && totalImagesCount >= limits.maxImages) {
-      alert(`Free plan limit reached (${limits.maxImages} image). Upgrade to Pro.`);
-      return;
-    }
-
     if (e.target.files) {
       const files = Array.from(e.target.files);
-      const remainingSlots = isPro ? 99 : limits.maxImages - totalImagesCount;
-      const allowedFiles = files.slice(0, remainingSlots);
-
-      const imageObjects = allowedFiles.map(file => ({
-        file, preview: URL.createObjectURL(file)
-      }));
+      const imageObjects = files.map(file => ({ file, preview: URL.createObjectURL(file) }));
       setNewImages(prev => [...prev, ...imageObjects]);
     }
   };
 
-  // ============================================================================
-  // SUBMIT VIA SECURE API
-  // ============================================================================
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const removeExistingImage = async (url: string) => {
+    try {
+      if (url.includes('firebasestorage')) {
+        await deleteObject(ref(storage, url));
+      }
+      updateField('images', formData.images.filter(img => img !== url));
+    } catch (e) {
+      console.error("Delete failed", e);
+    }
+  };
+
+  const handleSubmit = async (saveStatus: 'Draft' | 'Published') => {
+    // Only enforce required fields if they are Publishing
+    if (saveStatus === 'Published') {
+      if (!formData.roomTypeName) {
+        setError("Please fill in the Room Type Name.");
+        const el = document.getElementById('roomTypeName');
+        if (el) { el.focus(); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        return;
+      }
+      if (!formData.numberOfRooms) {
+        setError("Please specify the Number of Units.");
+        const el = document.getElementById('numberOfRooms');
+        if (el) { el.focus(); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        return;
+      }
+      if (!formData.basePrice) {
+        setError("Please set a Base Price.");
+        const el = document.getElementById('basePrice');
+        if (el) { el.focus(); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        return;
+      }
+    }
+
     setIsLoading(true);
     setError(null);
 
-    if (!isEditing && !isPro && currentRoomCount >= limits.maxRooms) {
-      setError(`Free plan limit reached (${limits.maxRooms} rooms). Please upgrade to Pro.`);
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      const user = auth.currentUser;
-      if (!user) throw new Error("Must be logged in");
-      const idToken = await user.getIdToken();
-
-      if (!roomName || !basePrice) throw new Error("Room Name and Base Price are required.");
-      if (existingImages.length === 0 && newImages.length === 0) throw new Error("Please upload at least one image.");
-
-      // STRICT FREE PLAN ENFORCEMENT: Enforce max 1 image before upload loop
-      let allowedNewImages = newImages;
-      if (!isPro) {
-        const remainingSlots = Math.max(0, limits.maxImages - existingImages.length);
-        allowedNewImages = newImages.slice(0, remainingSlots);
-      }
-
-      // 1. Upload New Images directly to Firebase Storage
-      let finalImageUrls = [...existingImages];
-      for (const img of allowedNewImages) {
-        const fileRef = ref(storage, `hotel_rooms/${Date.now()}_${img.file.name.replace(/[^a-zA-Z0-9.]/g, '')}`);
+      const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      
+      let uploadedUrls = [...formData.images];
+      for (const img of newImages) {
+        const fileRef = ref(storage, `room_types/${Date.now()}_${img.file.name}`);
         await uploadBytes(fileRef, img.file);
-        const downloadUrl = await getDownloadURL(fileRef);
-        finalImageUrls.push(downloadUrl);
+        uploadedUrls.push(await getDownloadURL(fileRef));
       }
 
-      // Final safety cap for free users
-      if (!isPro && finalImageUrls.length > limits.maxImages) {
-        finalImageUrls = finalImageUrls.slice(0, limits.maxImages);
-      }
+      // CLEANUP: Convert empty strings to null or 0 for the database
+      const cleanData = { ...formData };
+      const numericFields: (keyof RoomTypeFormData)[] = [
+        'basePrice', 'discountPrice', 'weekendPrice', 'depositAmount', 
+        'taxRate', 'serviceFee', 'tourismFee', 'otherFee'
+      ];
+      
+      numericFields.forEach(field => {
+        if (cleanData[field] === '') {
+          (cleanData as any)[field] = 0; // or use null if your DB prefers null
+        }
+      });
 
-      // 2. Clean Amenities (remove false)
-      const cleanedAmenities = Object.fromEntries(
-        Object.entries(selectedAmenities).filter(([_, v]) => v === true)
-      );
-
-      // 3. Build Payload
-      const payload = {
-        hotelId,
-        roomId: roomId || undefined,
-        roomName, roomNumber, internalId, category, floor, wing, roomSize,
-        maxOccupancy: Number(maxOccupancy), 
-        adultLimit: Number(adultLimit), 
-        childrenLimit: Number(childrenLimit), 
-        infantLimit: Number(infantLimit),
-        beds, 
-        allowExtraBed, 
-        maxExtraBeds: Number(maxExtraBeds), 
-        extraBedCharge: Number(extraBedCharge),
-        basePrice: Number(basePrice), 
-        discountPrice: Number(discountPrice) || 0,
-        weekendPrice: Number(weekendPrice) || Number(basePrice),
-        taxIncluded, 
-        taxes, 
-        depositRequired: Number(depositRequired) || 0,
-        minStay: Number(minStay), 
-        maxStay: Number(maxStay), 
-        allowInstantBooking,
-        amenities: cleanedAmenities, 
-        customTags,
-        images: finalImageUrls, 
-        videoUrl: isPro ? videoUrl : '', 
-        tour360Url: isPro ? tour360Url : '', 
-        headline, 
-        fullDescription, 
-        petsAllowed, 
-        smokingAllowed,
-        policies: { cancellation: cancellationPolicy },
-        roomStatus, 
-        cleaningStatus, 
-        cleaningDuration: Number(cleaningDuration),
-        maintenanceNotes, 
-        housekeepingNotes
-      };
-
-      const endpoint = '/api/rooms';
+      const payload = { ...cleanData, images: uploadedUrls, hotelId, inventoryStatus: saveStatus };
+      const endpoint = isEditing ? `/api/rooms?id=${editId}` : `/api/rooms`;
       const method = isEditing ? 'PATCH' : 'POST';
 
       const res = await fetch(endpoint, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
         body: JSON.stringify(payload)
       });
 
-      const resData = await res.json();
       if (!res.ok) {
-        throw new Error(resData.error || "Failed to save room.");
+        const err = await res.json();
+        throw new Error(err.error || "Failed to save room type.");
       }
 
-      alert(`Room successfully ${isEditing ? 'updated' : 'added'}!`);
-      router.back(); 
+      // SHOW ANIMATED SUCCESS & REDIRECT
+      setShowSuccess(true);
+      setTimeout(() => {
+        window.location.href = '/dashboard/hotel?tab=rooms';
+      }, 1500);
 
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || "An error occurred.");
-    } finally {
+      setError(err.message);
       setIsLoading(false);
     }
   };
 
-  if (isFetching) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-blue-600 w-10 h-10"/></div>;
+  if (isFetching) return <div className="flex justify-center items-center min-h-[60vh]"><Loader2 className="animate-spin text-blue-600 w-12 h-12"/></div>;
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-8 pb-32 font-sans">
+    <div className="min-h-screen bg-transparent pb-36 font-sans text-slate-800 selection:bg-blue-100 selection:text-blue-900">
+      {/* SUCCESS ANIMATION OVERLAY */}
+      <AnimatePresence>
+        {showSuccess && (
+          <motion.div 
+            initial={{ opacity: 0, y: -50, scale: 0.9 }} 
+            animate={{ opacity: 1, y: 20, scale: 1 }} 
+            exit={{ opacity: 0, y: -50, scale: 0.9 }} 
+            className="fixed top-10 left-1/2 -translate-x-1/2 z-[200] bg-emerald-500 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 font-black border border-emerald-400"
+          >
+            <CheckCircle2 size={24} className="animate-bounce" />
+            {isEditing ? 'Successfully Updated!' : 'Successfully Added!'} Redirecting...
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 pt-8">
       
-      {/* Freemium Header Banner */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-        <div>
-          <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">
-            {isEditing ? 'Edit Room Profile' : 'Add New Room'}
-          </h1>
-          <p className="text-slate-500 font-medium mt-1">Complete the details below to list this space.</p>
+        {/* INLINE TITLE CARD */}
+        <div className="relative bg-white rounded-[2rem] border border-slate-200/80 p-6 sm:p-8 shadow-sm flex items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100/50 shadow-inner shrink-0">
+            <BedDouble size={28} />
+          </div>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+              {isEditing ? 'Edit Room Type' : 'Add New Room Type'}
+            </h1>
+            <p className="text-sm font-semibold text-slate-500 mt-1">Create a room category that guests can view and book.</p>
+          </div>
         </div>
-        <div className={`px-4 py-2 rounded-xl flex flex-col items-center ${isPro ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
-          <span className="text-xs font-bold uppercase tracking-wider">Current Plan: {userPlan}</span>
-          {!isPro && (
-            <span className="text-[10px] opacity-80 mt-1">{currentRoomCount} / {limits.maxRooms} Rooms Created</span>
-          )}
-        </div>
-      </div>
-
-      {error && (
-        <div className="bg-red-50 text-red-600 p-4 rounded-2xl mb-8 font-bold flex items-center gap-3 border border-red-100">
-           <Info size={20}/> {error}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-8">
         
-        {/* ================================================================
-            1. BASIC IDENTIFICATION
-        ================================================================ */}
-        <Section title="1. Basic Identification" icon={Info}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Input label="Room Name / Title *" value={roomName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRoomName(e.target.value)} placeholder="e.g. The Presidential Suite" required />
-            <Select label="Room Category *" value={category} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCategory(e.target.value)} options={ROOM_CATEGORIES} />
-            <Input label="Room Number" value={roomNumber} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRoomNumber(e.target.value)} placeholder="101" />
-            <Input label="Internal SKU/ID" value={internalId} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInternalId(e.target.value)} placeholder="R-101-PREZ" />
-            <div className="grid grid-cols-3 gap-4 md:col-span-2">
-              <Input label="Floor" value={floor} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFloor(e.target.value)} placeholder="1st" />
-              <Input label="Wing/Building" value={wing} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWing(e.target.value)} placeholder="East Wing" />
-              <Input label="Room Size (m²)" type="number" value={roomSize} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRoomSize(e.target.value)} placeholder="45" />
-            </div>
+        {error && (
+          <div className="bg-red-50 text-red-700 p-4 rounded-2xl font-bold flex items-start gap-3 border border-red-200 shadow-sm animate-in fade-in slide-in-from-top-2">
+            <Info size={20} className="shrink-0 mt-0.5"/> <p>{error}</p>
           </div>
-        </Section>
+        )}
 
-        {/* ================================================================
-            2. CAPACITY & BEDDING
-        ================================================================ */}
-        <Section title="2. Capacity & Bedding" icon={Users}>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <Input label="Max Occupancy *" type="number" value={maxOccupancy} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMaxOccupancy(e.target.value)} required />
-            <Input label="Adults Limit" type="number" value={adultLimit} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAdultLimit(e.target.value)} />
-            <Input label="Children Limit" type="number" value={childrenLimit} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setChildrenLimit(e.target.value)} />
-            <Input label="Infant Limit" type="number" value={infantLimit} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInfantLimit(e.target.value)} />
-          </div>
-
-          <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 mb-6">
-            <h4 className="text-sm font-black text-slate-900 mb-4 uppercase tracking-wider">Bed Configuration</h4>
-            {beds.map((bed, idx) => (
-              <div key={idx} className="flex items-center gap-4 mb-3">
-                <Select className="flex-1" value={bed.type} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleUpdateBed(idx, 'type', e.target.value)} options={BED_TYPES} />
-                <Input type="number" value={bed.count} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateBed(idx, 'count', Number(e.target.value))} className="w-24" min="1" />
-                <button type="button" onClick={() => handleRemoveBed(idx)} className="p-3.5 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors"><Trash2 size={20}/></button>
+        {/* 1. ROOM TYPE INFORMATION */}
+        <FormCard number="1" title="Room Type Information" description="Identity and guest-facing details.">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <Field label="Room Type Name *" hint="Example: Deluxe King Room">
+              <input id="roomTypeName" type="text" value={formData.roomTypeName} onChange={e => updateField('roomTypeName', e.target.value)} className={InputStyles} />
+            </Field>
+            <Field label="Room Category *">
+              <div className="relative">
+                <select value={formData.roomCategory} onChange={e => updateField('roomCategory', e.target.value)} className={SelectStyles}>
+                  {ROOM_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18}/>
               </div>
-            ))}
-            <button type="button" onClick={handleAddBed} className="text-blue-600 font-bold text-sm flex items-center gap-1 hover:underline mt-2"><Plus size={16}/> Add Bed Type</button>
+            </Field>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+            <div className="md:col-span-3">
+              <Field label="Guest-Facing Headline" hint="Example: Spacious king room with a private balcony.">
+                <input type="text" value={formData.headline} onChange={e => updateField('headline', e.target.value)} className={InputStyles}/>
+              </Field>
+            </div>
+            <Field label="Room Size (m²)">
+              <input type="text" value={formData.roomSize} onChange={e => updateField('roomSize', e.target.value)} className={InputStyles} placeholder="45"/>
+            </Field>
+          </div>
+          <Field label="Room Description *">
+            <textarea rows={4} value={formData.description} onChange={e => updateField('description', e.target.value)} className={`${InputStyles} py-4 resize-none`} placeholder="Describe the room, atmosphere, and key features..."/>
+          </Field>
+        </FormCard>
+
+        {/* 2. CAPACITY & BEDDING */}
+        <FormCard number="2" title="Capacity & Bedding" description="How many people and beds fit in this room?">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mb-8">
+            <Field label="Maximum Occupancy *">
+              <input type="number" min="1" value={formData.maxOccupancy} onChange={e => updateField('maxOccupancy', parseInt(e.target.value)||1)} className={`${InputStyles} text-center font-black text-lg text-blue-700`}/>
+            </Field>
+            <Field label="Adults">
+              <input type="number" min="0" value={formData.adults} onChange={e => updateField('adults', parseInt(e.target.value)||0)} className={`${InputStyles} text-center`}/>
+            </Field>
+            <Field label="Children">
+              <input type="number" min="0" value={formData.children} onChange={e => updateField('children', parseInt(e.target.value)||0)} className={`${InputStyles} text-center`}/>
+            </Field>
+            <Field label="Infants">
+              <input type="number" min="0" value={formData.infants} onChange={e => updateField('infants', parseInt(e.target.value)||0)} className={`${InputStyles} text-center`}/>
+            </Field>
           </div>
 
-          <div className="flex flex-col md:flex-row items-start md:items-center gap-6 p-6 border border-slate-100 rounded-2xl">
-            <Toggle label="Allow Extra Beds?" checked={allowExtraBed} onChange={setAllowExtraBed} />
-            {allowExtraBed && (
-              <div className="flex gap-4 flex-1 w-full">
-                <Input label="Max Extra Beds" type="number" value={maxExtraBeds} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMaxExtraBeds(e.target.value)} className="flex-1" />
-                <Input label="Charge per Bed ($)" type="number" value={extraBedCharge} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setExtraBedCharge(e.target.value)} className="flex-1" />
+          <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-200 mb-8">
+            <label className="block text-[11px] font-black uppercase text-slate-500 tracking-wider mb-4">Bed Configuration *</label>
+            <div className="space-y-3">
+              {formData.beds.map((bed, idx) => (
+                <div key={bed.id} className="flex gap-3 items-center bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm transition-all hover:border-blue-300">
+                  <div className="relative flex-1">
+                    <select value={bed.type} onChange={e => {
+                      const newBeds = [...formData.beds];
+                      newBeds[idx].type = e.target.value;
+                      updateField('beds', newBeds);
+                    }} className={`${SelectStyles} border-none shadow-none bg-transparent py-2 focus:ring-0`}>
+                      {BED_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16}/>
+                  </div>
+                  <div className="w-20 sm:w-28 relative border-l border-slate-100 pl-3">
+                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 select-none">Qty:</span>
+                     <input type="number" min="1" value={bed.quantity} onChange={e => {
+                      const newBeds = [...formData.beds];
+                      newBeds[idx].quantity = parseInt(e.target.value)||1;
+                      updateField('beds', newBeds);
+                    }} className={`${InputStyles} border-none shadow-none bg-transparent py-2 pl-12 pr-2 text-center focus:ring-0`}/>
+                  </div>
+                  {formData.beds.length > 1 && (
+                    <button type="button" onClick={() => updateField('beds', formData.beds.filter(b => b.id !== bed.id))} className="p-2.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={18}/></button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button type="button" onClick={() => updateField('beds', [...formData.beds, { id: Date.now().toString(), type: 'Single', quantity: 1 }])} className="text-sm font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-4 py-2 rounded-lg transition-all flex items-center gap-1.5 mt-4">
+              <Plus size={16}/> Add Bed
+            </button>
+          </div>
+
+          <div className="border border-slate-200 rounded-2xl p-5 bg-white">
+            <Toggle label="Extra Bed Available" checked={formData.extraBedAvailable} onChange={v => updateField('extraBedAvailable', v)}/>
+            {formData.extraBedAvailable && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mt-5 pt-5 border-t border-slate-100">
+                <Field label="Extra Bed Type">
+                  <div className="relative">
+                    <select value={formData.extraBedType} onChange={e => updateField('extraBedType', e.target.value)} className={SelectStyles}>
+                      {EXTRA_BED_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18}/>
+                  </div>
+                </Field>
+                <Field label="Max Extra Beds">
+                  <input type="number" min="1" value={formData.maxExtraBeds} onChange={e => updateField('maxExtraBeds', parseInt(e.target.value)||1)} className={InputStyles}/>
+                </Field>
+                <Field label="Extra Bed Fee ($)">
+                  <input type="number" min="0" value={formData.extraBedFee} onChange={e => updateField('extraBedFee', parseFloat(e.target.value)||0)} className={InputStyles}/>
+                </Field>
               </div>
             )}
           </div>
-        </Section>
+        </FormCard>
 
-        {/* ================================================================
-            3. PRICING & RULES
-        ================================================================ */}
-        <Section title="3. Pricing & Business Rules" icon={DollarSign}>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-            <Input label="Base Price / Night ($) *" type="number" value={basePrice} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBasePrice(e.target.value)} required className="text-xl" />
-            <Input label="Discount Price ($)" type="number" value={discountPrice} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDiscountPrice(e.target.value)} placeholder="Promo price" />
-            <Input label="Weekend Price ($)" type="number" value={weekendPrice} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWeekendPrice(e.target.value)} placeholder="Leave blank to use base" />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-            <Input label="Deposit Required ($ or %)" type="number" value={depositRequired} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDepositRequired(e.target.value)} placeholder="0" />
-            <Input label="Minimum Stay (Nights)" type="number" value={minStay} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMinStay(e.target.value)} min="1" />
-            <Input label="Maximum Stay (Nights)" type="number" value={maxStay} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMaxStay(e.target.value)} />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 pt-6 border-t border-slate-100">
-             <Input label="Taxes Details (String)" value={taxes} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTaxes(e.target.value)} placeholder="e.g. 10% VAT included" />
-          </div>
-          <div className="flex gap-8 border-t border-slate-100 pt-6">
-            <Toggle label="Price Includes Taxes" checked={taxIncluded} onChange={setTaxIncluded} />
-            <Toggle label="Allow Instant Booking" checked={allowInstantBooking} onChange={setAllowInstantBooking} />
-          </div>
-        </Section>
-
-        {/* ================================================================
-            4. DESCRIPTION & MEDIA
-        ================================================================ */}
-        <Section title="4. Marketing & Media" icon={ImageIcon}>
-          <div className="space-y-6">
-            <Input label="Room Headline (Catchy Title)" value={headline} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setHeadline(e.target.value)} placeholder="Wake up to ocean views in our luxury suite..." />
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Detailed Description</label>
-              <textarea 
-                rows={4} 
-                value={fullDescription} 
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setFullDescription(e.target.value)} 
-                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500" 
-                placeholder="Sell the experience..."
-              />
+        {/* 3. INVENTORY */}
+        <FormCard number="3" title="Inventory" description="How many physical rooms belong to this room type?">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50/30 p-6 rounded-3xl border border-blue-100 shadow-sm">
+              <Field label="Number of Units (Rooms) *">
+                <input id="numberOfRooms" type="number" min="1" value={formData.numberOfRooms} onChange={e => updateField('numberOfRooms', parseInt(e.target.value)||1)} className={`${InputStyles} text-3xl font-black text-blue-700 py-4`}/>
+              </Field>
+              <p className="text-[13px] text-slate-500 mt-3 font-medium leading-relaxed">Example: If you have 10 identical Deluxe King Rooms, enter 10. You will assign specific room numbers (101, 102) later.</p>
             </div>
+            <div className="space-y-6">
+              <Toggle label="Available for Online Booking" checked={formData.availableForBooking} onChange={v => updateField('availableForBooking', v)}/>
+              <Toggle label="Allow Multiple Rooms Per Booking" checked={formData.allowMultiplePerBooking} onChange={v => updateField('allowMultiplePerBooking', v)}/>
+            </div>
+          </div>
+        </FormCard>
 
-            {/* IMAGE UPLOADER */}
-            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 border-dashed">
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Room Image Gallery *</label>
-              <div className="flex justify-between items-center mb-4">
-                 <span className="text-xs text-slate-500">
-                    {totalImagesCount} / {isPro ? 'Unlimited' : limits.maxImages} Images
-                 </span>
-                 {!isPro && <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-1 rounded-md font-bold">Free Limit: 1 Image</span>}
+        {/* 4. PRICING & RATES */}
+        <FormCard number="4" title="Pricing & Rates" description="Set your standard prices and booking windows.">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+            <Field label="Base Price / Night *">
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-slate-400">$</span>
+                <input id="basePrice" type="number" value={formData.basePrice} onChange={e => updateField('basePrice', parseFloat(e.target.value)||'')} className={`${InputStyles} pl-8 font-black text-slate-900 text-lg`} />
               </div>
-              
-              <div className="flex flex-col md:flex-row gap-4 mb-4">
-                <button 
-                  type="button" 
-                  onClick={() => fileInputRef.current?.click()} 
-                  disabled={!isPro && totalImagesCount >= limits.maxImages}
-                  className="flex-1 rounded-xl border-2 border-dashed border-blue-300 py-3 flex items-center justify-center text-blue-500 font-bold hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all bg-white"
-                >
-                  <Plus size={18} className="mr-2" /> Upload from Computer
-                </button>
-                <div className="flex-1 flex gap-2">
-                  <Input 
-                     placeholder="Or paste image URL link..." 
-                     value={imageUrlInput} 
-                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setImageUrlInput(e.target.value)}
-                     className="flex-1"
-                  />
-                  <button 
-                     type="button"
-                     onClick={handleAddImageUrl}
-                     disabled={!isPro && totalImagesCount >= limits.maxImages}
-                     className="bg-slate-900 text-white px-4 rounded-xl font-bold disabled:opacity-50"
-                  >
-                    Add Link
-                  </button>
+            </Field>
+            <Field label="Discounted Price">
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-slate-400">$</span>
+                <input type="number" value={formData.discountPrice} onChange={e => updateField('discountPrice', parseFloat(e.target.value)||'')} className={`${InputStyles} pl-8`}/>
+              </div>
+            </Field>
+            <Field label="Discount Label">
+              <div className="relative">
+                <select value={formData.discountLabel} onChange={e => updateField('discountLabel', e.target.value)} className={SelectStyles}>
+                  {DISCOUNT_LABELS.map(l => <option key={l} value={l}>{l}</option>)}
+                </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18}/>
+              </div>
+            </Field>
+            <Field label="Currency">
+              <div className="relative">
+                <select value={formData.currency} onChange={e => updateField('currency', e.target.value)} className={SelectStyles}>
+                  <option value="USD">USD ($)</option>
+                  <option value="EUR">EUR (€)</option>
+                  <option value="SOS">SOS (Shilling)</option>
+                </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18}/>
+              </div>
+            </Field>
+          </div>
+
+          <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 mb-8 flex flex-col md:flex-row gap-6 items-center">
+            <div className="w-full md:w-1/2">
+              <Field label="Weekend Price / Night">
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-slate-400">$</span>
+                  <input type="number" disabled={formData.useBasePriceOnWeekends} value={formData.useBasePriceOnWeekends ? formData.basePrice : formData.weekendPrice} onChange={e => updateField('weekendPrice', parseFloat(e.target.value)||'')} className={`${InputStyles} pl-8 disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-100`}/>
                 </div>
-              </div>
-
-              <div className="flex flex-wrap gap-4">
-                {existingImages.map((url, i) => (
-                  <div key={`ext-${i}`} className="relative w-28 h-28 rounded-xl overflow-hidden shadow-sm">
-                    <Image src={url} alt="Room" fill className="object-cover" />
-                    <button type="button" onClick={() => handleDeleteImage(url, i)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 shadow hover:scale-110"><X size={12}/></button>
-                  </div>
-                ))}
-                {newImages.map((img, i) => (
-                  <div key={`new-${i}`} className="relative w-28 h-28 rounded-xl overflow-hidden shadow-sm">
-                    <Image src={img.preview} alt="New" fill className="object-cover" />
-                    <button type="button" onClick={() => setNewImages(newImages.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 shadow hover:scale-110"><X size={12}/></button>
-                  </div>
-                ))}
-                <input type="file" multiple accept="image/*" className="hidden" ref={fileInputRef} onChange={handleImageSelect} />
-              </div>
+              </Field>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative">
-               {!isPro && (
-                 <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-10 rounded-xl flex items-center justify-center flex-col border border-slate-200 shadow-sm">
-                   <Lock size={24} className="text-amber-500 mb-2"/>
-                   <span className="font-bold text-slate-800">Video Walkthroughs Locked</span>
-                   <span className="text-xs text-slate-500 mt-1">Upgrade to Pro to add video links.</span>
-                 </div>
-               )}
-               <Input label="YouTube/Vimeo Walkthrough URL" disabled={!isPro} icon={<Video size={16}/>} value={videoUrl} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVideoUrl(e.target.value)} placeholder="https://..." />
-               <Input label="360° Virtual Tour URL" disabled={!isPro} icon={<Globe size={16}/>} value={tour360Url} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTour360Url(e.target.value)} placeholder="https://matterport..." />
+            <div className="w-full md:w-1/2 pt-2 md:pt-6">
+              <Toggle label="Use Base Price on Weekends" checked={formData.useBasePriceOnWeekends} onChange={v => updateField('useBasePriceOnWeekends', v)}/>
             </div>
           </div>
-        </Section>
 
-        {/* ================================================================
-            5. AMENITIES & TAGS
-        ================================================================ */}
-        <Section title="5. Comprehensive Amenities" icon={Wifi}>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-8">
-            {Object.entries(AMENITIES_MAP).map(([category, items]) => {
-              const isLocked = !isPro && PRO_AMENITIES.includes(category);
-
-              return (
-                <div key={category} className={`relative p-3 rounded-xl transition-all ${isLocked ? 'bg-slate-50' : ''}`}>
-                  {isLocked && (
-                     <div className="absolute top-3 right-3">
-                        <Star size={14} className="text-amber-400 fill-amber-400"/>
-                     </div>
-                  )}
-                  <h4 className={`font-bold text-slate-900 mb-3 border-b border-slate-100 pb-2 ${isLocked ? 'opacity-50' : ''}`}>{category}</h4>
-                  <div className="space-y-2">
-                    {items.map(item => (
-                      <label key={item} className={`flex items-start gap-3 cursor-pointer group ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                        <input 
-                          type="checkbox" 
-                          disabled={isLocked}
-                          className="mt-1 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer disabled:cursor-not-allowed"
-                          checked={selectedAmenities[item] || false}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSelectedAmenities(prev => ({ ...prev, [item]: e.target.checked }))}
-                        />
-                        <span className="text-sm font-medium text-slate-600 group-hover:text-slate-900 leading-tight">{item}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mb-8 border-t border-slate-100 pt-8">
+            <Field label="Min Stay (Nights)"><input type="number" value={formData.minStay} onChange={e => updateField('minStay', parseInt(e.target.value)||1)} className={InputStyles}/></Field>
+            <Field label="Max Stay (Nights)"><input type="number" value={formData.maxStay} onChange={e => updateField('maxStay', parseInt(e.target.value)||30)} className={InputStyles}/></Field>
+            <Field label="Min Advance Notice (Days)"><input type="number" value={formData.minAdvanceNotice} onChange={e => updateField('minAdvanceNotice', parseInt(e.target.value)||0)} className={InputStyles}/></Field>
+            <Field label="Max Advance Booking (Days)"><input type="number" value={formData.maxAdvanceBooking} onChange={e => updateField('maxAdvanceBooking', parseInt(e.target.value)||365)} className={InputStyles}/></Field>
           </div>
 
-          <div className="bg-blue-50/50 p-6 rounded-2xl border border-blue-100 relative">
-             {!isPro && (
-                 <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-10 rounded-xl flex items-center justify-center flex-col border border-slate-200">
-                   <Lock size={20} className="text-amber-500 mb-1"/>
-                   <span className="font-bold text-sm text-slate-800">Custom Tags Locked</span>
-                   <span className="text-[10px] text-slate-500 mt-1">Upgrade to Pro</span>
-                 </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t border-slate-100 items-start">
+             <div className="pt-3"><Toggle label="Allow Same-Day Booking" checked={formData.allowSameDay} onChange={v => updateField('allowSameDay', v)}/></div>
+             <Field label="Deposit Requirement">
+               <div className="relative">
+                 <select value={formData.depositType} onChange={e => updateField('depositType', e.target.value)} className={SelectStyles}>
+                   {DEPOSIT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                 </select>
+                 <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18}/>
+               </div>
+             </Field>
+             {formData.depositType !== 'No deposit' && (
+                <Field label={`Amount (${formData.depositType === 'Percentage' ? '%' : '$'})`}>
+                  <input type="number" value={formData.depositAmount} onChange={e => updateField('depositAmount', parseFloat(e.target.value)||'')} className={InputStyles}/>
+                </Field>
              )}
-             <h4 className="font-bold text-slate-900 mb-2 flex items-center gap-2"><Tags size={18} className="text-blue-600"/> Custom Tags / Unique Features</h4>
-             <p className="text-xs text-slate-500 mb-4">Add unique selling points not listed above (e.g. "Private Butler", "Gold Faucets")</p>
-             <div className="flex flex-wrap gap-2 mb-3">
-               {customTags.map(tag => (
-                 <span key={tag} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm">
-                   {tag} <button type="button" onClick={() => setCustomTags(customTags.filter(t => t !== tag))}><X size={14}/></button>
-                 </span>
-               ))}
-             </div>
-             <div className="flex gap-2">
-               <input 
-                 type="text" 
-                 value={tagInput}
-                 disabled={!isPro}
-                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTagInput(e.target.value)}
-                 onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                    if (e.key === 'Enter') {
-                       e.preventDefault();
-                       handleAddTag();
-                    }
-                 }}
-                 placeholder="Type and press Enter or Add"
-                 className="flex-1 p-3.5 bg-white border border-slate-200 rounded-xl font-medium outline-none focus:border-blue-500 shadow-sm disabled:bg-slate-100"
-               />
-               <button type="button" disabled={!isPro} onClick={handleAddTag} className="bg-slate-900 text-white px-6 rounded-xl font-bold hover:bg-slate-800 transition-colors shadow-md disabled:opacity-50">Add</button>
-             </div>
           </div>
-        </Section>
+        </FormCard>
 
-        {/* ================================================================
-            6. OPERATIONS & INTERNAL (ADMIN ONLY)
-        ================================================================ */}
-        <Section title="6. Operations & Housekeeping (Internal)" icon={Settings}>
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <Select label="Room Status" value={roomStatus} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setRoomStatus(e.target.value)} options={ROOM_STATUSES} />
-              <Select label="Cleaning Status" value={cleaningStatus} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCleaningStatus(e.target.value)} options={CLEANING_STATUSES} />
-              <Input label="Cleaning Duration (Mins)" type="number" value={cleaningDuration} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCleaningDuration(e.target.value)} />
-           </div>
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div>
-                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Maintenance Log</label>
-                 <textarea 
-                   rows={3} 
-                   value={maintenanceNotes} 
-                   onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setMaintenanceNotes(e.target.value)} 
-                   className="w-full p-4 bg-amber-50/30 border border-amber-100 rounded-xl outline-none focus:border-amber-400 text-sm" 
-                   placeholder="e.g. AC replaced Jan 2026..."
-                 />
-              </div>
-              <div>
-                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Housekeeping Notes</label>
-                 <textarea 
-                   rows={3} 
-                   value={housekeepingNotes} 
-                   onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setHousekeepingNotes(e.target.value)} 
-                   className="w-full p-4 bg-blue-50/30 border border-blue-100 rounded-xl outline-none focus:border-blue-400 text-sm" 
-                   placeholder="e.g. Guest prefers extra pillows..."
-                 />
-              </div>
-           </div>
-           <div className="mb-6">
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Cancellation Policy</label>
-              <Input 
-                value={cancellationPolicy} 
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCancellationPolicy(e.target.value)} 
-                placeholder="e.g. Free cancellation up to 24 hours before check-in." 
-              />
-           </div>
-           <div className="flex gap-8 border-t border-slate-100 pt-6">
-              <Toggle label="Pets Allowed" checked={petsAllowed} onChange={setPetsAllowed} />
-              <Toggle label="Smoking Allowed" checked={smokingAllowed} onChange={setSmokingAllowed} />
-           </div>
-        </Section>
+        {/* 5. TAXES & FEES */}
+        <FormCard number="5" title="Taxes & Additional Fees" description="Break down the final cost for the guest.">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
+            <div className="pt-3"><Toggle label="Taxes Included in Displayed Price?" checked={formData.taxIncluded} onChange={v => updateField('taxIncluded', v)}/></div>
+            <Field label="Tax Type (e.g. VAT)"><input type="text" value={formData.taxType} onChange={e => updateField('taxType', e.target.value)} className={InputStyles}/></Field>
+            <Field label="Tax Rate (%)"><input type="number" value={formData.taxRate} onChange={e => updateField('taxRate', parseFloat(e.target.value)||'')} className={InputStyles}/></Field>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 border-t border-slate-100 pt-8">
+            <Field label="Service Fee ($)"><input type="number" value={formData.serviceFee} onChange={e => updateField('serviceFee', parseFloat(e.target.value)||'')} className={InputStyles}/></Field>
+            <Field label="Tourism / City Fee ($)"><input type="number" value={formData.tourismFee} onChange={e => updateField('tourismFee', parseFloat(e.target.value)||'')} className={InputStyles}/></Field>
+            <Field label="Other Fee ($)"><input type="number" value={formData.otherFee} onChange={e => updateField('otherFee', parseFloat(e.target.value)||'')} className={InputStyles}/></Field>
+          </div>
+        </FormCard>
 
-        {/* ================================================================
-            SUBMIT BUTTON
-        ================================================================ */}
-        <div className="pt-6 flex justify-end sticky bottom-6 z-40">
-          <button 
-            type="submit" 
-            disabled={isLoading || (!isPro && currentRoomCount >= limits.maxRooms && !isEditing)}
-            className="w-full md:w-auto bg-slate-900 text-white px-12 py-5 rounded-2xl font-black text-lg hover:bg-slate-800 hover:-translate-y-1 shadow-[0_15px_30px_-10px_rgba(0,0,0,0.3)] transition-all flex items-center justify-center gap-3 disabled:opacity-70 disabled:hover:translate-y-0"
-          >
-            {isLoading ? <Loader2 className="animate-spin"/> : <CheckCircle size={24}/>}
-            {isEditing ? 'SAVE ROOM CHANGES' : 'PUBLISH ROOM TO HOTEL'}
-          </button>
+        {/* 6. ROOM VIEWS & PHYSICAL */}
+        <FormCard number="6" title="Room Views & Physical Features" description="What makes this room structurally unique?">
+          <div className="space-y-8">
+            <div>
+              <label className="block text-[11px] font-black uppercase text-slate-500 tracking-wider mb-4">Room Views (Select all that apply)</label>
+              <div className="flex flex-wrap gap-2.5">
+                {ROOM_VIEWS.map(view => <Chip key={view} label={view} selected={formData.views.includes(view)} onClick={() => toggleArrayItem('views', view)}/>)}
+              </div>
+            </div>
+            <div>
+              <label className="block text-[11px] font-black uppercase text-slate-500 tracking-wider mb-4">Outdoor Space</label>
+              <div className="flex flex-wrap gap-2.5">
+                {OUTDOOR_SPACES.map(space => <Chip key={space} label={space} selected={formData.outdoorSpaces.includes(space)} onClick={() => toggleArrayItem('outdoorSpaces', space)}/>)}
+              </div>
+            </div>
+            <div className="border-t border-slate-100 pt-8 grid grid-cols-1 md:grid-cols-3 gap-8">
+               <div>
+                  <Field label="Bathroom Type">
+                    <div className="relative">
+                      <select value={formData.bathroomType} onChange={e => updateField('bathroomType', e.target.value)} className={SelectStyles}>
+                        {BATHROOM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                      <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18}/>
+                    </div>
+                  </Field>
+               </div>
+               <div className="md:col-span-2">
+                  <label className="block text-[11px] font-black uppercase text-slate-500 tracking-wider mb-4">Bathroom Features</label>
+                  <div className="flex flex-wrap gap-2.5">
+                    {BATHROOM_FEATURES.map(feat => <Chip key={feat} label={feat} selected={formData.bathroomFeatures.includes(feat)} onClick={() => toggleArrayItem('bathroomFeatures', feat)}/>)}
+                  </div>
+               </div>
+            </div>
+          </div>
+        </FormCard>
+
+        {/* 7. AMENITIES & FEATURES */}
+        <FormCard number="7" title="Amenities & Features" description="Everything inside the room.">
+           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+             {Object.entries(AMENITIES_CATEGORIES).map(([cat, items]) => (
+               <div key={cat} className="bg-slate-50/80 p-5 rounded-3xl border border-slate-200/60 shadow-sm">
+                 <h4 className="font-black text-xs text-slate-900 mb-5 uppercase tracking-wider">{cat}</h4>
+                 <div className="space-y-3.5">
+                   {items.map(item => (
+                     <label key={item} className="flex items-start gap-3.5 cursor-pointer group">
+                        <div className="relative flex items-center justify-center mt-0.5">
+                          <input type="checkbox" checked={formData.amenities.includes(item)} onChange={() => toggleArrayItem('amenities', item)} className="peer appearance-none w-5 h-5 border-2 border-slate-300 rounded-lg checked:bg-blue-600 checked:border-blue-600 transition-colors cursor-pointer"/>
+                          <CheckCircle2 size={14} className="absolute text-white opacity-0 peer-checked:opacity-100 pointer-events-none stroke-[3]"/>
+                        </div>
+                        <span className="text-sm font-semibold text-slate-600 group-hover:text-slate-900 transition-colors leading-tight pt-0.5">{item}</span>
+                     </label>
+                   ))}
+                 </div>
+               </div>
+             ))}
+           </div>
+        </FormCard>
+
+        {/* 8. GUEST HIGHLIGHTS */}
+        <FormCard number="8" title="Guest Highlights" description="Select up to 6 key features to display prominently on the booking card.">
+           <div className="bg-gradient-to-br from-amber-50 to-orange-50/50 border border-amber-200/60 p-6 sm:p-8 rounded-3xl shadow-sm">
+             <div className="flex justify-between items-center mb-6">
+                <span className="text-xs font-black uppercase tracking-widest text-amber-700 bg-amber-100/50 px-3 py-1.5 rounded-full border border-amber-200">
+                  Selected: {formData.highlights.length} / 6
+                </span>
+             </div>
+             <div className="flex flex-wrap gap-3">
+               {HIGHLIGHT_OPTIONS.map(opt => {
+                 const isSelected = formData.highlights.includes(opt);
+                 return (
+                   <button key={opt} type="button" onClick={() => handleHighlightToggle(opt)} 
+                     className={`px-5 py-3 rounded-2xl text-sm font-bold transition-all border-2 ${isSelected ? 'bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-500/30 scale-[1.02]' : 'bg-white text-slate-600 border-slate-200 hover:border-amber-300 hover:shadow-sm'}`}>
+                     {opt}
+                   </button>
+                 )
+               })}
+             </div>
+           </div>
+        </FormCard>
+
+        {/* 9. PHOTOS & MEDIA */}
+        <FormCard number="9" title="Photos & Media" description="Upload high-quality images of this specific room type.">
+           <div className="space-y-8">
+             <div className="bg-slate-50 p-6 sm:p-8 rounded-3xl border-2 border-slate-200 border-dashed">
+                <label className="block text-[11px] font-black uppercase text-slate-500 tracking-wider mb-5">Room Gallery *</label>
+                <div className="flex flex-wrap gap-4 mb-5">
+                  {formData.images.map((url) => (
+                    <div key={url} className="relative w-28 h-28 sm:w-36 sm:h-36 rounded-2xl overflow-hidden shadow-sm border border-slate-200 group">
+                      <Image src={url} alt="Room" fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
+                      <button type="button" onClick={() => removeExistingImage(url)} className="absolute top-2 right-2 bg-white/90 text-red-500 rounded-full p-1.5 shadow-sm hover:bg-red-500 hover:text-white transition-colors backdrop-blur-sm"><X size={16}/></button>
+                    </div>
+                  ))}
+                  {newImages.map((img, i) => (
+                    <div key={i} className="relative w-28 h-28 sm:w-36 sm:h-36 rounded-2xl overflow-hidden shadow-sm border border-slate-200 group">
+                      <Image src={img.preview} alt="New" fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
+                      <button type="button" onClick={() => setNewImages(newImages.filter((_, idx) => idx !== i))} className="absolute top-2 right-2 bg-white/90 text-red-500 rounded-full p-1.5 shadow-sm hover:bg-red-500 hover:text-white transition-colors backdrop-blur-sm"><X size={16}/></button>
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => fileInputRef.current?.click()} className="w-28 h-28 sm:w-36 sm:h-36 rounded-2xl border-2 border-dashed border-blue-300 flex flex-col items-center justify-center text-blue-600 font-bold hover:bg-blue-50 transition-colors bg-white hover:border-blue-500 group">
+                    <Plus size={28} className="mb-2 text-blue-400 group-hover:text-blue-600 transition-colors" /> 
+                    <span className="text-sm">Add Photos</span>
+                  </button>
+                  <input type="file" multiple accept="image/*" className="hidden" ref={fileInputRef} onChange={handleImageSelect} />
+                </div>
+                <p className="text-xs text-slate-500 font-medium bg-white inline-block px-4 py-2 rounded-xl border border-slate-100 shadow-sm">💡 Recommended: Main bedroom, Bathroom, Balcony/View, Sitting Area.</p>
+             </div>
+
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+               <Field label="Video Walkthrough URL (YouTube/Vimeo)">
+                 <div className="relative">
+                   <Video size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"/>
+                   <input type="text" value={formData.videoUrl} onChange={e => updateField('videoUrl', e.target.value)} className={`${InputStyles} pl-11`} placeholder="https://..."/>
+                 </div>
+               </Field>
+               <Field label="360° Virtual Tour (Matterport)">
+                 <div className="relative">
+                   <Globe size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"/>
+                   <input type="text" value={formData.tour360Url} onChange={e => updateField('tour360Url', e.target.value)} className={`${InputStyles} pl-11`} placeholder="https://..."/>
+                 </div>
+               </Field>
+             </div>
+           </div>
+        </FormCard>
+
+        {/* 10. GUEST POLICIES */}
+        <FormCard number="10" title="Guest Policies" description="Rules applied specifically to this room type.">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+            <Field label="Smoking Policy">
+              <div className="relative">
+                <select value={formData.smokingPolicy} onChange={e => updateField('smokingPolicy', e.target.value)} className={SelectStyles}>
+                  {['Non-Smoking', 'Smoking Allowed', 'Smoking Area Only'].map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18}/>
+              </div>
+            </Field>
+            <Field label="Pet Policy">
+              <div className="relative">
+                <select value={formData.petPolicy} onChange={e => updateField('petPolicy', e.target.value)} className={SelectStyles}>
+                  {['Pets Not Allowed', 'Pets Allowed', 'Pets Allowed With Fee'].map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18}/>
+              </div>
+            </Field>
+            <Field label="Children">
+              <div className="relative">
+                <select value={formData.childrenPolicy} onChange={e => updateField('childrenPolicy', e.target.value)} className={SelectStyles}>
+                  {['Children Allowed', 'Children Not Allowed'].map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18}/>
+              </div>
+            </Field>
+            <Field label="Extra Guests">
+              <div className="relative">
+                <select value={formData.extraGuestsPolicy} onChange={e => updateField('extraGuestsPolicy', e.target.value)} className={SelectStyles}>
+                  {['Allowed', 'Not Allowed'].map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18}/>
+              </div>
+            </Field>
+            <Field label="Party / Event Policy">
+              <div className="relative">
+                <select value={formData.partyPolicy} onChange={e => updateField('partyPolicy', e.target.value)} className={SelectStyles}>
+                  {['Not Allowed', 'Allowed With Approval'].map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18}/>
+              </div>
+            </Field>
+            <Field label="Quiet Hours">
+              <input type="text" value={formData.quietHours} onChange={e => updateField('quietHours', e.target.value)} className={InputStyles} placeholder="e.g. 10:00 PM – 7:00 AM"/>
+            </Field>
+          </div>
+        </FormCard>
+
+        {/* 11. CANCELLATION & BOOKING POLICY */}
+        <FormCard number="11" title="Cancellation & Booking Policy" description="How bookings are confirmed and cancelled.">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+             <Field label="Cancellation Policy *">
+               <div className="relative">
+                 <select value={formData.cancellationPolicy} onChange={e => updateField('cancellationPolicy', e.target.value)} className={SelectStyles}>
+                   {CANCEL_POLICIES.map(o => <option key={o} value={o}>{o}</option>)}
+                 </select>
+                 <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18}/>
+               </div>
+             </Field>
+             <Field label="Booking Method">
+               <div className="relative">
+                 <select value={formData.bookingMethod} onChange={e => updateField('bookingMethod', e.target.value)} className={SelectStyles}>
+                   {['Instant Booking', 'Booking Request / Hotel Approval'].map(o => <option key={o} value={o}>{o}</option>)}
+                 </select>
+                 <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18}/>
+               </div>
+             </Field>
+           </div>
+           <Field label="Cancellation Terms (Details)">
+             <textarea rows={2} value={formData.cancellationTerms} onChange={e => updateField('cancellationTerms', e.target.value)} className={`${InputStyles} py-4 resize-none`} placeholder="Example: Free cancellation up to 24 hours before check-in..."/>
+           </Field>
+           <div className="pt-6 border-t border-slate-100 mt-8">
+             <Toggle label="Automatically Confirm Eligible Bookings" checked={formData.autoConfirm} onChange={v => updateField('autoConfirm', v)}/>
+           </div>
+        </FormCard>
+
+        {/* 12. CHECK-IN & STAY RULES */}
+        <FormCard number="12" title="Check-In & Stay Rules" description="Overrides for hotel-level defaults.">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+             <div className="space-y-4">
+               <Field label="Check-In Time">
+                 <div className="relative">
+                   <select value={formData.checkInType} onChange={e => updateField('checkInType', e.target.value)} className={SelectStyles}>
+                     <option value="Use Hotel Default">Use Hotel Default</option>
+                     <option value="Custom">Custom Check-In</option>
+                   </select>
+                   <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18}/>
+                 </div>
+               </Field>
+               {formData.checkInType === 'Custom' && <input type="time" value={formData.customCheckIn} onChange={e => updateField('customCheckIn', e.target.value)} className={InputStyles}/>}
+             </div>
+             <div className="space-y-4">
+               <Field label="Check-Out Time">
+                 <div className="relative">
+                   <select value={formData.checkOutType} onChange={e => updateField('checkOutType', e.target.value)} className={SelectStyles}>
+                     <option value="Use Hotel Default">Use Hotel Default</option>
+                     <option value="Custom">Custom Check-Out</option>
+                   </select>
+                   <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18}/>
+                 </div>
+               </Field>
+               {formData.checkOutType === 'Custom' && <input type="time" value={formData.customCheckOut} onChange={e => updateField('customCheckOut', e.target.value)} className={InputStyles}/>}
+             </div>
+           </div>
+        </FormCard>
+
+        {/* 13. INTERNAL SETTINGS */}
+        <FormCard number="13" title="Internal Room-Type Settings" description="Not shown to guests.">
+           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
+             <Field label="Internal Room-Type Code (SKU)"><input type="text" value={formData.internalCode} onChange={e => updateField('internalCode', e.target.value)} className={InputStyles} placeholder="DLX-KING"/></Field>
+             <Field label="Sort Order (List Priority)"><input type="number" value={formData.sortOrder} onChange={e => updateField('sortOrder', parseInt(e.target.value)||1)} className={InputStyles}/></Field>
+             <Field label="Public Visibility">
+               <div className="relative">
+                 <select value={formData.publicVisibility} onChange={e => updateField('publicVisibility', e.target.value)} className={SelectStyles}>
+                   <option value="Visible">Visible</option>
+                   <option value="Hidden">Hidden</option>
+                 </select>
+                 <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18}/>
+               </div>
+             </Field>
+           </div>
+           <Field label="Internal Notes"><textarea rows={2} value={formData.internalNotes} onChange={e => updateField('internalNotes', e.target.value)} className={`${InputStyles} py-4 resize-none`} placeholder="Notes for hotel staff..."/></Field>
+           <div className="mt-8 bg-gradient-to-r from-slate-50 to-white border border-slate-200 p-5 rounded-2xl flex items-center justify-between shadow-sm">
+             <div>
+               <span className="font-black text-sm text-slate-900 block flex items-center gap-2">
+                 <div className="p-1.5 bg-amber-100 rounded-lg"><Star size={16} className="text-amber-500 fill-amber-500"/></div>
+                 Featured Room Type
+               </span>
+               <span className="text-xs text-slate-500 font-medium mt-1 block">Show this room at the top of your property page.</span>
+             </div>
+             <Toggle label="" checked={formData.isFeatured} onChange={v => updateField('isFeatured', v)}/>
+           </div>
+        </FormCard>
+
+        {/* FLOATING ACTION DOCK (STICKY INSIDE FORM CONTAINER) */}
+        <div className="sticky bottom-6 z-[100] mt-8 flex justify-center w-full pointer-events-none animate-in slide-in-from-bottom-8 duration-300">
+          <div className="bg-white/90 backdrop-blur-2xl border border-slate-200/90 shadow-[0_20px_50px_rgba(0,0,0,0.2)] p-2.5 rounded-2xl flex items-center gap-3 pointer-events-auto">
+            <button 
+              type="button" disabled={isLoading} onClick={() => handleSubmit('Draft')}
+              className="px-6 py-3.5 rounded-xl border-2 border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 hover:border-slate-300 transition-all focus:ring-4 focus:ring-slate-100 disabled:opacity-50"
+            >
+              Save as Draft
+            </button>
+            <button 
+              type="button" disabled={isLoading} onClick={() => handleSubmit('Published')}
+              className="px-8 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black text-sm shadow-lg shadow-blue-500/25 transition-all flex items-center justify-center gap-2 focus:ring-4 focus:ring-blue-500/30 disabled:opacity-70 disabled:hover:bg-blue-600"
+            >
+              {isLoading ? <Loader2 size={18} className="animate-spin"/> : <Save size={18}/>} 
+              {isLoading ? 'Saving...' : 'Publish Room Type'}
+            </button>
+          </div>
         </div>
 
-      </form>
+      </div>
     </div>
   );
 }
 
 // ============================================================================
-// UI HELPER COMPONENTS WITH STRICT TYPES
+// UI WRAPPERS & COMPONENTS
 // ============================================================================
 
-interface SectionProps {
-  title: string;
-  icon: React.ElementType;
-  children: React.ReactNode;
-}
-
-function Section({ title, icon: Icon, children }: SectionProps) {
+function FormCard({ number, title, description, children }: { number: string; title: string; description: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100">
-      <div className="flex items-center gap-3 mb-8 pb-4 border-b border-slate-50">
-        <div className="p-3 bg-blue-50 rounded-xl text-blue-600"><Icon size={24} strokeWidth={2.5}/></div>
-        <h2 className="text-xl md:text-2xl font-black text-slate-900">{title}</h2>
+    <section className="bg-white rounded-[2rem] border border-slate-200/80 p-6 sm:p-10 shadow-sm relative overflow-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 pb-6 border-b border-slate-100 mb-8">
+        <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 font-black text-lg flex items-center justify-center shrink-0 border border-blue-100/50 shadow-inner">
+          {number}
+        </div>
+        <div>
+          <h2 className="text-xl font-black text-slate-900 tracking-tight">{title}</h2>
+          <p className="text-sm text-slate-500 font-medium mt-1">{description}</p>
+        </div>
       </div>
       {children}
+    </section>
+  );
+}
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-[11px] font-black uppercase text-slate-500 tracking-wider mb-2.5 ml-1">{label}</label>
+      {children}
+      {hint && <p className="text-[11px] text-slate-400 mt-2 font-medium ml-1">{hint}</p>}
     </div>
   );
 }
 
-interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  label?: string;
-  icon?: React.ReactNode;
-  className?: string;
-  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
-}
-
-function Input({ label, icon, className = '', onChange, ...props }: InputProps) {
+function Chip({ label, selected, onClick }: { label: string; selected: boolean; onClick: () => void }) {
   return (
-    <div className={className}>
-      {label && <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">{label}</label>}
-      <div className="relative">
-        {icon && <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">{icon}</div>}
-        <input 
-          className={`w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:text-slate-300 disabled:opacity-50 disabled:bg-slate-100 ${icon ? 'pl-11' : ''}`}
-          onChange={onChange}
-          {...props} 
-        />
-      </div>
-    </div>
+    <button 
+      type="button" 
+      onClick={onClick}
+      className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border-2 flex items-center gap-2 ${selected ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-500/20' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300'}`}
+    >
+      {selected ? <CheckSquare size={16} /> : <Square size={16} className="text-slate-400" />} {label}
+    </button>
   );
 }
 
-interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
-  label?: string;
-  options: string[];
-  className?: string;
-  onChange?: (e: React.ChangeEvent<HTMLSelectElement>) => void;
-}
-
-function Select({ label, options, className = '', onChange, ...props }: SelectProps) {
+function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <div className={className}>
-      {label && <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">{label}</label>}
-      <div className="relative">
-        <select 
-          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-900 outline-none focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all appearance-none cursor-pointer pr-10"
-          onChange={onChange}
-          {...props}
-        >
-          {options.map((opt: string) => <option key={opt} value={opt}>{opt}</option>)}
-        </select>
-        <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-slate-400">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-        </div>
+    <label className="flex items-center gap-3.5 cursor-pointer group w-max">
+      <div className="relative shrink-0">
+        <input type="checkbox" className="sr-only peer" checked={checked} onChange={e => onChange(e.target.checked)} />
+        <div className="block w-12 h-7 rounded-full transition-colors bg-slate-200 peer-checked:bg-blue-600 peer-focus:ring-4 peer-focus:ring-blue-500/20 shadow-inner"></div>
+        <div className={`absolute left-1 top-1 bg-white w-5 h-5 rounded-full transition-transform shadow-sm border border-slate-100/50 ${checked ? 'transform translate-x-5' : ''}`}></div>
       </div>
-    </div>
-  );
-}
-
-interface ToggleProps {
-  label: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}
-
-function Toggle({ label, checked, onChange }: ToggleProps) {
-  return (
-    <label className="flex items-center gap-3 cursor-pointer group">
-      <div className="relative">
-        <input type="checkbox" className="sr-only" checked={checked} onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.checked)} />
-        <div className={`block w-12 h-7 rounded-full transition-colors ${checked ? 'bg-blue-500' : 'bg-slate-200'}`}></div>
-        <div className={`absolute left-1 top-1 bg-white w-5 h-5 rounded-full transition-transform ${checked ? 'transform translate-x-5' : ''}`}></div>
-      </div>
-      <span className="text-sm font-bold text-slate-700 group-hover:text-slate-900 select-none">{label}</span>
+      {label && <span className="text-sm font-bold text-slate-700 group-hover:text-slate-900 select-none transition-colors">{label}</span>}
     </label>
   );
 }

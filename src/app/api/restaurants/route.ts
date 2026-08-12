@@ -52,16 +52,41 @@ export async function GET(request: Request) {
     const limitCount = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 100;
 
     if (entity === 'menu_item') {
-      let menuQuery = supabaseAdmin.from('restaurants').select('menuItems');
-      // 🛡️ FIX: Strictly use _id to prevent missing column crash
+      let menuQuery = supabaseAdmin.from('restaurants').select('_id, id, menuItems');
       if (restaurantId) menuQuery = menuQuery.eq('_id', restaurantId);
       else if (hotelId) menuQuery = menuQuery.eq('hotelId', hotelId);
 
       const { data, error } = await menuQuery;
-      if (error) return NextResponse.json([]); // Prevent 500 crash
+      if (error) return NextResponse.json([]); 
       
-      const allItems = data?.flatMap(rest => rest.menuItems || []) || [];
+      const allItems = data?.flatMap(rest => {
+        const items = Array.isArray(rest.menuItems) ? rest.menuItems : [];
+        return items.map((item: any) => ({
+          ...item,
+          restaurantId: item.restaurantId || rest._id || rest.id
+        }));
+      }) || [];
+      
       return NextResponse.json(allItems);
+    }
+
+    if (entity === 'table') {
+      let tableQuery = supabaseAdmin.from('restaurants').select('_id, id, tables');
+      if (restaurantId) tableQuery = tableQuery.eq('_id', restaurantId);
+      else if (hotelId) tableQuery = tableQuery.eq('hotelId', hotelId);
+
+      const { data, error } = await tableQuery;
+      if (error) return NextResponse.json([]); 
+      
+      const allTables = data?.flatMap(rest => {
+        const t = Array.isArray(rest.tables) ? rest.tables : [];
+        return t.map((table: any) => ({
+          ...table,
+          restaurantId: table.restaurantId || rest._id || rest.id
+        }));
+      }) || [];
+      
+      return NextResponse.json(allTables);
     }
 
     let restQuery = supabaseAdmin.from('restaurants').select('*');
@@ -74,7 +99,22 @@ export async function GET(request: Request) {
     const { data, error } = await restQuery.order('createdAt', { ascending: false }).limit(limitCount);
     if (error) throw error;
 
-    return NextResponse.json(data);
+    // 🛡️ Map legacy restaurant data to support the new Dining Hub structures natively
+    const formattedRestaurants = (data || []).map(rest => ({
+      ...rest,
+      cuisines: rest.cuisines || (rest.cuisineType ? [rest.cuisineType] : ['International']),
+      restaurantType: rest.restaurantType || 'Restaurant',
+      hotelGuests: rest.hotelGuests || { dineIn: true, roomService: true, chargeToRoom: true },
+      outsideGuests: rest.outsideGuests || { allowed: true, walkIns: true, reservations: true, takeaway: true, onlineOrdering: false },
+      operatingHours: rest.operatingHours || {},
+      reservationRules: rest.reservationRules || { maxPartySize: 10, requirement: 'Recommended', walkInsAccepted: true, noticeMinutes: 30, maxAdvanceDays: 30 },
+      roomServiceDetails: rest.roomServiceDetails || { hoursType: 'Same as restaurant', guestOrdering: { orderFromGuriUp: true, chargeToRoom: true, paySeparately: false } },
+      publicDiscovery: rest.publicDiscovery || { showOnGuriUp: true, allowPublicOrdering: true, allowPublicReservations: true },
+      facilities: rest.facilities || [],
+      galleryImages: rest.galleryImages || [],
+    }));
+
+    return NextResponse.json(formattedRestaurants);
   } catch (error: any) {
     console.error('Restaurants GET Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -118,7 +158,10 @@ export async function POST(request: Request) {
         _id: crypto.randomUUID(), 
         id: crypto.randomUUID(), 
         hotelId, 
+        restaurantId: restId, // Force strict association
         isAvailable: dataPayload.isAvailable ?? true, 
+        addons: dataPayload.addons || [],
+        requiredChoices: dataPayload.requiredChoices || [],
         createdAt: new Date().toISOString(), 
         updatedAt: new Date().toISOString() 
       };

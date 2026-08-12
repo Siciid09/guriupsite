@@ -16,7 +16,7 @@ import {
   Settings, Users, TrendingUp, DollarSign, CheckCircle, XCircle, 
   Plus, Edit3, Lock, MapPin, Building2, Phone, Globe, Wifi, Shield,
   FileText, UserPlus, BellRing, LogOut, ArrowRightCircle, ArrowLeftCircle, AlertCircle, Loader2, Utensils, Trash2, Eye, EyeOff,
-  X
+  X, ChevronDown
 } from 'lucide-react';
 
 // --- IMPORT YOUR COMPLETED FORMS ---
@@ -25,6 +25,8 @@ import AddEditRoom from '../../../../components/room';
 import HotelAnalytics from '@/components/hotelstats';
 import RestaurantManagement from '../../../../components/RestaurantManagement'; // Adjust path as needed
 import SharedChatComponent from '@/components/sharedchat';
+import RoomInventory from '@/components/RoomInventory';
+import AddEditPhysicalRoom from '@/components/AddEditPhysicalRoom';
 
 // ============================================================================
 // STRICT TYPES
@@ -48,16 +50,31 @@ interface HotelData {
 }
 
 interface Booking {
-  id: string;
+  id?: string;
+  _id?: string;
   guestName: string;
   guestPhone: string;
   roomName: string;
+  roomTypeId?: string;
+  physicalRoomId?: string;
+  assignedRoomNumber?: string;
   checkIn: Timestamp;
   checkOut: Timestamp;
   totalPrice: number;
   status: 'pending' | 'confirmed' | 'checked-in' | 'checked-out' | 'cancelled' | 'no-show';
   paymentStatus: string;
   createdAt: Timestamp;
+}
+
+interface PhysicalRoom {
+  id?: string;
+  _id?: string;
+  hotelId: string;
+  roomTypeId: string;
+  roomTypeName: string;
+  roomNumber: string;
+  operationalStatus: string;
+  housekeepingStatus: string;
 }
 
 interface Room {
@@ -81,7 +98,27 @@ interface Chat {
 }
 
 // Expanded TabTypes to include inner navigation for forms
-type TabType = 'overview' | 'reservations' | 'calendar' | 'rooms' | 'restaurants' | 'messages' | 'analytics' | 'reports' | 'guests' | 'staff' | 'settings' | 'edit-hotel' | 'add-room' | 'edit-room' | 'setup-hotel' | 'setup-agent';
+type TabType = 'overview' | 'reservations' | 'calendar' | 'rooms' | 'restaurants' | 'messages' | 'analytics' | 'reports' | 'guests' | 'staff' | 'settings' | 'edit-hotel' | 'add-room' | 'edit-room' | 'add-physical-room' | 'edit-physical-room' | 'setup-hotel' | 'setup-agent';
+
+function formatDateOnly(dateVal: any): string {
+  if (!dateVal) return 'N/A';
+  const raw = typeof dateVal === 'string'
+    ? dateVal
+    : (dateVal?.toDate ? dateVal.toDate().toISOString() : new Date(dateVal).toISOString());
+  const [y, m, d] = raw.split('T')[0].split('-').map(Number);
+  if (!y || !m || !d) return new Date(dateVal).toLocaleDateString();
+  return new Date(y, m - 1, d).toLocaleDateString();
+}
+
+function parseLocalDate(dateVal: any): Date {
+  if (!dateVal) return new Date(0);
+  const raw = typeof dateVal === 'string'
+    ? dateVal
+    : (dateVal?.toDate ? dateVal.toDate().toISOString() : new Date(dateVal).toISOString());
+  const [y, m, d] = raw.split('T')[0].split('-').map(Number);
+  if (!y || !m || !d) return new Date(dateVal);
+  return new Date(y, m - 1, d);
+}
 
 // ============================================================================
 // MAIN COMPONENT WRAPPER
@@ -111,10 +148,18 @@ function DashboardContent() {
   const [hotel, setHotel] = useState<HotelData | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [physicalRooms, setPhysicalRooms] = useState<PhysicalRoom[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   
   // UI Navigation State
   const [activeTab, setActiveTab] = useState<TabType>(tabParam || 'overview');
+
+  // SYNCS THE UI WHENEVER THE URL CHANGES
+  useEffect(() => {
+    if (tabParam && tabParam !== activeTab) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
   const [resFilter, setResFilter] = useState<string>('all');
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
@@ -166,41 +211,61 @@ function DashboardContent() {
            setRooms(fetchedRooms);
         }
 
-        // Chats Listener (Keep Firebase Realtime for Messages)
-        // 🛡️ CRITICAL FIX: Match Flutter query exactly to bypass permission denied errors
-        const qChats = query(collection(db, 'chats'), where('hotelId', '==', hotelId));
+        // Fetch Physical Rooms
+        const prRes = await fetch(`/api/physical-rooms?hotelId=${hotelId}`, { headers: { Authorization: `Bearer ${idToken}` } });
+        if (prRes.ok) {
+           const prJson = await prRes.json();
+           setPhysicalRooms(Array.isArray(prJson) ? prJson : (prJson.physicalRooms || prJson.data || []));
+        }
 
-        const unsubChats = onSnapshot(qChats, (cSnap) => {
-           const processed = cSnap.docs.map(d => {
+        // Chats Listener: Multi-Query to catch Web (propertyId), Flutter (hotelId), and Direct (participants)
+        const qChats1 = query(collection(db, 'chats'), where('hotelId', '==', hotelId));
+        const qChats2 = query(collection(db, 'chats'), where('propertyId', '==', hotelId));
+        const qChats3 = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid));
+
+        const activeChatsMap = new Map();
+
+        const processAndSetChats = (cSnap: any) => {
+           cSnap.docs.forEach((d: any) => {
              const data = d.data();
              const isMe = data.lastSenderId === user.uid || data.lastSenderId === hotelId || data.senderId === hotelId;
              
-             // Dynamic Fallbacks to match Flutter Payload Structure
              const unread = data[`unreadCount_${user.uid}`] || data[`unreadCount_${hotelId}`] || data.unreadCount || 0;
              let recId = data.guestId || data.userId;
              if (!recId && Array.isArray(data.participants)) {
                  recId = data.participants.find((pid: string) => pid !== user.uid && pid !== hotelId);
              }
              
-             return {
+             activeChatsMap.set(d.id, {
                id: d.id,
                lastMessage: isMe ? `You: ${data.lastMessage || 'Sent a message'}` : (data.lastMessage || 'Sent a message'),
                participantName: data.guestName || data.customerName || data.userName || data.otherUserName || 'Guest',
                unreadCount: isMe ? 0 : unread, 
                updatedAt: data.lastMessageTime || data.updatedAt || new Date(),
                recipientId: recId || 'unknown'
-             } as any;
-           }).sort((a, b) => {
+             });
+           });
+
+           const processed = Array.from(activeChatsMap.values()).sort((a: any, b: any) => {
               const timeA = a.updatedAt?.toDate ? a.updatedAt.toDate().getTime() : new Date(a.updatedAt as any).getTime();
               const timeB = b.updatedAt?.toDate ? b.updatedAt.toDate().getTime() : new Date(b.updatedAt as any).getTime();
               return (timeB || 0) - (timeA || 0);
            });
            
            setChats(processed);
-        });
+        };
+
+        // Safely catch rule errors so a block on one query doesn't crash the others!
+        const unsub1 = onSnapshot(qChats1, processAndSetChats, (err) => console.warn('Q1 block:', err.code));
+        const unsub2 = onSnapshot(qChats2, processAndSetChats, (err) => console.warn('Q2 block:', err.code));
+        const unsub3 = onSnapshot(qChats3, processAndSetChats, (err) => console.warn('Q3 block:', err.code));
 
         setLoading(false);
-        return () => unsubChats();
+        return () => { 
+            unsub1(); 
+            unsub2(); 
+            unsub3(); 
+        };
       } else {
         setNeedsSetup(true);
         setLoading(false);
@@ -209,9 +274,18 @@ function DashboardContent() {
     return () => unsubAuth();
   }, [router]);
 
-  const updateTab = (tab: TabType) => {
+  const updateTab = async (tab: TabType) => {
     setActiveTab(tab);
     router.push(`?tab=${tab}`, { scroll: false });
+    if (tab === 'reservations' && currentUser && hotel) {
+      const idToken = await currentUser.getIdToken();
+      const hotelId = hotel.id || hotel._id;
+      const bRes = await fetch(`/api/bookings?hotelId=${hotelId}`, { headers: { Authorization: `Bearer ${idToken}` } });
+      if (bRes.ok) {
+        const bJson = await bRes.json();
+        setBookings(Array.isArray(bJson) ? bJson : (bJson.bookings || bJson.data || []));
+      }
+    }
   };
 
   const deleteRoom = async (roomId: string) => {
@@ -240,6 +314,32 @@ function DashboardContent() {
       setRooms(prev => prev.map(r => (r.id || r._id) === roomId ? { ...r, status: newStatus } : r));
     } catch (e) {
       alert("Failed to update status");
+    }
+  };
+
+  const assignPhysicalRoom = async (bookingId: string, physicalRoomId: string, roomNumber: string) => {
+    try {
+      if (!currentUser || !hotel) return;
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch('/api/bookings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+        body: JSON.stringify({ 
+          id: bookingId, 
+          hotelId: hotel.id || hotel._id, 
+          physicalRoomId, 
+          assignedRoomNumber: roomNumber 
+        })
+      });
+      if (!res.ok) throw new Error("Failed");
+      
+      // Optimistic update
+      setBookings(prev => prev.map(b => (b.id === bookingId || (b as any)._id === bookingId) ? { ...b, physicalRoomId, assignedRoomNumber: roomNumber } : b));
+      if (selectedBooking && (selectedBooking.id === bookingId || (selectedBooking as any)._id === bookingId)) {
+        setSelectedBooking({ ...selectedBooking, physicalRoomId, assignedRoomNumber: roomNumber });
+      }
+    } catch (e) {
+      alert("Failed to assign physical room.");
     }
   };
 
@@ -285,7 +385,7 @@ function DashboardContent() {
     
     // Revenue (only confirmed/checked-in/paid)
     if (['confirmed', 'checked-in', 'checked-out'].includes(b.status)) {
-       if (b.createdAt && new Date(b.createdAt as any).getMonth() === today.getMonth()) monthlyRevenue += (b.totalPrice || 0);
+       if (b.createdAt && new Date(b.createdAt as any).getMonth() === today.getMonth()) monthlyRevenue += ((b as any).totalPrice || (b as any).totalAmount || 0);
     }
     // Arrivals
     if (checkInDate.toDateString() === today.toDateString() && ['pending', 'confirmed'].includes(b.status)) todayArrivals++;
@@ -382,13 +482,13 @@ function DashboardContent() {
                   </div>
                   <div className="space-y-3">
                      {bookings.filter(b => b.status === 'pending').slice(0, 5).map(b => (
-                        <div key={b.id} className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 gap-4">
+                        <div key={b.id || (b as any)._id} className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 gap-4">
                            <div className="flex flex-col">
                               <span className="font-bold text-slate-900">{b.guestName || 'Guest'}</span>
-                              <span className="text-xs text-slate-500 font-medium">{b.roomName} • {format(new Date(b.checkIn as any), 'MMM d')} - {format(new Date(b.checkOut as any), 'MMM d')}</span>
+                              <span className="text-xs text-slate-500 font-medium">{b.roomName} • {b.checkIn ? format(parseLocalDate(b.checkIn), 'MMM d') : 'TBD'} - {b.checkOut ? format(parseLocalDate(b.checkOut), 'MMM d') : 'TBD'}</span>
                            </div>
                            <div className="flex items-center gap-4 justify-between w-full md:w-auto border-t md:border-none border-slate-200 pt-3 md:pt-0">
-                              <span className="font-black text-[#0065eb]">${b.totalPrice}</span>
+                              <span className="font-black text-[#0065eb]">${(b as any).totalPrice || (b as any).totalAmount || 0}</span>
                               <div className="flex gap-2">
                                  <button onClick={() => updateBookingStatus(b.id, 'confirmed')} className="p-2 bg-emerald-500 text-white rounded-xl shadow-sm hover:scale-105 transition-transform"><CheckCircle size={18}/></button>
                                  <button onClick={() => updateBookingStatus(b.id, 'cancelled')} className="p-2 bg-red-100 text-red-600 rounded-xl hover:bg-red-200 transition-colors"><XCircle size={18}/></button>
@@ -423,7 +523,7 @@ function DashboardContent() {
                {/* List */}
                <div className="space-y-4">
                   {filteredBookings.map(b => (
-                     <div key={b.id} onClick={() => setSelectedBooking(b)} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 cursor-pointer hover:shadow-md transition-shadow">
+                     <div key={b.id || (b as any)._id} onClick={() => setSelectedBooking(b)} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 cursor-pointer hover:shadow-md transition-shadow">
                         <div className="flex items-center gap-4">
                            <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-[#0065eb] font-bold text-lg">{b.guestName?.[0] || 'G'}</div>
                            <div>
@@ -439,7 +539,7 @@ function DashboardContent() {
                            </div>
                            <div>
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Dates</p>
-                              <p className="font-bold text-sm">{b.checkIn ? format(new Date(b.checkIn as any), 'MMM d') : 'TBD'} - {b.checkOut ? format(new Date(b.checkOut as any), 'MMM d') : 'TBD'}</p>
+                              <p className="font-bold text-sm">{b.checkIn ? format(parseLocalDate(b.checkIn), 'MMM d') : 'TBD'} - {b.checkOut ? format(parseLocalDate(b.checkOut), 'MMM d') : 'TBD'}</p>
                            </div>
                            <div className="col-span-2 md:col-span-1 text-right md:text-left">
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total</p>
@@ -484,12 +584,12 @@ function DashboardContent() {
                             <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-white border-4 border-[#0065eb]"></div>
                             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex-1 flex justify-between items-center">
                                <div>
-                                  <p className="font-bold text-[#0065eb]">{format(new Date(b.checkIn as any), 'MMM do, yyyy')}</p>
+                                  <p className="font-bold text-[#0065eb]">{format(parseLocalDate(b.checkIn), 'MMM do, yyyy')}</p>
                                   <p className="font-black text-slate-900 text-lg">{b.guestName}</p>
                                </div>
                                <div className="text-right">
                                   <p className="text-xs font-bold text-slate-500">{b.roomName}</p>
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase">Check-out: {format(new Date(b.checkOut as any), 'MMM do')}</p>
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase">Check-out: {format(parseLocalDate(b.checkOut), 'MMM do')}</p>
                                </div>
                             </div>
                          </div>
@@ -503,55 +603,19 @@ function DashboardContent() {
           {/* --- TAB: ROOMS --- */}
           {activeTab === 'rooms' && hotel && !needsSetup && (
              <motion.div key="rooms" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
-                <div className="flex justify-between items-center mb-8">
-                   <h1 className="text-3xl font-black tracking-tight">Room Inventory</h1>
-                   <button onClick={() => updateTab('add-room')} className="bg-[#0065eb] text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-blue-500/30 hover:scale-105 transition-transform">
-                      <Plus size={18}/> Add Room
-                   </button>
-                </div>
-                
-                {rooms.length === 0 ? (
-                    <EmptyState icon={BedDouble} title="No Rooms Listed" desc="You haven't added any rooms yet. Click 'Add Room' to start building your inventory." />
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                     {rooms.map(room => (
-                        <div key={room._id || room.id} className="bg-white rounded-3xl border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl transition-shadow group flex flex-col">
-                           <div className="h-48 bg-slate-100 relative">
-                              {room.images && room.images[0] ? (
-                                <Image src={room.images[0]} alt={room.roomName || room.roomTypeName || 'Room'} fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center text-slate-300"><BedDouble size={48}/></div>
-                              )}
-                              <div className={`absolute top-4 right-4 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest backdrop-blur-md ${room.status === 'draft' ? 'bg-slate-900/80 text-white' : 'bg-emerald-500/90 text-white shadow-lg'}`}>
-                                 {room.status === 'draft' ? 'Hidden' : 'Live'}
-                              </div> 
-                           </div>
-                           <div className="p-6 flex-1 flex flex-col">
-                              <h4 className="font-bold text-xl mb-1">{room.roomName || room.roomTypeName || 'Unnamed Room'}</h4>
-                              <p className="text-xs font-bold text-slate-400 mb-4 flex items-center gap-1"><Users size={14}/> Max {room.maxOccupancy} Guests</p>
-                              
-                              <div className="mt-auto pt-4 border-t border-slate-100 flex items-center justify-between">
-                                 <div>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Price / Night</p>
-                                    <span className="font-black text-2xl text-[#0065eb]">${room.pricePerNight || room.basePrice || 0}</span>
-                                 </div>
-                                 <div className="flex gap-2">
-                                    <button onClick={() => toggleRoomStatus(room._id || room.id || '', room.status)} className="p-3 bg-slate-50 text-slate-600 rounded-xl hover:bg-slate-900 hover:text-white transition-colors" title={room.status === 'draft' ? "Make Live" : "Hide Room"}>
-                                       {room.status === 'draft' ? <Eye size={18}/> : <EyeOff size={18}/>}
-                                    </button>
-                                    <button onClick={() => { setSelectedRoomId(room._id || room.id || ''); updateTab('edit-room'); }} className="p-3 bg-slate-50 text-slate-600 rounded-xl hover:bg-[#0065eb] hover:text-white transition-colors" title="Edit Room">
-                                       <Edit3 size={18}/>
-                                    </button>
-                                    <button onClick={() => deleteRoom(room._id || room.id || '')} className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-500 hover:text-white transition-colors" title="Delete Room">
-                                       <Trash2 size={18}/>
-                                    </button>
-                                 </div>
-                              </div>
-                           </div>
-                        </div>
-                     ))}
-                  </div>
-                )}
+                <RoomInventory 
+                  hotelId={hotel.id || hotel._id || ''} 
+                  onNavigateAddRoomType={() => updateTab('add-room')}
+                  onNavigateAddPhysicalRoom={() => updateTab('add-physical-room')}
+                  onNavigateEditRoomType={(id) => { 
+                    setSelectedRoomId(id); 
+                    // 🔥 FIX: We must use router.push directly so the ID stays in the URL!
+                    router.push(`?tab=edit-room&id=${id}`); 
+                  }}
+                  onNavigateEditPhysicalRoom={(id) => { 
+                    router.push(`?tab=edit-physical-room&id=${id}`); 
+                  }}
+                />
              </motion.div>
           )}
 
@@ -562,23 +626,28 @@ function DashboardContent() {
              </motion.div>
           )}
 
-          {/* --- TAB: ADD ROOM --- */}
-          {activeTab === 'add-room' && hotel && (
+          {/* --- TAB: ADD / EDIT ROOM TYPE --- */}
+          {['add-room', 'edit-room'].includes(activeTab) && hotel && (
              <motion.div key="add-room" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
-                <button onClick={() => updateTab('rooms')} className="mb-6 flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold transition-colors">
+                <button onClick={() => { setSelectedRoomId(null); updateTab('rooms'); }} className="mb-6 flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold transition-colors">
                    <ArrowLeftCircle size={20} /> Back to Rooms
                 </button>
-                <AddEditRoom hotelId={hotel.id} />
+                <AddEditRoom 
+                   hotelId={hotel.id || hotel._id || ''} 
+                   roomTypeId={searchParams.get('id') || selectedRoomId || undefined} 
+                />
              </motion.div>
           )}
-
-          {/* --- TAB: EDIT ROOM --- */}
-          {activeTab === 'edit-room' && hotel && selectedRoomId && (
-             <motion.div key="edit-room" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
+{/* --- TAB: ADD / EDIT PHYSICAL ROOM --- */}
+          {['add-physical-room', 'edit-physical-room'].includes(activeTab) && hotel && (
+             <motion.div key="physical-room" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
                 <button onClick={() => updateTab('rooms')} className="mb-6 flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold transition-colors">
                    <ArrowLeftCircle size={20} /> Back to Rooms
                 </button>
-                <AddEditRoom hotelId={hotel.id} roomId={selectedRoomId} />
+                <AddEditPhysicalRoom 
+                   hotelId={hotel.id || hotel._id || ''} 
+                   physicalRoomId={searchParams.get('id')} 
+                />
              </motion.div>
           )}
 
@@ -719,13 +788,125 @@ function DashboardContent() {
                       </div>
                       <div>
                          <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Check In</p>
-                         <p className="font-bold text-slate-900">{selectedBooking.checkIn ? new Date(selectedBooking.checkIn as any).toLocaleDateString() : 'N/A'}</p>
+                         <p className="font-bold text-slate-900">{selectedBooking.checkIn ? formatDateOnly(selectedBooking.checkIn as any) : 'N/A'}</p>
                       </div>
                       <div>
                          <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Check Out</p>
-                         <p className="font-bold text-slate-900">{selectedBooking.checkOut ? new Date(selectedBooking.checkOut as any).toLocaleDateString() : 'N/A'}</p>
+                         <p className="font-bold text-slate-900">{selectedBooking.checkOut ? formatDateOnly(selectedBooking.checkOut as any) : 'N/A'}</p>
                       </div>
                    </div>
+
+                   {/* --- PHYSICAL ROOM ASSIGNMENT --- */}
+                   <div className="bg-indigo-50/50 border border-indigo-100 p-6 rounded-3xl flex flex-col gap-3">
+                      <div className="flex justify-between items-center">
+                         <p className="text-[10px] font-black uppercase text-indigo-400 tracking-widest">Assigned Physical Room</p>
+                         {selectedBooking.assignedRoomNumber && (
+                           <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-1 rounded-md border border-indigo-200 shadow-sm">
+                             Room #{selectedBooking.assignedRoomNumber}
+                           </span>
+                         )}
+                      </div>
+                      
+                      {(() => {
+                         const isAssignable = selectedBooking.status === 'confirmed';
+
+                         // 1. Find physical rooms that match this booking's room type
+                         const applicableRooms = physicalRooms.filter(pr => 
+                            pr.operationalStatus === 'active' && 
+                            (selectedBooking.roomTypeId ? pr.roomTypeId === selectedBooking.roomTypeId : pr.roomTypeName === selectedBooking.roomName)
+                         );
+
+                         // SUPABASE STRICT DATE PARSER (NO FIREBASE .SECONDS)
+                         const parseDate = (dateVal: any) => new Date(dateVal || 0);
+                         
+                         const reqIn = parseDate(selectedBooking.checkIn);
+                         const reqOut = parseDate(selectedBooking.checkOut);
+                         reqIn.setHours(0,0,0,0);
+                         reqOut.setHours(0,0,0,0);
+
+                         // 2. Map them to include their availability status for these specific dates
+                         const roomsWithAvailability = applicableRooms.map(pr => {
+                            const isOccupied = bookings.some(b => {
+                              // DEEP FIX 1: Match by ID OR Room Number
+                              const matchesPhysical = b.physicalRoomId === (pr._id || pr.id) || 
+                                                      b.assignedRoomNumber === pr.roomNumber || 
+                                                      b.roomName === pr.roomNumber;
+                              if (!matchesPhysical) return false;
+                              
+                              const bIdentity = b._id || b.id;
+                              const selIdentity = selectedBooking._id || selectedBooking.id;
+                              if (bIdentity && selIdentity && bIdentity === selIdentity) return false;
+                              
+                              // DEEP FIX 2: Pending bookings MUST lock the room
+                              if (!['pending', 'confirmed', 'checked-in'].includes(b.status)) return false;
+
+                              const bIn = parseDate(b.checkIn);
+                              const bOut = parseDate(b.checkOut);
+                              bIn.setHours(0,0,0,0);
+                              bOut.setHours(0,0,0,0);
+
+                              return (bIn.getTime() < reqOut.getTime() && bOut.getTime() > reqIn.getTime());
+                            });
+                            return { ...pr, isAvailable: !isOccupied };
+                         });
+
+                         // 3. Count how many are actually available
+                         const availableCount = roomsWithAvailability.filter(r => r.isAvailable).length;
+
+                         return (
+                            <>
+                              {/* Warning Error if No Rooms Available */}
+                              {isAssignable && availableCount === 0 && (
+                                <div className="bg-red-50 text-red-600 p-3 rounded-xl border border-red-200 flex items-center gap-2 text-xs font-bold mb-1">
+                                  <AlertCircle size={16} className="shrink-0" />
+                                  No physical rooms available for these dates!
+                                </div>
+                              )}
+                              {!isAssignable && (
+                                <p className="text-xs text-indigo-400 font-medium mb-1">
+                                  Room assignment is locked until this booking is CONFIRMED. (Current status: {selectedBooking.status})
+                                </p>
+                              )}
+
+                              <div
+                                className="relative mt-1"
+                                onClick={() => {
+                                  if (!isAssignable) {
+                                    alert(`❌ This booking is "${selectedBooking.status}". Only CONFIRMED bookings can be assigned a physical room.`);
+                                  }
+                                }}
+                              >
+                                <select 
+                                  className="w-full appearance-none bg-white border border-indigo-200 text-indigo-900 text-sm font-bold rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer disabled:opacity-50 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                                  style={!isAssignable ? { pointerEvents: 'none' } : undefined}
+                                  value={selectedBooking.physicalRoomId || ''}
+                                  onChange={(e) => {
+                                    if (!isAssignable) return;
+                                    const selectedId = e.target.value;
+                                    const pr = physicalRooms.find(p => (p._id || p.id) === selectedId);
+                                    if (pr) assignPhysicalRoom(selectedBooking.id || (selectedBooking as any)._id, selectedId, pr.roomNumber);
+                                  }}
+                                  disabled={!isAssignable || availableCount === 0}
+                                >
+                                  <option value="" disabled>Click to assign an available room...</option>
+                                  {roomsWithAvailability.map(pr => (
+                                    <option 
+                                       key={pr._id || pr.id} 
+                                       value={pr._id || pr.id} 
+                                       disabled={!pr.isAvailable}
+                                       className={!pr.isAvailable ? "text-red-500 bg-red-50 font-bold" : "text-slate-900"}
+                                    >
+                                      Room #{pr.roomNumber} {!pr.isAvailable ? '(Occupied / Conflict)' : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                                <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-indigo-400 pointer-events-none" />
+                              </div>
+                            </>
+                         );
+                      })()}
+                   </div>
+
                    <div className="flex justify-between items-center bg-blue-50 p-6 rounded-3xl">
                       <span className="font-black text-blue-900">Total Amount</span>
                       <span className="font-black text-2xl text-blue-600">${selectedBooking.totalPrice || (selectedBooking as any).totalAmount || 0}</span>

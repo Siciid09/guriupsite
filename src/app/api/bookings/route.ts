@@ -79,14 +79,10 @@ export async function GET(request: Request) {
 
     // --- SCENARIO A: SINGLE BOOKING FETCH ---
     if (id) {
-      const queryFilter = isValidUUID(id) 
-        ? `id.eq.${id},_id.eq.${id}` 
-        : `_id.eq.${id}`;
-
       const { data, error } = await supabaseAdmin
         .from(table)
         .select('*')
-        .or(queryFilter)
+        .eq('_id', id) // ONLY query the _id column
         .maybeSingle();
 
       if (error) throw error;
@@ -251,16 +247,45 @@ export async function PATCH(request: Request) {
       }
     }
 
-    updatePayload.updatedAt = new Date().toISOString();
+    // 🔥 FIX #5: Server-side double-booking guard for physical-room assignment.
+    if (updatePayload.physicalRoomId) {
+      const { data: currentBooking } = await supabaseAdmin
+        .from('bookings')
+        .select('checkIn, checkOut')
+        .or(`id.eq.${targetId},_id.eq.${targetId}`)
+        .maybeSingle();
 
-    const queryFilter = isValidUUID(targetId) 
-      ? `id.eq.${targetId},_id.eq.${targetId}` 
-      : `_id.eq.${targetId}`;
+      if (currentBooking?.checkIn && currentBooking?.checkOut) {
+        const reqIn = new Date(currentBooking.checkIn).setHours(0, 0, 0, 0);
+        const reqOut = new Date(currentBooking.checkOut).setHours(0, 0, 0, 0);
+
+        const { data: conflictCandidates } = await supabaseAdmin
+          .from('bookings')
+          .select('_id, checkIn, checkOut, status')
+          .eq('hotelId', hotelId)
+          .eq('physicalRoomId', updatePayload.physicalRoomId)
+          .in('status', ['pending', 'confirmed', 'checked-in']);
+
+        const hasConflict = (conflictCandidates || []).some((b: any) => {
+          if (b._id === targetId) return false;
+          if (!b.checkIn || !b.checkOut) return false;
+          const bIn = new Date(b.checkIn).setHours(0, 0, 0, 0);
+          const bOut = new Date(b.checkOut).setHours(0, 0, 0, 0);
+          return bIn < reqOut && bOut > reqIn;
+        });
+
+        if (hasConflict) {
+          return NextResponse.json({ error: 'This physical room is already booked for the selected dates.' }, { status: 409 });
+        }
+      }
+    }
+
+    updatePayload.updatedAt = new Date().toISOString();
 
     const { error } = await supabaseAdmin
       .from(table)
       .update(updatePayload)
-      .or(queryFilter)
+      .eq('_id', targetId) // ONLY query the _id column
       .eq('hotelId', hotelId);
 
     if (error) throw error;
@@ -319,14 +344,10 @@ export async function DELETE(request: Request) {
       }
     }
 
-    const queryFilter = isValidUUID(id) 
-      ? `id.eq.${id},_id.eq.${id}` 
-      : `_id.eq.${id}`;
-
     const { error } = await supabaseAdmin
       .from(table)
       .delete()
-      .or(queryFilter)
+      .eq('_id', id) // ONLY query the _id column
       .eq('hotelId', hotelId);
 
     if (error) throw error;

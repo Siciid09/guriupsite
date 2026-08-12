@@ -188,6 +188,53 @@ export async function getPropertyTypes(): Promise<string[]> {
 // 3. HOTEL QUERIES (Normalized for Supabase schema)
 // =======================================================================
 
+// 🆕 Batch-computes real "from" price (cheapest active room) + real review
+// count/average for a list of already-normalized hotels. Uses supabaseAdmin
+// because rooms/reviews are RLS-protected the same way agents/users are.
+async function enrichHotelsWithPricingAndReviews(hotels: Hotel[]): Promise<Hotel[]> {
+  if (hotels.length === 0) return hotels;
+
+  const hotelIds = hotels.map((h: any) => h.id).filter(Boolean);
+  if (hotelIds.length === 0 || !supabaseAdmin) return hotels;
+
+  const cheapestRoomByHotel = new Map<string, number>();
+  const reviewAggByHotel = new Map<string, { count: number; total: number }>();
+
+  const [roomsRes, reviewsRes] = await Promise.all([
+    supabaseAdmin.from('rooms').select('hotelId, pricePerNight, price, basePrice, status').in('hotelId', hotelIds),
+    supabaseAdmin.from('reviews').select('hotelId, rating').in('hotelId', hotelIds)
+  ]);
+
+  (roomsRes.data || []).forEach((r: any) => {
+    if (r.status === 'draft' || r.status === 'Hidden') return;
+    const p = Number(r.basePrice || r.pricePerNight || r.price) || 0;
+    if (p <= 0) return;
+    const current = cheapestRoomByHotel.get(r.hotelId);
+    if (current === undefined || p < current) cheapestRoomByHotel.set(r.hotelId, p);
+  });
+
+  (reviewsRes.data || []).forEach((rv: any) => {
+    const entry = reviewAggByHotel.get(rv.hotelId) || { count: 0, total: 0 };
+    entry.count += 1;
+    entry.total += Number(rv.rating) || 0;
+    reviewAggByHotel.set(rv.hotelId, entry);
+  });
+
+  return hotels.map((h: any) => {
+    const reviewAgg = reviewAggByHotel.get(h.id);
+    const reviewCount = reviewAgg?.count || 0;
+    const avgRating = reviewAgg && reviewAgg.count > 0 ? Number((reviewAgg.total / reviewAgg.count).toFixed(1)) : h.rating;
+    const fromPrice = cheapestRoomByHotel.get(h.id) ?? h.displayPrice ?? h.pricePerNight;
+
+    return {
+      ...h,
+      rating: avgRating,
+      reviewCount,
+      fromPrice,
+    };
+  });
+}
+
 export async function getFeaturedHotels(): Promise<Hotel[]> {
   const { data, error } = await supabase
     .from('hotels')
@@ -196,7 +243,7 @@ export async function getFeaturedHotels(): Promise<Hotel[]> {
   
   if (error || !data) return [];
 
-  return data
+  const filtered = data
     .map(normalizeHotel)
     .filter(h => 
       (h.isPro || h.featured) 
@@ -204,6 +251,8 @@ export async function getFeaturedHotels(): Promise<Hotel[]> {
       && h.status !== 'banned'
     )
     .slice(0, 10);
+
+  return await enrichHotelsWithPricingAndReviews(filtered);
 }
 
 export async function getLatestHotels(): Promise<Hotel[]> {
@@ -220,34 +269,21 @@ export async function getLatestHotels(): Promise<Hotel[]> {
     .slice(0, 4);
 }
 
-console.log("\n=======================================================");
-  console.log("🟢 NEXT.JS IS CURRENTLY USING THIS SUPABASE URL:");
-  console.log("➡️ ", process.env.NEXT_PUBLIC_SUPABASE_URL);
-  console.log("🟢 NEXT.JS IS CURRENTLY USING THIS KEY (First 15 chars):");
-  console.log("➡️ ", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.substring(0, 15), "...");
-  console.log("=======================================================\n");
-
-export async function getAllHotels() {
+export async function getAllHotels(): Promise<Hotel[]> {
   try {
     const { data, error } = await supabase.from('hotels').select('*');
-    
-    // 👇 THIS PRINTS THE ACTUAL DATA TO YOUR TERMINAL 👇
-    console.log("\n====== TERMINAL DATA DUMP ======");
-    console.log(`Total Rows Found: ${data ? data.length : 0}`);
-    
-    if (data && data.length > 0) {
-      console.log("🏨 FIRST HOTEL ROW DATA:");
-      console.log(JSON.stringify(data[0], null, 2));
-    } else if (error) {
-      console.log("🚨 SUPABASE ERROR:", error);
-    } else {
-      console.log("⚠️ NO ERROR, BUT SUPABASE RETURNED AN EMPTY ARRAY []");
-    }
-    console.log("================================\n");
+    if (error || !data) return [];
 
-    return data || [];
+    // 🛠️ FIX: this used to return raw un-normalized rows, which is why
+    // fields like amenities/location/pricePerNight looked inconsistent
+    // on the "Explore All Stays" grid.
+    const normalized = data
+      .map(normalizeHotel)
+      .filter(h => !h.isArchived && h.status !== 'banned');
+
+    return await enrichHotelsWithPricingAndReviews(normalized);
   } catch (err: any) {
-    console.log("💥 FATAL CRASH:", err?.message || err);
+    console.error('getAllHotels crash:', err?.message || err);
     return [];
   }
 }

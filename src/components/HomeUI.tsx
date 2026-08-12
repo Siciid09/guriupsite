@@ -7,7 +7,7 @@ import { db } from '@/app/lib/firebase';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import LocationSelectorModal, { LocationResult } from '@/components/LocationSelectorModal';
-import { ChevronLeft, ChevronRight, ArrowRight, ChevronDown, X, RotateCcw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowRight, ChevronDown, X, RotateCcw, Wifi, Wind, Dumbbell, Utensils, Car, Coffee, Sparkles, Zap, CheckCircle } from 'lucide-react';
 
 // --- CARD AUTO & MANUAL IMAGE SLIDESHOW COMPONENT ---
 const CardImageSlider = ({ images = [], alt = '' }: { images: string[]; alt: string }) => {
@@ -74,6 +74,7 @@ interface LocationData {
   city?: string;
   area?: string;
   address?: string;
+  country?: string;
 }
 
 interface Property {
@@ -104,6 +105,8 @@ interface Hotel {
   images: string[];
   location: LocationData | string;
   rating: number;
+  reviewCount?: number;
+  fromPrice?: number;
   planTier?: 'free' | 'pro' | 'premium';
   isPro?: boolean;
   amenities?: string[] | Record<string, any>; // Support both array and API object format
@@ -235,12 +238,11 @@ const HomeUI = ({
 
   const formatPrice = (price: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(price);
 
-  const getLocationString = (location: LocationData | string) => {
+const getLocationString = (location: LocationData | string) => {
     if (typeof location === 'string') return location;
     if (!location) return 'Unknown Location';
-    const parts = [];
-    if (location.area) parts.push(location.area);
-    if (location.city) parts.push(location.city);
+    // Extract ONLY city and country, ignoring area/address
+    const parts = [location.city, location.country].filter(Boolean);
     return parts.length > 0 ? parts.join(', ') : (location.address || 'Unknown Location');
   };
 
@@ -419,8 +421,8 @@ const HomeUI = ({
                 <div className="w-5 h-5 bg-white rounded-full animate-pulse"></div>
               </div>
 
-              <h1 className="text-white font-extrabold text-4xl md:text-6xl lg:text-[4.5rem] leading-[1.1] mb-6 tracking-tight">
-                Choose Your <br /> Best Happy Land
+              <h1 className="text-white font-extrabold text-[10vw] sm:text-5xl md:text-6xl lg:text-[4.5rem] leading-[1.05] mb-6 tracking-tight">
+                Choose Your <br className="hidden sm:block" /> Best Happy Land
               </h1>
 
               <p className="text-gray-400 text-sm md:text-base mb-10 font-medium max-w-lg">
@@ -948,6 +950,31 @@ const HomeUI = ({
 
 // --- HELPER COMPONENTS ---
 
+// hotel-only location string incl. country + amenity → icon map (mirrors HotelsUI)
+// hotel-only location string incl. country + amenity → icon map (mirrors HotelsUI)
+// hotel-only location string incl. country + amenity → icon map (mirrors HotelsUI)
+const getHotelLocationString = (location: any) => {
+  if (typeof location === 'string') return location;
+  if (!location) return 'Unknown Location';
+  // Extract ONLY city and country, matching HotelsUI behavior exactly
+  const parts = [location.city, location.country].filter(Boolean);
+  return parts.length > 0 ? parts.join(', ') : (location.address || 'Unknown Location');
+};
+
+
+const getAmenityIcon = (amenity: string) => {
+  const a = (amenity || '').toLowerCase();
+  if (a.includes('wi-fi') || a.includes('wifi') || a.includes('internet')) return <Wifi size={12} />;
+  if (a.includes('pool') || a.includes('swimming')) return <Wind size={12} />;
+  if (a.includes('gym') || a.includes('fitness')) return <Dumbbell size={12} />;
+  if (a.includes('restaurant') || a.includes('dining')) return <Utensils size={12} />;
+  if (a.includes('parking')) return <Car size={12} />;
+  if (a.includes('coffee') || a.includes('breakfast')) return <Coffee size={12} />;
+  if (a.includes('air') || a.includes('ac')) return <Sparkles size={12} />;
+  if (a.includes('generator') || a.includes('power')) return <Zap size={12} />;
+  return <CheckCircle size={12} />;
+};
+
 const PropertyCard = ({ property, favorites, toggleFavorite, handleShare, formatPrice, getLocationString }: any) => {
     const pId = property._id || property.id;
     const isVerified = property.planTier === 'pro' || property.planTier === 'premium' || property.agentVerified;
@@ -1025,68 +1052,95 @@ const HotelCard = ({ hotel, favorites, toggleFavorite, handleShare, formatPrice,
     const isVerified = hotel.planTier === 'pro' || hotel.planTier === 'premium' || hotel.isPro;
     const isFavorite = favorites.includes(hId);
     const hotelPath = `/hotels/${hotel.slug || hId}`;
-    
-    // ✅ DATA MISMATCH FIX: Calculate actual price including discounts
-    const finalPrice = hotel.hasDiscount && hotel.discountPrice && hotel.discountPrice < hotel.pricePerNight
+
+    // ✅ Exact lowest active room price (backend-computed), discount-aware fallback
+    const finalPrice = hotel.fromPrice ?? (hotel.hasDiscount && hotel.discountPrice && hotel.discountPrice < hotel.pricePerNight
         ? hotel.discountPrice
-        : (hotel.pricePerNight || 120);
-    
-    // Dynamic Rating Check
+        : (hotel.pricePerNight || 120));
+
+    // ✅ Exact review data
+    const reviewCount = hotel.reviewCount ?? 0;
+    const ratingVal = Number(hotel.rating || 5.0).toFixed(1);
     const isTopRated = hotel.rating >= 4.5;
+
+    // ✅ Area, city & country — bigger text, matches HotelsUI
+    const locationText = getHotelLocationString(hotel.location);
+
+    const amenitiesList = hotel.amenities && Array.isArray(hotel.amenities)
+        ? hotel.amenities
+        : hotel.amenities && typeof hotel.amenities === 'object'
+            ? Object.keys(hotel.amenities).filter((k: string) => hotel.amenities[k])
+            : [];
+    const topAmenities = amenitiesList.slice(0, 3);
 
     return (
         <div className="hotel-card group relative">
             <Link href={hotelPath} className="absolute inset-0 z-0"></Link>
-            <div className="h-64 overflow-hidden relative">
-                <CardImageSlider images={hotel.images} alt={hotel.name} />
-                
-                {/* Dynamically show Top Rated only if rating is good */}
-                {isTopRated && (
-                     <div className="absolute top-4 left-4 bg-[#0065eb] text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shadow-lg">Top Rated</div>
-                )}
-                
-                {isVerified ? (
-                    <div className="verified-card"><svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg><span>Verified</span></div>
-                ) : (
-                    <div className="unverified-card"><svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg><span>Unverified</span></div>
-                )}
-                
-                <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
-                    <button onClick={(e) => toggleFavorite(e, hId)} className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors shadow-lg ${isFavorite ? 'bg-red-500 text-white' : 'bg-white/90 text-black hover:bg-[#0065eb] hover:text-white'}`}>
-                        <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                    </button>
-                    <button onClick={(e) => handleShare(e, hotel.name, hotelPath)} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors shadow-lg bg-white/90 text-black hover:bg-[#0065eb] hover:text-white">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
-                    </button>
+
+            {/* Framed image: blue stroke sits on the outer wrapper with padding, so there's a
+                white gap before the photo instead of the border sitting flush on it */}
+            <div className="h-64 m-2 rounded-[1.5rem] border border-[#0065eb] p-1 bg-white relative">
+                <div className="w-full h-full overflow-hidden relative bg-slate-200 rounded-[1.15rem]">
+                    <CardImageSlider images={hotel.images} alt={hotel.name} />
+
+                    {isTopRated && (
+                         <div className="absolute top-4 left-4 bg-[#0065eb] text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider shadow-lg z-10">Top Rated</div>
+                    )}
+
+                    {isVerified ? (
+                        <div className="verified-card"><svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg><span>Verified</span></div>
+                    ) : (
+                        <div className="unverified-card"><svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg><span>Unverified</span></div>
+                    )}
+
+                    <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
+                        <button onClick={(e) => toggleFavorite(e, hId)} className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors shadow-lg ${isFavorite ? 'bg-red-500 text-white' : 'bg-white/90 text-black hover:bg-[#0065eb] hover:text-white'}`}>
+                            <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                        </button>
+                        <button onClick={(e) => handleShare(e, hotel.name, hotelPath)} className="w-8 h-8 rounded-full flex items-center justify-center transition-colors shadow-lg bg-white/90 text-black hover:bg-[#0065eb] hover:text-white">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
+                        </button>
+                    </div>
+
+                    {/* Amenity icons (e.g. Wifi) overlaid on the photo */}
+                    {topAmenities.length > 0 && (
+                        <div className="absolute bottom-3 left-3 flex gap-1.5 z-10">
+                            {topAmenities.map((am: string, i: number) => (
+                                <div key={am || `hicon-${i}`} title={am} className="w-6 h-6 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center text-white">
+                                    {getAmenityIcon(am)}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
             <div className="p-5 relative pointer-events-none">
-                <div className="flex justify-between items-start">
+                <div className="flex justify-between items-start gap-2">
                     <h3 className="text-lg font-bold text-slate-900 leading-tight mb-1">{hotel.name}</h3>
-                    <span className="flex items-center text-xs font-bold text-[#0065eb] gap-1">{hotel.rating || 5.0} <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></span>
+                    <span className="flex items-center text-xs font-bold text-[#0065eb] gap-1 shrink-0">
+                        {ratingVal} <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                        <span className="text-gray-400 font-semibold">({reviewCount})</span>
+                    </span>
                 </div>
-                <p className="text-gray-400 text-xs font-bold mb-3">{getLocationString(hotel.location)}</p>
-                
-                {/* DYNAMIC AMENITIES: No more fake data */}
-                <div className="hotel-features">
-                    {hotel.amenities && Array.isArray(hotel.amenities) && hotel.amenities.length > 0 ? (
-                        hotel.amenities.slice(0, 3).map((am: string, i: number) => (
-                            <span key={i} className="hotel-feature">{am}</span>
-                        ))
-                    ) : hotel.amenities && typeof hotel.amenities === 'object' && Object.keys(hotel.amenities).length > 0 ? (
-                        Object.keys(hotel.amenities).slice(0, 3).map((am: string, i: number) => (
-                            <span key={i} className="hotel-feature">{am}</span>
+                {/* Bigger location line: area, city & country — matches HotelsUI */}
+                <p className="text-gray-400 text-sm font-bold mb-3">{locationText}</p>
+
+                {/* DYNAMIC AMENITIES with icons (e.g. Wifi) */}
+                <div className="hotel-features flex-wrap">
+                    {amenitiesList.length > 0 ? (
+                        amenitiesList.slice(0, 3).map((am: string, i: number) => (
+                            <span key={am || `am-${i}`} className="hotel-feature flex items-center gap-1">{getAmenityIcon(am)} {am}</span>
                         ))
                     ) : (
-                        // Fallback only if no data
-                        <>
-                            <span className="hotel-feature">Luxury Stay</span>
-                        </>
+                        <span className="hotel-feature">Luxury Stay</span>
                     )}
                 </div>
 
                 <div className="mt-5 flex items-center justify-between pointer-events-auto">
-                    <div className="text-slate-900 font-black text-lg">{formatPrice(finalPrice)}<span className="text-xs font-normal text-gray-400">/night</span></div>
+                    <div>
+                        <span className="text-gray-400 text-[9px] font-bold uppercase block">From</span>
+                        <div className="text-slate-900 font-black text-lg">{formatPrice(finalPrice)}<span className="text-xs font-normal text-gray-400">/night</span></div>
+                    </div>
                     <Link href={hotelPath} className="bg-[#0065eb] text-white px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-black transition-colors shadow-lg shadow-blue-500/20 relative z-10">Book Now</Link>
                 </div>
             </div>

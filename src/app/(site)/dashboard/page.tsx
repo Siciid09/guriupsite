@@ -545,17 +545,16 @@ function DashboardContent() {
                       <EmptyState icon={Calendar} title="No Active Stays" desc="Your booking history is currently empty." action={() => router.push('/hotels')} actionLabel="Browse Hotels" />
                     ) : (
                       bookings.map((booking) => (
-                        <div key={booking.id} className="bg-white p-6 lg:p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6 hover:shadow-md transition-all">
+                        <div key={booking.id} onClick={() => setSelectedBooking(booking)} className="bg-white p-6 lg:p-8 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-6 hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group">
                           <div className="flex items-center gap-5">
-                             <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-[#0065eb] border border-blue-100">
+                             <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-[#0065eb] border border-blue-100 group-hover:bg-[#0065eb] group-hover:text-white transition-colors">
                                 <Building2 size={32} />
                              </div>
                              <div>
-                                <h3 className="font-black text-xl text-slate-900">{booking.hotelName || 'My Stay'}</h3>
+                                <h3 className="font-black text-xl text-slate-900 group-hover:text-[#0065eb] transition-colors">{booking.hotelName || 'My Stay'}</h3>
                                 <div className="flex items-center gap-2 mt-1">
                                    <span className="text-xs font-black text-blue-600 uppercase tracking-wider">{booking.roomName || 'Room'}</span>
                                    <span className="text-slate-300">•</span>
-                                   {/* 🛡️ FIX: Safely parse standard string dates from the Supabase API */}
                                    <span className="text-xs font-bold text-slate-400">
                                       {booking.checkInDate ? new Date(booking.checkInDate).toDateString() : (booking as any).checkIn ? new Date((booking as any).checkIn).toDateString() : 'Upcoming'}
                                    </span>
@@ -563,7 +562,7 @@ function DashboardContent() {
                              </div>
                           </div>
                           <div className="flex items-center gap-8 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 pt-4 md:pt-0">
-                             <StatusBadge status={booking.paymentStatus} />
+                             <StatusBadge status={booking.status || booking.paymentStatus} />
                              <div className="text-right">
                                 <p className="text-2xl font-black text-slate-900">${booking.totalAmount || (booking as any).totalPrice || 0}</p>
                                 <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Total</p>
@@ -721,21 +720,30 @@ function DashboardContent() {
                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Check Out</p>
                                <p className="font-bold text-slate-900">{selectedBooking.checkOutDate ? new Date(selectedBooking.checkOutDate).toLocaleDateString() : (selectedBooking as any).checkOut ? new Date((selectedBooking as any).checkOut).toLocaleDateString() : 'N/A'}</p>
                             </div>
-                            <div className="col-span-2 mt-2">
+                            <div>
+                               <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Guests & Rooms</p>
+                               <p className="font-bold text-slate-900">{(selectedBooking as any).adults || 1} Guests • {(selectedBooking as any).roomCount || 1} Rooms</p>
+                            </div>
+                            <div>
                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Reservation Status</p>
                                <StatusBadge status={selectedBooking.status || selectedBooking.paymentStatus || 'pending'} />
                             </div>
                          </div>
-                         <div className="flex justify-between items-center bg-blue-50 p-6 rounded-3xl">
-                            <span className="font-black text-blue-900">Total Charged</span>
+                         <div className="flex justify-between items-center bg-blue-50 p-6 rounded-3xl border border-blue-100">
+                            <span className="font-black text-blue-900">Total Price</span>
                             <span className="font-black text-2xl text-blue-600">${selectedBooking.totalAmount || (selectedBooking as any).totalPrice || 0}</span>
                          </div>
                       </div>
                       <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
-                         {(selectedBooking.status || selectedBooking.paymentStatus) !== 'cancelled' && (
+                         {['pending', 'confirmed', 'accepted'].includes((selectedBooking.status || selectedBooking.paymentStatus || '').toLowerCase()) && (
                             <button onClick={() => cancelUserBooking(selectedBooking)} className="w-full py-4 bg-red-100 text-red-600 hover:bg-red-200 rounded-2xl font-black text-sm uppercase tracking-widest transition-colors">
                               Cancel Reservation
                             </button>
+                         )}
+                         {['checked-in', 'checked-out', 'cancelled'].includes((selectedBooking.status || selectedBooking.paymentStatus || '').toLowerCase()) && (
+                            <p className="w-full text-center text-xs font-bold text-slate-400 uppercase tracking-widest py-2">
+                              Cancellation unavailable for this status
+                            </p>
                          )}
                       </div>
                     </motion.div>
@@ -986,16 +994,20 @@ const InputGroup = ({ label, value, disabled, onChange }: any) => (
 const StatusBadge = ({ status }: { status?: string | null }) => {
    const safeStatus = status || 'pending';
    const styles: any = {
-     paid: 'bg-emerald-500 text-white',
-     confirmed: 'bg-emerald-500 text-white',
-     pending: 'bg-amber-500 text-white',
-     cancelled: 'bg-red-500 text-white'
+     'paid': 'bg-emerald-100 text-emerald-700',
+     'confirmed': 'bg-emerald-100 text-emerald-700',
+     'approved': 'bg-emerald-100 text-emerald-700',
+     'accepted': 'bg-emerald-100 text-emerald-700',
+     'checked-in': 'bg-blue-100 text-blue-700',
+     'checked-out': 'bg-slate-100 text-slate-700',
+     'pending': 'bg-amber-100 text-amber-700',
+     'cancelled': 'bg-red-100 text-red-700'
    };
-   const appliedStyle = styles[safeStatus.toLowerCase()] || 'bg-slate-900 text-white';
+   const appliedStyle = styles[safeStatus.toLowerCase()] || 'bg-slate-100 text-slate-900';
 
    return (
-     <span className={`${appliedStyle} px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md`}>
-       {safeStatus}
+     <span className={`${appliedStyle} px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-sm`}>
+       {safeStatus.replace('-', ' ')}
      </span>
    );
 };

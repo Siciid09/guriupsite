@@ -1,44 +1,68 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/app/lib/supabase';
+import { adminAuth } from '@/app/lib/firebase-admin';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(request: Request) {
+async function getVerifiedUid(request: Request): Promise<string | null> {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) return null;
+  const token = authHeader.split('Bearer ')[1];
   try {
-    if (!supabaseAdmin) {
-      return NextResponse.json({ error: 'Server error: Admin client missing.' }, { status: 500 });
-    }
-
-    const body = await request.json();
-    const { type, ids } = body; 
-
-    // Validate payload
-    if (!type || (type !== 'property' && type !== 'hotel')) {
-      return NextResponse.json({ error: 'Invalid type. Must be "property" or "hotel".' }, { status: 400 });
-    }
-
-    if (!ids || !Array.isArray(ids) || ids.length === 0) {
-      // If they send an empty list, just return an empty array back
-      return NextResponse.json({ success: true, data: [] }, { status: 200 });
-    }
-
-    const table = type === 'hotel' ? 'hotels' : 'property';
-    
-    // Convert array to a comma-separated string for Supabase .in() query
-    const idList = ids.join(',');
-
-    // Fetch using the admin client to bypass RLS, supporting both schemas
-    const { data, error } = await supabaseAdmin
-      .from(table)
-      .select('*')
-      .or(`id.in.(${idList}),_id.in.(${idList})`);
-
-    if (error) throw error;
-
-    return NextResponse.json({ success: true, data }, { status: 200 });
-
-  } catch (error: any) {
-    console.error('Favorites Fetch Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const decodedToken = await adminAuth.verifyIdToken(token);
+    return decodedToken.uid;
+  } catch (e) {
+    return null;
   }
+}
+
+// GET: the logged-in user's favorite hotel IDs (dashboard reads from here)
+export async function GET(request: Request) {
+  if (!supabaseAdmin) return NextResponse.json({ error: 'Server error' }, { status: 500 });
+  const uid = await getVerifiedUid(request);
+  if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const { data, error } = await supabaseAdmin
+    .from('user_favorites')
+    .select('hotelId')
+    .eq('uid', uid);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true, favorites: (data || []).map((f: any) => f.hotelId) });
+}
+
+// POST: add a favorite
+export async function POST(request: Request) {
+  if (!supabaseAdmin) return NextResponse.json({ error: 'Server error' }, { status: 500 });
+  const uid = await getVerifiedUid(request);
+  if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const { hotelId } = await request.json();
+  if (!hotelId) return NextResponse.json({ error: 'hotelId is required' }, { status: 400 });
+
+  const { error } = await supabaseAdmin
+    .from('user_favorites')
+    .upsert({ uid, hotelId, createdAt: new Date().toISOString() }, { onConflict: 'uid,hotelId' });
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
+}
+
+// DELETE: remove a favorite
+export async function DELETE(request: Request) {
+  if (!supabaseAdmin) return NextResponse.json({ error: 'Server error' }, { status: 500 });
+  const uid = await getVerifiedUid(request);
+  if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const { hotelId } = await request.json();
+  if (!hotelId) return NextResponse.json({ error: 'hotelId is required' }, { status: 400 });
+
+  const { error } = await supabaseAdmin
+    .from('user_favorites')
+    .delete()
+    .eq('uid', uid)
+    .eq('hotelId', hotelId);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
 }

@@ -54,7 +54,7 @@ export async function GET(request: Request) {
       const { data, error } = await supabaseAdmin // 🛡️ TUNNEL FIX
         .from('rooms')
         .select('*')
-        .or(`id.eq.${id},_id.eq.${id}`) // Unified ID Check
+        .eq('_id', id)
         .maybeSingle();
 
       if (error) throw error;
@@ -155,9 +155,16 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Forbidden: Requires admin or hoadmin role.' }, { status: 403 });
     }
 
+    // 1. Get ID from the URL parameters (where the frontend actually sends it)
+    const { searchParams } = new URL(request.url);
+    const urlId = searchParams.get('id') || searchParams.get('_id');
+
     const body = await request.json();
-    const { id, _id, hotelId, ...updateData } = body;
-    const roomId = id || _id;
+    // 2. Strip id and _id out of the body so Supabase doesn't crash, but keep hotelId
+    const { hotelId, id: bodyId, _id: body_Id, ...updateData } = body; 
+    
+    // 3. Set roomId using the URL first, then fallback to body
+    const roomId = urlId || bodyId || body_Id;
 
     if (!roomId || !hotelId) {
       return NextResponse.json({ error: 'Both Room ID and Hotel ID are required.' }, { status: 400 });
@@ -178,7 +185,7 @@ export async function PATCH(request: Request) {
     const { error } = await supabaseAdmin
       .from('rooms')
       .update({ ...updateData, updatedAt: new Date().toISOString() })
-      .or(`id.eq.${roomId},_id.eq.${roomId}`) // Unified ID Check
+      .eq('_id', roomId)
       .eq('hotelId', hotelId);
 
     if (error) throw error;
@@ -231,7 +238,7 @@ export async function DELETE(request: Request) {
     const { error } = await supabaseAdmin
       .from('rooms')
       .delete()
-      .or(`id.eq.${id},_id.eq.${id}`) // Unified ID Check
+      .eq('_id', id)
       .eq('hotelId', hotelId);
 
     if (error) throw error;

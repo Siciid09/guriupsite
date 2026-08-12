@@ -50,8 +50,11 @@ async function attachAdminData(hotels: any[]) {
 
   // 1. Gather unique Admin/Owner IDs
   const adminIds = [...new Set(hotels.map(h => h.hotelAdminId || h.ownerId || h.agentId).filter(Boolean))];
-  
+  const hotelIds = hotels.map(h => h._id || h.id).filter(Boolean);
+
   const adminMap = new Map();
+  const cheapestRoomByHotel = new Map<string, number>();
+  const reviewAggByHotel = new Map<string, { count: number; total: number }>();
 
   // 2. Fetch admin data ONLY if we have IDs
   if (adminIds.length > 0) {
@@ -67,6 +70,29 @@ async function attachAdminData(hotels: any[]) {
     (agentsRes.data || []).forEach(a => adminMap.set(a._id || a.uid, a));
   }
 
+  // 2b. Cheapest active room price + review aggregates, batched for every hotel
+  if (hotelIds.length > 0) {
+    const [roomsRes, reviewsRes] = await Promise.all([
+      supabaseAdmin.from('rooms').select('hotelId, pricePerNight, price, basePrice, status').in('hotelId', hotelIds),
+      supabaseAdmin.from('reviews').select('hotelId, rating').in('hotelId', hotelIds)
+    ]);
+
+    (roomsRes.data || []).forEach((r: any) => {
+      if (r.status === 'draft' || r.status === 'Hidden') return;
+      const p = Number(r.basePrice || r.pricePerNight || r.price) || 0;
+      if (p <= 0) return;
+      const current = cheapestRoomByHotel.get(r.hotelId);
+      if (current === undefined || p < current) cheapestRoomByHotel.set(r.hotelId, p);
+    });
+
+    (reviewsRes.data || []).forEach((rv: any) => {
+      const entry = reviewAggByHotel.get(rv.hotelId) || { count: 0, total: 0 };
+      entry.count += 1;
+      entry.total += Number(rv.rating) || 0;
+      reviewAggByHotel.set(rv.hotelId, entry);
+    });
+  }
+
   // 3. CRITICAL FIX: ALWAYS map every hotel so the frontend never crashes on undefined fields
   return hotels.map(h => {
     const adminId = h.hotelAdminId || h.ownerId || h.agentId;
@@ -80,7 +106,13 @@ async function attachAdminData(hotels: any[]) {
     const area = locObj.area || locObj.district || h.area || h.district || 'Unknown Area';
     const address = locObj.address || h.address || `${area}, ${city}`;
 
-    const price = Number(h.pricePerNight || h.price || h.displayPrice) || 0;
+    const hotelId = h._id || h.id;
+    const fallbackPrice = Number(h.pricePerNight || h.price || h.displayPrice) || 0;
+    const fromPrice = cheapestRoomByHotel.get(hotelId) ?? fallbackPrice;
+
+    const reviewAgg = reviewAggByHotel.get(hotelId);
+    const reviewCount = reviewAgg?.count || 0;
+    const avgRating = reviewAgg && reviewAgg.count > 0 ? Number((reviewAgg.total / reviewAgg.count).toFixed(1)) : (Number(h.rating) || 4.5);
 
     return {
       id: h._id || h.id,
@@ -90,9 +122,11 @@ async function attachAdminData(hotels: any[]) {
       shortDescription: h.shortDescription || '',
       type: h.type || h.hotelType || 'Hotel',
       roomsCount: h.roomsCount || 0,
-      rating: Number(h.rating) || 4.5,
-      pricePerNight: price,
-      displayPrice: price,
+      rating: avgRating,
+      reviewCount,
+      pricePerNight: fromPrice,
+      displayPrice: fromPrice,
+      fromPrice: fromPrice,
       images: Array.isArray(h.images) && h.images.length > 0 ? h.images : ['https://placehold.co/600x400?text=No+Hotel+Image'],
       media: h.media || { logo: '', coverPhoto: '' },
       amenities: typeof h.amenities === 'object' && h.amenities !== null && !Array.isArray(h.amenities) 

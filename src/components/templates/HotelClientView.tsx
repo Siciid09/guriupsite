@@ -293,19 +293,34 @@ export default function HotelDetailPage() {
     });
   };
 
-  const confirmBooking = async () => {
+ const confirmBooking = async () => {
     if (!hotel) return;
 
-    // Strict Validation
+    // 1. STRICT VALIDATION: Name & Phone
     if (!bookingData.name.trim() || !bookingData.phone.trim()) {
       alert("Please provide your Full Name and Phone Number.");
       return;
     }
     
-    // Validate Phone Number properly
     const phoneRegex = /^[0-9+\s-]{7,15}$/;
     if (!phoneRegex.test(bookingData.phone.trim())) {
       alert("Please provide a valid Phone Number.");
+      return;
+    }
+
+    // 2. STRICT VALIDATION: Dates (PREVENTS "NO DATE SELECTED" BUG)
+    if (!bookingData.checkIn || !bookingData.checkOut) {
+      alert("❌ Please select both Check-In and Check-Out dates before booking.");
+      return;
+    }
+
+    const reqIn = new Date(bookingData.checkIn);
+    const reqOut = new Date(bookingData.checkOut);
+    reqIn.setHours(0, 0, 0, 0);
+    reqOut.setHours(0, 0, 0, 0);
+
+    if (reqIn >= reqOut) {
+      alert("❌ Check-Out date must be after Check-In date.");
       return;
     }
 
@@ -316,6 +331,80 @@ export default function HotelDetailPage() {
 
     setIsSubmitting(true);
     const hotelId = hotel.id || hotel._id;
+
+    const selectedRoom = rooms.find(r => (r.id || r._id) === bookingData.roomId);
+    const roomName = selectedRoom ? (selectedRoom.roomName || selectedRoom.roomTypeName) : 'Standard Room';
+    const roomPrice = Number(selectedRoom?.basePrice || selectedRoom?.pricePerNight || selectedRoom?.price || hotel.pricePerNight || 0);
+    
+    const diffDays = Math.round((reqOut.getTime() - reqIn.getTime()) / (1000 * 60 * 60 * 24));
+    const nights = diffDays > 0 ? diffDays : 1;
+
+    // 3. BULLETPROOF DOUBLE-BOOKING PREVENTION — checks each actual physical room, not just a count
+    try {
+      // Fetch Physical Rooms for this Room Type
+      const resPhys = await fetch(`/api/physical-rooms?hotelId=${hotelId}`);
+      const physRooms = await resPhys.json();
+      const targetPhysRooms = (Array.isArray(physRooms) ? physRooms : (physRooms.physicalRooms || [])).filter(
+        (p: any) => (p.roomTypeId === bookingData.roomId || p.roomId === bookingData.roomId) && p.operationalStatus === 'active'
+      );
+
+      // Fetch ALL Bookings
+      const resBk = await fetch(`/api/bookings?hotelId=${hotelId}`);
+      const bkData = await resBk.json();
+      const allBookings = (Array.isArray(bkData) ? bkData : (bkData.bookings || []));
+      const blockingStatuses = ['pending', 'confirmed', 'checked-in'];
+
+      const parseBDate = (d: any) => {
+        const dt = new Date((d as any)?.seconds ? (d as any).seconds * 1000 : d);
+        dt.setHours(0,0,0,0);
+        return dt;
+      };
+      const overlapsRequested = (b: any) => {
+        if (!b.checkIn || !b.checkOut) return false;
+        const bIn = parseBDate(b.checkIn);
+        const bOut = parseBDate(b.checkOut);
+        return bIn.getTime() < reqOut.getTime() && bOut.getTime() > reqIn.getTime();
+      };
+
+      let availableRooms: number;
+
+      if (targetPhysRooms.length > 0) {
+        // 🔥 Check EACH specific physical room of this type — is there at least one free unit for these dates?
+        availableRooms = targetPhysRooms.filter((pr: any) => {
+          const prId = pr._id || pr.id;
+          const isBookedForDates = allBookings.some((b: any) => {
+            if (!blockingStatuses.includes(b.status)) return false;
+            const matchesPhysical = b.physicalRoomId === prId || b.assignedRoomNumber === pr.roomNumber || b.roomName === pr.roomNumber;
+            if (!matchesPhysical) return false;
+            return overlapsRequested(b);
+          });
+          return !isBookedForDates;
+        }).length;
+      } else {
+        // No physical units mapped yet — fall back to counting overlapping bookings against room-type capacity
+        const totalUnits = Number((selectedRoom as any)?.numberOfRooms || selectedRoom?.capacity || 1);
+        const overlappingCount = allBookings.filter((b: any) => {
+          if (!blockingStatuses.includes(b.status)) return false;
+          const isSameRoom = b.roomId === bookingData.roomId || b.roomTypeId === bookingData.roomId || (b.roomName && b.roomName.includes(roomName));
+          if (!isSameRoom) return false;
+          return overlapsRequested(b);
+        }).length;
+        availableRooms = Math.max(0, totalUnits - overlappingCount);
+      }
+
+      const requestedRooms = Number(bookingData.roomCount) || 1;
+
+      if (requestedRooms > availableRooms) {
+          alert(`❌ We're fully booked! Only ${availableRooms} unit(s) available for these dates.\n\nPlease select different dates or fewer rooms.`);
+          setIsSubmitting(false);
+          return; // STOP EXECUTION
+      }
+    } catch (err) {
+      console.warn("Availability check failed, proceeding to manual approval", err);
+    }
+    
+    // 4. Final Total Price
+    const totalPrice = roomPrice * Number(bookingData.roomCount || 1) * nights;
 
     try {
       const idToken = user ? await user.getIdToken() : '';
@@ -330,8 +419,10 @@ export default function HotelDetailPage() {
           hotelName: hotel.name,
           userId: user?.uid || 'guest',
           ...bookingData,
-          guestName: bookingData.name, // Maps data properly for the dashboard read
-          guestPhone: bookingData.phone, // Maps data properly for the dashboard read
+          guestName: bookingData.name, 
+          guestPhone: bookingData.phone, 
+          roomName: roomName,          
+          totalAmount: totalPrice,      
           status: 'pending',
           source: 'whatsapp_redirect'
         })
@@ -343,21 +434,14 @@ export default function HotelDetailPage() {
       setIsSubmitting(false);
     }
 
-    const selectedRoom = rooms.find(r => (r.id || r._id) === bookingData.roomId);
-    
-    // 🛡️ CRITICAL FIX: Safe fallback bindings for room properties
-    const roomName = selectedRoom ? (selectedRoom.roomName || selectedRoom.roomTypeName) : 'Standard Room';
-    const roomPrice = Number(selectedRoom?.basePrice || selectedRoom?.pricePerNight || selectedRoom?.price || hotel.pricePerNight || 0);
-    const totalPrice = roomPrice * Number(bookingData.roomCount || 1);
-
     const message = `Hello, I would like to book a stay at *${hotel.name}*.\n\n` +
       `👤 *Name:* ${bookingData.name}\n` +
       `📱 *Phone:* ${bookingData.phone}\n` +
-      `🏨 *Room:* ${roomName} (${bookingData.roomCount} room${bookingData.roomCount > 1 ? 's' : ''})\n` +
+      `🏨 *Room:* ${roomName} (${bookingData.roomCount} room${Number(bookingData.roomCount) > 1 ? 's' : ''})\n` +
       `📅 *Dates:* ${bookingData.checkIn} to ${bookingData.checkOut}\n` +
       `👥 *Guests:* ${bookingData.adults} Adults, ${bookingData.children} Kids\n` +
-      `💰 *Est. Price:* $${totalPrice}/night\n\n` +
-      `Please confirm availability.`;
+      `💰 *Est. Price:* $${totalPrice}\n\n` +
+      `Please confirm my reservation.`;
 
     const isPro = hotel.planTier?.toLowerCase().includes('pro') || hotel.isVerified === true;
     const rawP = hotel.contact?.phoneWhatsapp || hotel.contact?.phoneCall || hotel.contactPhone || hotel.phone;
@@ -415,7 +499,7 @@ export default function HotelDetailPage() {
         <div className="flex flex-col lg:flex-row gap-8">
           {/* --- LEFT SIDE: GALLERY (65%) --- */}
           <div className="w-full lg:w-[65%] space-y-4">
-            <div className="relative h-[300px] md:h-[500px] w-full rounded-[2.5rem] overflow-hidden group bg-slate-900 shadow-2xl">
+            <div className="relative h-[300px] md:h-[500px] w-full rounded-[2.5rem] overflow-hidden group bg-slate-900 shadow-2xl border border-[#0065eb]">
               <Image src={hotel.images?.[currentImg] && hotel.images[currentImg].trim() !== '' ? hotel.images[currentImg] : '/placeholder.jpg'} alt={hotel.name} fill className="object-cover transition-transform duration-700 group-hover:scale-105" priority />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60"></div>
               <button onClick={() => router.back()} className="absolute top-6 left-6 p-3 bg-white/10 backdrop-blur-md rounded-full text-white hover:bg-white hover:text-black transition-all border border-white/10 z-20">
@@ -438,7 +522,7 @@ export default function HotelDetailPage() {
             </div>
             <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
               {(hotel.images || []).slice(0, 8).map((img, idx) => (
-                <div key={idx} onClick={() => idx === 7 ? setShowGalleryModal(true) : setCurrentImg(idx)} className={`relative aspect-square rounded-2xl overflow-hidden cursor-pointer transition-all ${currentImg === idx ? 'ring-2 ring-[#0065eb] ring-offset-2' : 'hover:opacity-80'}`}>
+                <div key={idx} onClick={() => idx === 7 ? setShowGalleryModal(true) : setCurrentImg(idx)} className={`relative aspect-square rounded-2xl overflow-hidden cursor-pointer transition-all border border-[#0065eb]/40 ${currentImg === idx ? 'ring-2 ring-[#0065eb] ring-offset-2' : 'hover:opacity-80'}`}>
                   <Image src={img && img.trim() !== '' ? img : '/placeholder.jpg'} alt="" fill className="object-cover" />
                   {idx === 7 && (hotel.images?.length || 0) > 8 && (
                     <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white font-black text-sm">
@@ -825,21 +909,44 @@ export default function HotelDetailPage() {
                 </div>
               </div>
               <div>
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2 block">Select Room</label>
-                <div className="grid grid-cols-1 gap-2">
-                  {rooms.map(room => {
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Select Room</label>
+                  {bookingData.roomId && (
+                    <button type="button" onClick={() => handleBookingChange('roomId', '')} className="text-[10px] font-black text-[#0065eb] hover:text-[#0052c1] flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-full transition-colors">
+                      <ChevronLeft size={12} /> Change Room
+                    </button>
+                  )}
+                </div>
+                <div className={`grid gap-3 ${bookingData.roomId ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                  {rooms.filter(room => !bookingData.roomId || (room.id || room._id) === bookingData.roomId).map(room => {
                     const roomId = room.id || room._id;
                     const rPrice = room.basePrice || room.pricePerNight || room.price || 0;
                     const rName = room.roomName || room.roomTypeName || 'Standard Room';
                     const rCap = room.maxOccupancy || room.capacity || 2;
+                    const rImg = (room.images?.[0] && room.images[0].trim() !== '') ? room.images[0] : (hotel.images?.[0] && hotel.images[0].trim() !== '' ? hotel.images[0] : '/placeholder.jpg');
+                    const isSelected = bookingData.roomId === roomId;
                     return (
-                      <div key={roomId} onClick={() => handleBookingChange('roomId', roomId)} className={`p-4 rounded-xl border-2 cursor-pointer flex justify-between items-center transition-all ${bookingData.roomId === roomId ? 'border-[#0065eb] bg-blue-50' : 'border-slate-100 hover:border-slate-200'}`}>
-                        <div><p className="font-bold text-sm text-slate-900">{rName}</p><p className="text-xs text-slate-500">Max {rCap} Guests</p></div>
-                        <span className="font-black text-sm text-[#0065eb]">${rPrice}</span>
+                      <div key={roomId} onClick={() => handleBookingChange('roomId', roomId)} className={`group relative rounded-2xl overflow-hidden cursor-pointer border-2 bg-white transition-all ${isSelected ? 'border-[#0065eb] shadow-xl shadow-blue-500/15' : 'border-slate-100 hover:border-slate-200 hover:shadow-md'}`}>
+                        <div className={`relative w-full ${bookingData.roomId ? 'h-36' : 'h-24'} bg-slate-200`}>
+                          <Image src={rImg} alt={rName} fill className="object-cover group-hover:scale-105 transition-transform duration-500" />
+                          {isSelected && (
+                            <div className="absolute top-2 right-2 bg-[#0065eb] text-white rounded-full p-1.5 shadow-lg">
+                              <CheckCircle size={14} />
+                            </div>
+                          )}
+                          <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm text-white text-[10px] font-black px-2 py-1 rounded-lg">
+                            ${rPrice} / night
+                          </div>
+                        </div>
+                        <div className="p-3">
+                          <p className="font-bold text-sm text-slate-900 truncate">{rName}</p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Max {rCap} Guests</p>
+                        </div>
                       </div>
                     );
                   })}
                 </div>
+                {rooms.length === 0 && <p className="text-slate-400 text-xs font-bold">No rooms listed for this property.</p>}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div><label className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2 block">Check-in</label><div className="relative"><Calendar size={16} className="absolute top-4 left-4 text-slate-400" /><input type="date" onChange={(e) => handleBookingChange('checkIn', e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-50 rounded-xl font-bold text-sm" /></div></div>
@@ -860,7 +967,7 @@ export default function HotelDetailPage() {
             </div>
             <div className="p-6 border-t border-slate-100 bg-white">
               <button disabled={isSubmitting} onClick={confirmBooking} className="w-full py-4 bg-[#25D366] hover:bg-[#1dbf57] text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg shadow-green-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-70">
-                {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <MessageCircle size={20} />} Confirm via WhatsApp
+                {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <CheckCircle size={20} />} Confirm
               </button>
             </div>
           </div>
