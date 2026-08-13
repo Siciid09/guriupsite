@@ -60,13 +60,14 @@ export async function POST(request: Request) {
       createdAt: new Date().toISOString()
     };
 
-    const { error: userError } = await supabaseAdmin.from('users').insert([userData]);
+    // ✅ CHANGED: Uses upsert to prevent crashes when upgrading an existing user to an agent
+    const { error: userError } = await supabaseAdmin.from('users').upsert([userData], { onConflict: '_id' });
     
     if (userError) {
       console.error('Supabase User Insert Error:', userError);
       await adminAuth.deleteUser(firebaseUid).catch(() => console.error('Rollback failed'));
       return NextResponse.json({ error: 'Failed to save user profile to database.' }, { status: 500 });
-    }
+    } 
 
     // 3. If Role is Agent (reagent), Store in Supabase 'agents' table
     if (role === 'reagent') {
@@ -96,7 +97,8 @@ export async function POST(request: Request) {
         specialties: [specialty || 'Residential'] 
       };
 
-      const { error: agentError } = await supabaseAdmin.from('agents').insert([agencyData]);
+      // ✅ CHANGED: Uses upsert to prevent duplicate key errors
+      const { error: agentError } = await supabaseAdmin.from('agents').upsert([agencyData], { onConflict: '_id' });
       
       if (agentError) {
         console.error('Supabase Agent Insert Error:', agentError);
