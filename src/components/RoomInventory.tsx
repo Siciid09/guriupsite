@@ -396,72 +396,7 @@ export default function RoomInventory({
     }
   };
 
-  const handleManualOccupy = async () => {
-    if (!manualDates.checkIn || !manualDates.checkOut) return alert("Please select both check-in and check-out dates.");
-    if (new Date(manualDates.checkIn) >= new Date(manualDates.checkOut)) return alert("Check-out must be after check-in.");
-    if (!selectedPhysicalRoom) return;
-
-    // 🔥 PREVENT MANUAL DOUBLE BOOKING (SUPABASE STRICT ISO DATES)
-    const sIn = new Date(manualDates.checkIn);
-    const sOut = new Date(manualDates.checkOut);
-    sIn.setHours(0,0,0,0);
-    sOut.setHours(0,0,0,0);
-    
-    const isConflict = bookings.some(b => {
-      const matchesPhysical = b.physicalRoomId === (selectedPhysicalRoom._id || selectedPhysicalRoom.id) || b.assignedRoomNumber === selectedPhysicalRoom.roomNumber || b.roomName === selectedPhysicalRoom.roomNumber;
-      if (!matchesPhysical) return false;
-      if (!['pending', 'confirmed', 'checked-in'].includes(b.status)) return false;
-      
-      const bIn = new Date((b.checkIn as any)?.seconds ? (b.checkIn as any).seconds * 1000 : b.checkIn);
-      const bOut = new Date((b.checkOut as any)?.seconds ? (b.checkOut as any).seconds * 1000 : b.checkOut);
-      bIn.setHours(0,0,0,0);
-      bOut.setHours(0,0,0,0);
-      
-      return (bIn.getTime() < sOut.getTime() && bOut.getTime() > sIn.getTime());
-    });
-
-    if (isConflict) return alert("❌ ERROR: This room is already occupied or booked during these dates!");
-
-    setActionLoading('manual_occupy');
-    try {
-      const user = auth.currentUser;
-      const idToken = user ? await user.getIdToken() : '';
-      
-      const payload = {
-        hotelId,
-        roomId: selectedPhysicalRoom.roomTypeId, // 🔥 FIX 1: Database uses 'roomId'
-        physicalRoomId: selectedPhysicalRoom._id || selectedPhysicalRoom.id,
-        roomName: selectedPhysicalRoom.roomNumber,
-        assignedRoomNumber: selectedPhysicalRoom.roomNumber,
-        guestName: "Manual Block / Walk-in",
-        guestPhone: "N/A",
-        checkIn: manualDates.checkIn,
-        checkOut: manualDates.checkOut,
-        status: 'checked-in', // Instantly occupy
-        totalAmount: 0, // 🔥 FIX 2: Database uses 'totalAmount'
-        source: 'admin_manual'
-      };
-
-      const res = await fetch('/api/bookings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify(payload)
-      });
-
-      if (!res.ok) throw new Error("Failed to occupy room");
-      
-      const newBooking = await res.json();
-      setBookings(prev => [newBooking.booking, ...prev]);
-      
-      setShowManualOccupy(false);
-      setManualDates({ checkIn: '', checkOut: '' });
-      setSelectedPhysicalRoom(null);
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  ;
 
   const toggleRoomTypeVisibility = async (roomTypeId: string, currentStatus: string) => {
     setActionLoading(roomTypeId);
@@ -1469,6 +1404,10 @@ export default function RoomInventory({
 
                        let bg = status === 'Available' ? 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200 hover:scale-105 cursor-pointer shadow-sm' : 
                                 status === 'Occupied' ? 'bg-rose-100 text-rose-700 border-rose-200 hover:bg-rose-200 hover:scale-105 cursor-pointer shadow-sm' : 'bg-slate-100 text-slate-500 border-slate-200 opacity-60';
+
+                       function updateBookingStatus(occupyingBooking: any, arg1: string) {
+                         throw new Error('Function not implemented.');
+                       }
 
                        return (
                          <div key={day.toISOString()} onClick={() => {
