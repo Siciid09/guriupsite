@@ -65,8 +65,8 @@ export async function POST(request: Request) {
     
     if (userError) {
       console.error('Supabase User Insert Error:', userError);
-      await adminAuth.deleteUser(firebaseUid).catch(() => console.error('Rollback failed'));
-      return NextResponse.json({ error: 'Failed to save user profile to database.' }, { status: 500 });
+      // 🚨 REMOVED: Do not delete Firebase Auth user. This destroys existing accounts during upgrades.
+      return NextResponse.json({ error: `Supabase Error: ${userError.message}` }, { status: 500 });
     } 
 
     // 3. If Role is Agent (reagent), Store in Supabase 'agents' table
@@ -102,9 +102,8 @@ export async function POST(request: Request) {
       
       if (agentError) {
         console.error('Supabase Agent Insert Error:', agentError);
-        await supabaseAdmin.from('users').delete().eq('_id', firebaseUid);
-        await adminAuth.deleteUser(firebaseUid).catch(() => console.error('Rollback failed'));
-        return NextResponse.json({ error: 'Failed to save agency profile.' }, { status: 500 });
+        // 🚨 REMOVED: Do not delete the user from Firebase or Supabase. Just return the error so we can fix the database constraint.
+        return NextResponse.json({ error: `Supabase Agent Error: ${agentError.message}` }, { status: 500 });
       }
     }
 
