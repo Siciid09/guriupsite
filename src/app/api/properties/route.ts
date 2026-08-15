@@ -19,6 +19,21 @@ async function getVerifiedUid(request: Request): Promise<string | null> {
   }
 }
 
+// =========================================================
+// SECURITY HELPER: STRICT ROLE CHECK
+// =========================================================
+async function getUserRoleStrict(uid: string): Promise<string | null> {
+  if (!supabaseAdmin) return null;
+  
+  const { data: user } = await supabaseAdmin
+    .from('users')
+    .select('role')
+    .or(`uid.eq.${uid},_id.eq.${uid}`) // Safe from UUID crashes
+    .maybeSingle(); 
+    
+  return user?.role || null;
+}
+
 function isPaidTier(plan: string): boolean {
   const tier = (plan || 'free').toLowerCase().trim();
   return ['pro', 'premium', 'agent_pro', 'agentpro', 'admin', 'sadmin'].includes(tier);
@@ -231,11 +246,10 @@ export async function POST(request: Request) {
     const uid = await getVerifiedUid(request);
     if (!uid) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
-    // 🚨 FIX: Removed 'isAgent' from the select query to prevent PGRST204 errors
-    const { data: user } = await supabaseAdmin.from('users').select('role').or(`id.eq.${uid},_id.eq.${uid}`).single();
+    // 👈 FIXED: Uses your safe helper instead of raw UUID cast which crashes Postgres
+    const role = await getUserRoleStrict(uid);
     
-    // Check if the user role is an admin or reagent
-    if (user?.role !== 'admin' && user?.role !== 'sadmin' && user?.role !== 'reagent') {
+    if (role !== 'admin' && role !== 'sadmin' && role !== 'reagent') {
       return NextResponse.json({ error: 'Forbidden. Only Admins and Agents can post properties.' }, { status: 403 });
     }
 
@@ -282,14 +296,14 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Property ID is required' }, { status: 400 });
     }
 
-    // 🚨 FIX: Safely retrieve the role without checking non-existent columns
-    const { data: userRecord } = await supabaseAdmin.from('users').select('role').or(`id.eq.${uid},_id.eq.${uid}`).single();
-    const isAdmin = userRecord?.role === 'admin' || userRecord?.role === 'sadmin';
+    // 👈 FIXED: Uses the safe helper for role extraction
+    const role = await getUserRoleStrict(uid);
+    const isAdmin = role === 'admin' || role === 'sadmin';
 
     const { data: checkData, error: checkError } = await supabaseAdmin
       .from('property')
       .select('agentId')
-      .or(`id.eq.${targetId},_id.eq.${targetId}`)
+      .eq('_id', targetId) // 👈 FIXED: Protects against UUID cast crash on legacy string IDs
       .single();
 
     if (checkError || !checkData) {
@@ -334,14 +348,14 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Property ID is required' }, { status: 400 });
     }
 
-    // 🚨 FIX: Safely retrieve the role
-    const { data: userRecord } = await supabaseAdmin.from('users').select('role').or(`id.eq.${uid},_id.eq.${uid}`).single();
-    const isAdmin = userRecord?.role === 'admin' || userRecord?.role === 'sadmin';
+    // 👈 FIXED: Uses the safe helper
+    const role = await getUserRoleStrict(uid);
+    const isAdmin = role === 'admin' || role === 'sadmin';
 
     const { data: checkData, error: checkError } = await supabaseAdmin
       .from('property')
       .select('agentId')
-      .or(`id.eq.${id},_id.eq.${id}`)
+      .eq('_id', id) // 👈 FIXED: Stop UUID cast crash
       .single();
 
     if (checkError || !checkData) {
