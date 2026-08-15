@@ -23,23 +23,13 @@ export async function GET(request: NextRequest) {
     }
 
     // 3. Fetch User Profile from Supabase (Bypassing RLS)
+    // 👈 FIXED: We combine the search to check both legacy `_id` and the new `uid` string column.
+    // Do NOT use `.eq('id', uid)` because Postgres will crash trying to convert the Firebase string to a UUID.
     let { data: userProfile, error } = await supabaseAdmin
       .from('users')
       .select('*')
-      .eq('id', uid)
+      .or(`uid.eq.${uid},_id.eq.${uid}`)
       .maybeSingle();
-
-    // 4. Fallback: Check legacy _id column if standard id fails
-    if (!userProfile) {
-      const { data: fallbackProfile, error: fallbackError } = await supabaseAdmin
-        .from('users')
-        .select('*')
-        .eq('_id', uid)
-        .maybeSingle();
-        
-      userProfile = fallbackProfile;
-      error = fallbackError;
-    }
 
     if (error || !userProfile) {
       console.error('Supabase fetch error/not found for UID:', uid);
