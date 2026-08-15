@@ -363,7 +363,7 @@ export async function PATCH(request: Request) {
       const { data: check, error: checkError } = await supabaseAdmin
         .from('hotels')
         .select('hotelAdminId, ownerId')
-        .or(`_id.eq.${targetId},id.eq.${targetId}`)
+        .eq('_id', targetId) // 👈 FIXED: Removed id.eq to stop UUID cast crash
         .maybeSingle(); // Prevent crash if missing
 
       if (checkError || !check || (check.hotelAdminId !== uid && check.ownerId !== uid)) {

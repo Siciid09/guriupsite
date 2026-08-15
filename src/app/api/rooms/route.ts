@@ -29,8 +29,8 @@ async function getUserRoleStrict(uid: string): Promise<string | null> {
   const { data: user } = await supabaseAdmin
     .from('users')
     .select('role')
-    .or(`id.eq.${uid},_id.eq.${uid}`) // Unified ID Check
-    .maybeSingle(); // Prevent crash if user is missing
+    .or(`uid.eq.${uid},_id.eq.${uid}`) // 👈 FIXED: Replaced 'id' to prevent PostgreSQL cast crashes
+    .maybeSingle(); 
     
   return user?.role || null;
 }
@@ -109,8 +109,8 @@ export async function POST(request: Request) {
       const { data: hotelCheck, error: hotelError } = await supabaseAdmin
         .from('hotels')
         .select('hotelAdminId, ownerId')
-        .or(`id.eq.${hotelId},_id.eq.${hotelId}`) // Unified ID Check
-        .maybeSingle(); // Prevent crash
+        .eq('_id', hotelId) // 👈 FIXED: Direct lookup against Firebase legacy column
+        .maybeSingle();
 
       if (hotelError || !hotelCheck || (hotelCheck.hotelAdminId !== uid && hotelCheck.ownerId !== uid)) {
         return NextResponse.json({ error: 'Forbidden. You do not own this hotel.' }, { status: 403 });
@@ -174,8 +174,8 @@ export async function PATCH(request: Request) {
       const { data: hotelCheck, error: hotelError } = await supabaseAdmin
         .from('hotels')
         .select('hotelAdminId, ownerId')
-        .or(`id.eq.${hotelId},_id.eq.${hotelId}`) // Unified ID Check
-        .maybeSingle(); // Prevent crash
+        .eq('_id', hotelId) // 👈 FIXED: Direct lookup against Firebase legacy column
+        .maybeSingle();
 
       if (hotelError || !hotelCheck || (hotelCheck.hotelAdminId !== uid && hotelCheck.ownerId !== uid)) {
         return NextResponse.json({ error: 'Forbidden. You do not own this hotel.' }, { status: 403 });
@@ -227,8 +227,8 @@ export async function DELETE(request: Request) {
       const { data: hotelCheck, error: hotelError } = await supabaseAdmin
         .from('hotels')
         .select('hotelAdminId, ownerId')
-        .or(`id.eq.${hotelId},_id.eq.${hotelId}`) // Unified ID Check
-        .maybeSingle(); // Prevent crash
+        .eq('_id', hotelId) // 👈 FIXED: Direct lookup against Firebase legacy column
+        .maybeSingle();
 
       if (hotelError || !hotelCheck || (hotelCheck.hotelAdminId !== uid && hotelCheck.ownerId !== uid)) {
         return NextResponse.json({ error: 'Forbidden. You do not own this hotel.' }, { status: 403 });
