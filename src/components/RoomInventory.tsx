@@ -398,6 +398,31 @@ export default function RoomInventory({
 
   ;
 
+  const deleteRoomType = async (roomId: string) => {
+    if (!window.confirm("Are you sure you want to delete this room type? This will permanently remove it from your inventory.")) return;
+    setActionLoading(roomId);
+    try {
+      const user = auth.currentUser;
+      const idToken = user ? await user.getIdToken() : '';
+
+      const res = await fetch(`/api/rooms?id=${roomId}&hotelId=${hotelId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${idToken}` }
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to delete room type');
+      }
+
+      setRoomTypes(prev => prev.filter(rt => (rt._id !== roomId && rt.id !== roomId)));
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const toggleRoomTypeVisibility = async (roomTypeId: string, currentStatus: string) => {
     setActionLoading(roomTypeId);
     try {
@@ -653,6 +678,15 @@ export default function RoomInventory({
                             title="Edit Room Type"
                           >
                             <Edit3 size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={actionLoading === rtId}
+                            onClick={() => deleteRoomType(rtId)}
+                            className="p-2.5 bg-slate-100 text-slate-700 hover:bg-rose-50 hover:text-rose-600 rounded-xl transition-colors"
+                            title="Delete Room Type"
+                          >
+                            <Trash2 size={16} />
                           </button>
                         </div>
                       </div>
