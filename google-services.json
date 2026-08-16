@@ -1,0 +1,178 @@
+{
+  "project_info": {
+    "project_number": "1066966823801",
+    "project_id": "guriapp123",
+    "storage_bucket": "guriapp123.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1066966823801:android:db5936159e76d6fc0535a8",
+        "android_client_info": {
+          "package_name": "com.example.guriup"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1066966823801-mcnv5anthbrg5qmf78repf8dj2fubafm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDu3ftBerz4YRyJlfws3Br8iiZTQ7iNZBU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1066966823801-mcnv5anthbrg5qmf78repf8dj2fubafm.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1066966823801-1qlj8kqbglum7umd0gmanl20kf7pl6o3.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.myguri.me"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1066966823801:android:b05adbed0229f3720535a8",
+        "android_client_info": {
+          "package_name": "com.guriup.up"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1066966823801-mcnv5anthbrg5qmf78repf8dj2fubafm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDu3ftBerz4YRyJlfws3Br8iiZTQ7iNZBU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1066966823801-mcnv5anthbrg5qmf78repf8dj2fubafm.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1066966823801-1qlj8kqbglum7umd0gmanl20kf7pl6o3.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.myguri.me"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1066966823801:android:4fe6bb8696a438800535a8",
+        "android_client_info": {
+          "package_name": "com.hantikaab.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1066966823801-mcnv5anthbrg5qmf78repf8dj2fubafm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDu3ftBerz4YRyJlfws3Br8iiZTQ7iNZBU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1066966823801-mcnv5anthbrg5qmf78repf8dj2fubafm.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1066966823801-1qlj8kqbglum7umd0gmanl20kf7pl6o3.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.myguri.me"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1066966823801:android:371807fd9c1371540535a8",
+        "android_client_info": {
+          "package_name": "com.myguri.me"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1066966823801-3rgdd52o4rk3efd3pji4b7tk1pppji77.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.myguri.me",
+            "certificate_hash": "2aa89645249b5413b9d13229f266beae2cce7f0d"
+          }
+        },
+        {
+          "client_id": "1066966823801-eh0tq17k1q0dps2t05lv6he91kvlng6g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.myguri.me",
+            "certificate_hash": "c273882ff2f8afff18115744b0fec55289d91061"
+          }
+        },
+        {
+          "client_id": "1066966823801-n31t58t2jrticb5rmhsinpuor3e4ejv4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.myguri.me",
+            "certificate_hash": "a3a726d9303c738b8b34a4e17bee81f4a7f51deb"
+          }
+        },
+        {
+          "client_id": "1066966823801-mcnv5anthbrg5qmf78repf8dj2fubafm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDu3ftBerz4YRyJlfws3Br8iiZTQ7iNZBU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1066966823801-mcnv5anthbrg5qmf78repf8dj2fubafm.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1066966823801-1qlj8kqbglum7umd0gmanl20kf7pl6o3.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.myguri.me"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

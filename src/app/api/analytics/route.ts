@@ -181,19 +181,33 @@ export async function GET(request: Request) {
         }
       }
 
-      const [bookingsRes, eventsRes] = await Promise.all([
+      // 🛡️ ENHANCED: Fetching Rooms and Reviews to calculate true dashboard capacities
+      const [bookingsRes, eventsRes, roomsRes, reviewsRes] = await Promise.all([
         supabaseAdmin.from('bookings').select('*').or(`hotelId.eq.${hotelId},hotel_id.eq.${hotelId}`),
-        supabaseAdmin.from('analytics_events').select('*').eq('hotelId', hotelId)
+        supabaseAdmin.from('analytics_events').select('*').eq('hotelId', hotelId),
+        supabaseAdmin.from('rooms').select('*').eq('hotelId', hotelId),
+        supabaseAdmin.from('reviews').select('*').eq('hotelId', hotelId)
       ]);
 
       if (bookingsRes.error) throw new Error(`Hotel bookings error: ${bookingsRes.error.message}`);
 
       const bookingList = bookingsRes.data || [];
       const monthlyRevenue = bookingList
-        .filter((b) => ['confirmed', 'paid', 'checked-in', 'checked-out'].includes(b.status))
-        .reduce((sum, b) => sum + (Number(b.totalAmount || b.totalPrice) || 0), 0);
+        .filter((b: any) => ['confirmed', 'paid', 'checked-in', 'checked-out'].includes(b.status))
+        .reduce((sum: number, b: any) => sum + (Number(b.totalAmount || b.totalPrice) || 0), 0);
 
-      const pendingBookings = bookingList.filter((b) => b.status === 'pending').length;
+      const pendingBookings = bookingList.filter((b: any) => b.status === 'pending').length;
+
+      // 📊 DYNAMIC REVIEWS PROCESSING
+      const reviewsList = reviewsRes.data || [];
+      const totalReviews = reviewsList.length;
+      const avgRating = totalReviews > 0 
+        ? reviewsList.reduce((sum: number, r: any) => sum + (Number(r.rating) || 5), 0) / totalReviews 
+        : 0;
+        
+      // 📊 DYNAMIC ROOM INVENTORY
+      const roomsList = roomsRes.data || [];
+      const totalRoomsCount = roomsList.length;
 
       return NextResponse.json({
         success: true,
@@ -202,6 +216,23 @@ export async function GET(request: Request) {
           pendingBookings,
           totalBookings: bookingList.length,
           events: eventsRes.data || [], 
+          rooms: {
+            totalInventory: totalRoomsCount,
+            activeList: roomsList
+          },
+          reviews: {
+            average: Number(avgRating.toFixed(1)),
+            total: totalReviews,
+            newReviews: reviewsList.filter((r: any) => {
+              const rDate = r.createdAt ? new Date(r.createdAt) : new Date();
+              const lastWeek = new Date();
+              lastWeek.setDate(lastWeek.getDate() - 7);
+              return rDate >= lastWeek;
+            }).length,
+            latest: reviewsList
+              .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+              .slice(0, 5)
+          }
         },
       });
     }
