@@ -99,7 +99,7 @@ const BookingModal = ({ isOpen, onClose, property, agent }: { isOpen: boolean; o
         userId: currentUser?.uid || 'anonymous_web',
         date: formData.date,
         time: formData.time,
-        createdAt: new Date().toISOString(),
+        timestamp: new Date().toISOString(),
         status: 'pending',
         platform: 'web'
       }]);
