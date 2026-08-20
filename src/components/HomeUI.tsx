@@ -239,15 +239,24 @@ const HomeUI = ({
   }, []);
 
   const formatPrice = (price: number, currencyCode: string = 'USD') => {
+    const code = (currencyCode || 'USD').toUpperCase();
+    
+    const symbols: Record<string, string> = {
+      'KES': 'KSh', 'ETB': 'Br', 'TZS': 'TSh', 'UGX': 'USh',
+      'SOS': 'Sh', 'SLSH': 'Slsh', 'ZAR': 'R', 'NGN': '₦',
+      'GHS': 'GH₵', 'RWF': 'FRw', 'USD': '$', 'EUR': '€', 'GBP': '£'
+    };
+
+    const symbol = symbols[code];
+
+    if (symbol) {
+      return `${symbol} ${price.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+    }
+
     try {
-      return new Intl.NumberFormat('en-US', { 
-        style: 'currency', 
-        currency: currencyCode, 
-        maximumFractionDigits: 0 
-      }).format(price);
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: code, maximumFractionDigits: 0 }).format(price);
     } catch (error) {
-      // Fallback for unrecognized currency codes
-      return `${currencyCode} ${price.toLocaleString()}`; 
+      return `${code} ${price.toLocaleString('en-US')}`; 
     }
   };
 
