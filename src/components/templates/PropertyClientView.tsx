@@ -100,8 +100,7 @@ const BookingModal = ({ isOpen, onClose, property, agent }: { isOpen: boolean; o
         date: formData.date,
         time: formData.time,
         timestamp: new Date().toISOString(),
-        status: 'pending',
-        platform: 'web'
+        status: 'pending'
       }]);
 
       if (tourError) throw tourError;
