@@ -246,7 +246,6 @@ export async function POST(request: Request) {
     const uid = await getVerifiedUid(request);
     if (!uid) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
-    // 👈 FIXED: Uses your safe helper instead of raw UUID cast which crashes Postgres
     const role = await getUserRoleStrict(uid);
     
     if (role !== 'admin' && role !== 'sadmin' && role !== 'reagent') {
@@ -256,11 +255,38 @@ export async function POST(request: Request) {
     const propertyData = await request.json();
     propertyData.agentId = uid;
 
+    // Destructure out the unmapped root fields to stop Supabase crashing
+    const { 
+      tenantId, 
+      tenantName, 
+      tenantPhone, 
+      boosted, 
+      virtualTourUrl, 
+      floorPlanUrl, 
+      ...safeDbData 
+    } = propertyData;
+
+    // Safely embed them into JSONB columns so they are written successfully
+    safeDbData.details = {
+      ...(safeDbData.details || {}),
+      boosted: boosted ?? false,
+      virtualTourUrl: virtualTourUrl ?? '',
+      floorPlanUrl: floorPlanUrl ?? '',
+    };
+    
+    // Ensure tenant fields exist inside rentalDetails
+    safeDbData.rentalDetails = {
+      ...(safeDbData.rentalDetails || {}),
+      tenantId: tenantId ?? '',
+      tenantName: tenantName ?? '',
+      tenantPhone: tenantPhone ?? '',
+    };
+
     const { data, error } = await supabaseAdmin
       .from('property')
       .insert([
         {
-          ...propertyData,
+          ...safeDbData,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         }
@@ -289,21 +315,33 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json();
-    const { id, _id, ...updateData } = body; 
+    
+    // Destructure out the ID and unmapped root fields to stop crashes
+    const { 
+      id, 
+      _id, 
+      tenantId, 
+      tenantName, 
+      tenantPhone, 
+      boosted, 
+      virtualTourUrl, 
+      floorPlanUrl, 
+      ...updateData 
+    } = body; 
+    
     const targetId = id || _id;
 
     if (!targetId) {
       return NextResponse.json({ error: 'Property ID is required' }, { status: 400 });
     }
 
-    // 👈 FIXED: Uses the safe helper for role extraction
     const role = await getUserRoleStrict(uid);
     const isAdmin = role === 'admin' || role === 'sadmin';
 
     const { data: checkData, error: checkError } = await supabaseAdmin
       .from('property')
       .select('agentId')
-      .eq('_id', targetId) // 👈 FIXED: Protects against UUID cast crash on legacy string IDs
+      .eq('_id', targetId) 
       .single();
 
     if (checkError || !checkData) {
@@ -313,6 +351,22 @@ export async function PATCH(request: Request) {
     if (!isAdmin && checkData.agentId !== uid) {
        return NextResponse.json({ error: 'Forbidden. You do not own this property.' }, { status: 403 });
     }
+
+    // Safely embed new fields into existing JSONB column 
+    updateData.details = {
+      ...(updateData.details || {}),
+      boosted: boosted ?? updateData.details?.boosted ?? false,
+      virtualTourUrl: virtualTourUrl ?? updateData.details?.virtualTourUrl ?? '',
+      floorPlanUrl: floorPlanUrl ?? updateData.details?.floorPlanUrl ?? '',
+    };
+    
+    // Ensure tenant fields exist inside rentalDetails JSONB
+    updateData.rentalDetails = {
+      ...(updateData.rentalDetails || {}),
+      tenantId: tenantId ?? updateData.rentalDetails?.tenantId ?? '',
+      tenantName: tenantName ?? updateData.rentalDetails?.tenantName ?? '',
+      tenantPhone: tenantPhone ?? updateData.rentalDetails?.tenantPhone ?? '',
+    };
 
     const { data, error } = await supabaseAdmin
       .from('property')
@@ -348,14 +402,13 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Property ID is required' }, { status: 400 });
     }
 
-    // 👈 FIXED: Uses the safe helper
     const role = await getUserRoleStrict(uid);
     const isAdmin = role === 'admin' || role === 'sadmin';
 
     const { data: checkData, error: checkError } = await supabaseAdmin
       .from('property')
       .select('agentId')
-      .eq('_id', id) // 👈 FIXED: Stop UUID cast crash
+      .eq('_id', id)
       .single();
 
     if (checkError || !checkData) {
@@ -423,37 +476,49 @@ function mergeAndNormalize(p: any, liveAgentData: any) {
 
   const locationObj = typeof p.location === 'object' && p.location !== null ? p.location : {};
   const contactObj = p.contact || {};
+  const rentalDetailsObj = p.rentalDetails || {};
 
   return {
     id: p._id || p.id,
     slug: p.slug || null,
     title: p.title || p.name || 'Untitled Property',
-    description: p.description || p.bio || p.details || '',
+    description: p.description || p.bio || p.details?.description || p.details || '',
     price: price,
-    currency: p.currency || 'USD', // 🆕 Added
-    negotiable: p.negotiable || p.saleDetails?.negotiable || false, // 🆕 Added
+    currency: p.currency || 'USD', 
+    negotiable: p.negotiable || p.saleDetails?.negotiable || false, 
     discountPrice: hasValidDiscount ? discountPrice : 0,
     hasDiscount: hasValidDiscount,
     displayPrice: hasValidDiscount ? discountPrice : price,
     isForSale: p.isForSale ?? p.is_for_sale ?? (p.transactionType ? p.transactionType === 'Sale' : true),
     status: p.status || 'available',
     images: Array.isArray(p.images) && p.images.length > 0 ? p.images : ['https://placehold.co/600x400?text=No+Image'],
-    videoUrl: p.videoUrl || '', // 🆕 Added
+    
+    // Properly read media fields whether they are direct DB columns or nested in details JSONB
+    videoUrl: p.videoUrl || details.videoUrl || '', 
+    virtualTourUrl: p.virtualTourUrl || details.virtualTourUrl || '', 
+    floorPlanUrl: p.floorPlanUrl || details.floorPlanUrl || '',
+    
     location: {
       city: locationObj.city || p.city || 'Unknown City',
       area: locationObj.area || p.area || 'Unknown Area',
       gpsCoordinates: locationObj.gpsCoordinates || locationObj.coordinates || null,
-      visibility: locationObj.visibility || 'Exact', // 🆕 Added
+      visibility: locationObj.visibility || 'Exact', 
     },
+    
     // Map from either new details obj or old features obj
     bedrooms: Number(details.bedrooms || p.bedrooms || feats.bedrooms || 0),
     bathrooms: Number(details.bathrooms || p.bathrooms || feats.bathrooms || 0),
     area: Number(details.size || p.area || p.size || feats.size || 0),
-    type: p.category || p.type || p.propertyType || 'House', // Map new category field
+    type: p.category || p.type || p.propertyType || 'House', 
+    
+    // Read tenant fields out of the rental details
+    tenantId: p.tenantId || rentalDetailsObj.tenantId || '',
+    tenantName: p.tenantName || rentalDetailsObj.tenantName || '',
+    tenantPhone: p.tenantPhone || rentalDetailsObj.tenantPhone || '',
     
     // Pass the new specific details safely 
-    details: p.details || {},
-    rentalDetails: p.rentalDetails || {},
+    details: details,
+    rentalDetails: rentalDetailsObj,
     saleDetails: p.saleDetails || {},
     highlights: p.highlights || [],
     
@@ -464,7 +529,10 @@ function mergeAndNormalize(p: any, liveAgentData: any) {
     agentPhone: finalVerifiedStatus ? (contactObj.phone || contactObj.whatsapp || p.contactPhone || liveAgentData.whatsappNumber || liveAgentData.phone || p.agentPhone) : null, // Prefer new contact object
     agentVerified: finalVerifiedStatus,
     agentPlanTier: livePlan,
+    
+    // Properly map boosted alongside featured
     featured: p.featured || p.isFeatured || false,
+    boosted: p.boosted || details.boosted || false,
     createdAt: createdAt,
   };
 }
