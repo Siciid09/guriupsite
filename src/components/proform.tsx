@@ -37,6 +37,7 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
   const [activeStep, setActiveStep] = useState(1);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sectionRefs = useRef<(HTMLElement | null)[]>([]);
   const [dragItem, setDragItem] = useState<{type: 'existing' | 'new', index: number} | null>(null);
 
   const [formData, setFormData] = useState({
@@ -104,7 +105,6 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
           originalPrice: existingProperty.discountPrice || 0,
           percentage: 0
         },
-        // Correctly maps flat arrays from the API back into the categorized UI
         amenities: {
           general: ['Furnished', 'Balcony', 'Garden', 'Terrace', 'Pool'].filter(a => (existingProperty.amenities || []).includes(a)),
           utilities: ['Water Available', 'Electricity', 'Generator', 'Solar', 'Internet'].filter(a => (existingProperty.amenities || []).includes(a)),
@@ -116,6 +116,37 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
       setExistingImages(existingProperty.images || []);
     }
   }, [existingProperty]);
+
+  // Scroll Spy Logic
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const index = sectionRefs.current.findIndex((ref) => ref === entry.target);
+            if (index !== -1) {
+              setActiveStep(index + 1);
+            }
+          }
+        });
+      },
+      { rootMargin: '-20% 0px -60% 0px' } 
+    );
+
+    sectionRefs.current.forEach((section) => {
+      if (section) observer.observe(section);
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  const scrollToStep = (stepId: number) => {
+    const el = sectionRefs.current[stepId - 1];
+    if (el) {
+      const y = el.getBoundingClientRect().top + window.scrollY - 100; // Offset for navbar
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    }
+  };
 
   const handleDeleteExistingImage = async (url: string, index: number) => {
     try {
@@ -155,7 +186,6 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
       const currentUser = auth.currentUser;
       const idToken = currentUser ? await currentUser.getIdToken() : '';
 
-      // Upload Images
       const uploadedUrls = [...existingImages];
       for (const file of formImages) {
         const fileRef = ref(storage, `property_images/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`);
@@ -164,14 +194,11 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
         uploadedUrls.push(downloadUrl);
       }
 
-      // Upload Private Documents
       const uploadedDocUrls = [];
-      // Keep existing documents if editing
       if (existingProperty?.documents && Array.isArray(existingProperty.documents)) {
         uploadedDocUrls.push(...existingProperty.documents);
       }
       for (const file of formData.documents) {
-        // Only upload actual File objects, skip if it's already a URL string from an edit
         if (file instanceof File) {
           const docRef = ref(storage, `property_docs/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`);
           await uploadBytes(docRef, file);
@@ -184,11 +211,10 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
         ...(existingProperty?.id ? { id: existingProperty.id } : {}),
         ...formData,
         images: uploadedUrls,
-        documents: uploadedDocUrls, // Replaces raw files with safe Firebase URLs
+        documents: uploadedDocUrls,
         agentId: currentUserUid,
         isForSale: formData.transactionType === 'Sale',
         isArchived: isDraft,
-        // Map back some flat fields for legacy support in your API
         tenantId: formData.rentalDetails.tenantId,
         tenantName: formData.rentalDetails.tenantName,
         tenantPhone: formData.rentalDetails.tenantPhone,
@@ -229,42 +255,49 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
   const isLand = formData.category === 'Land';
 
   return (
-    <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-8 animate-in fade-in duration-500">
+    <div className="max-w-5xl mx-auto flex flex-col gap-6 animate-in fade-in duration-500 pb-20">
       
-      {/* Sidebar Stepper */}
-      <aside className="w-full md:w-64 flex-shrink-0">
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 sticky top-6">
-          <button onClick={onCancel} className="flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold text-sm mb-8 transition-colors">
-            <ArrowLeft size={16} /> Back to Dashboard
-          </button>
-          <nav className="space-y-2">
-            {STEPS.map((step) => {
-              const Icon = step.icon;
-              const isActive = activeStep === step.id;
-              return (
-                <button key={step.id} type="button" onClick={() => setActiveStep(step.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${isActive ? 'bg-[#0065eb] text-white shadow-md shadow-blue-500/20' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}>
-                  <Icon size={18} />
-                  <span>{step.id}. {step.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-      </aside>
+      {/* Top Header Actions */}
+      <div className="flex justify-between items-center px-2">
+        <button onClick={onCancel} className="flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold text-sm transition-colors">
+          <ArrowLeft size={16} /> Back to Dashboard
+        </button>
+        <button type="button" onClick={(e) => handleSave(e, true)} disabled={isSaving} className="px-5 py-2.5 rounded-xl font-bold text-sm bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
+          Save Draft
+        </button>
+      </div>
+
+      {/* Sticky Navigation Bar */}
+      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm py-4 px-2 flex overflow-x-auto gap-2 no-scrollbar">
+        {STEPS.map((step) => {
+          const Icon = step.icon;
+          const isActive = activeStep === step.id;
+          return (
+            <button 
+              key={step.id} 
+              type="button" 
+              onClick={() => scrollToStep(step.id)} 
+              className={`flex-shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                isActive ? 'bg-[#0065eb] text-white shadow-md shadow-blue-500/20' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <Icon size={16} />
+              <span>{step.id}. {step.label}</span>
+            </button>
+          );
+        })}
+      </nav>
 
       {/* Main Form Content */}
-      <main className="flex-1">
-        <form onSubmit={(e) => handleSave(e, false)} className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8">
-          <div className="border-b border-slate-50 pb-6 mb-6 flex justify-between items-center">
-            <h2 className="text-2xl font-black text-slate-900">{STEPS.find(s => s.id === activeStep)?.label}</h2>
-            <button type="button" onClick={(e) => handleSave(e, true)} disabled={isSaving} className="px-5 py-2.5 rounded-xl font-bold text-sm bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
-              Save Draft
-            </button>
-          </div>
+      <main className="flex-1 px-2">
+        <form onSubmit={(e) => handleSave(e, false)} className="space-y-12">
 
           {/* STEP 1: Basic Details */}
-          {activeStep === 1 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-right-4">
+          <section id="step-1" ref={(el) => { sectionRefs.current[0] = el; }} className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8 scroll-mt-28">
+            <h2 className="text-2xl font-black text-slate-900 mb-6 flex items-center gap-3">
+              <Building className="text-[#0065eb]" /> 1. Basic Details
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="md:col-span-2">
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Property Title *</label>
                 <input required type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value, slug: e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-')})} className="w-full bg-slate-50 rounded-xl p-4 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. Modern 3 Bedroom House" />
@@ -308,11 +341,14 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
                 </select>
               </div>
             </div>
-          )}
+          </section>
 
           {/* STEP 2: Location */}
-          {activeStep === 2 && (
-            <div className="space-y-6 animate-in slide-in-from-right-4">
+          <section id="step-2" ref={(el) => { sectionRefs.current[1] = el; }} className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8 scroll-mt-28">
+            <h2 className="text-2xl font-black text-slate-900 mb-6 flex items-center gap-3">
+              <MapPin className="text-[#0065eb]" /> 2. Location
+            </h2>
+            <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-2">City & District *</label>
@@ -362,11 +398,14 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
                 )}
               </div>
             </div>
-          )}
+          </section>
 
           {/* STEP 3: Details */}
-          {activeStep === 3 && (
-             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-in slide-in-from-right-4">
+          <section id="step-3" ref={(el) => { sectionRefs.current[2] = el; }} className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8 scroll-mt-28">
+             <h2 className="text-2xl font-black text-slate-900 mb-6 flex items-center gap-3">
+              <Home className="text-[#0065eb]" /> 3. Details
+             </h2>
+             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                <div>
                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Size (m²)</label>
                  <input type="number" value={formData.details.size || ''} onChange={e => setFormData({...formData, details: {...formData.details, size: Number(e.target.value)}})} className="w-full bg-slate-50 rounded-xl p-4 text-sm font-bold outline-none" placeholder="0" />
@@ -417,7 +456,6 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
                  </div>
                )}
 
-               {/* RESTORED MISSING PROPERTY DETAILS */}
                {isResidential && (
                  <>
                    <div>
@@ -469,7 +507,6 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
                  </div>
                )}
 
-               {/* AMENITIES SECTION (Newly Restored) */}
                <div className="col-span-2 md:col-span-4 mt-6 pt-6 border-t border-slate-100">
                  <h3 className="font-bold text-slate-900 mb-4">Features & Amenities</h3>
                  <div className="flex flex-wrap gap-2">
@@ -480,15 +517,13 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
                      { cat: 'parking', items: ['Parking', 'Garage'] }
                    ].map(group => (
                      group.items.map(item => {
-                       // @ts-ignore - safe dynamic access
-                       const isSelected = formData.amenities[group.cat].includes(item);
+                       const isSelected = formData.amenities[group.cat as keyof typeof formData.amenities].includes(item);
                        return (
                          <button
                            key={item} type="button"
                            onClick={() => {
                              setFormData(prev => {
-                               // @ts-ignore
-                               const current = prev.amenities[group.cat] as string[];
+                               const current = prev.amenities[group.cat as keyof typeof formData.amenities] as string[];
                                return {
                                  ...prev,
                                  amenities: {
@@ -510,11 +545,14 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
                  </div>
                </div>
              </div>
-          )}
+          </section>
 
-          {/* STEP 4: Rental / Sale Info + Tenant Assignment */}
-          {activeStep === 4 && (
-            <div className="space-y-6 animate-in slide-in-from-right-4">
+          {/* STEP 4: Rental / Sale Info */}
+          <section id="step-4" ref={(el) => { sectionRefs.current[3] = el; }} className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8 scroll-mt-28">
+            <h2 className="text-2xl font-black text-slate-900 mb-6 flex items-center gap-3">
+              <Tags className="text-[#0065eb]" /> 4. {formData.transactionType === 'Rent' ? 'Rental Info' : 'Sale Info'}
+            </h2>
+            <div className="space-y-6">
               {formData.transactionType === 'Rent' ? (
                 <>
                   <div className="grid grid-cols-2 gap-4">
@@ -543,7 +581,6 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
                     </div>
                   </div>
                   
-                  {/* Tenant Assignment from original code */}
                   <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 mt-6">
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-3">Assign to Existing Tenant (Optional)</label>
                     {isPro ? (
@@ -593,11 +630,14 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
                 </div>
               )}
             </div>
-          )}
+          </section>
 
           {/* STEP 5: Media & Docs */}
-          {activeStep === 5 && (
-            <div className="space-y-6 animate-in slide-in-from-right-4">
+          <section id="step-5" ref={(el) => { sectionRefs.current[4] = el; }} className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8 scroll-mt-28">
+            <h2 className="text-2xl font-black text-slate-900 mb-6 flex items-center gap-3">
+              <ImageIcon className="text-[#0065eb]" /> 5. Media & Docs
+            </h2>
+            <div className="space-y-6">
                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {existingImages.map((img, i) => (
                   <div 
@@ -685,7 +725,6 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
                 {isPro ? (
                   <div className="relative">
                     <ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                    {/* @ts-ignore */}
                     <input type="text" value={formData.floorPlanUrl || ''} onChange={e => setFormData({...formData, floorPlanUrl: e.target.value})} className="w-full bg-slate-50 rounded-xl pl-12 pr-4 py-4 text-sm font-bold outline-none" placeholder="Link to Floor Plan (Optional)" />
                   </div>
                 ) : (
@@ -696,7 +735,6 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
                 )}
               </div>
 
-              {/* RESTORED DOCUMENTS SECTION */}
               <div className="mt-8 pt-6 border-t border-slate-100">
                 <h3 className="font-bold text-slate-900 mb-2 flex items-center gap-2">
                   <FileText size={18} className="text-indigo-500" />
@@ -725,13 +763,15 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
                   </div>
                 )}
               </div>
-
             </div>
-          )}
+          </section>
 
-          {/* STEP 6: Description, Promo & Contact */}
-          {activeStep === 6 && (
-            <div className="space-y-8 animate-in slide-in-from-right-4">
+          {/* STEP 6: Promo & Contact */}
+          <section id="step-6" ref={(el) => { sectionRefs.current[5] = el; }} className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8 scroll-mt-28">
+            <h2 className="text-2xl font-black text-slate-900 mb-6 flex items-center gap-3">
+              <Phone className="text-[#0065eb]" /> 6. Promo & Contact
+            </h2>
+            <div className="space-y-8">
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Description *</label>
                 <textarea required value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} rows={4} maxLength={isPro ? 5000 : 100} className="w-full bg-slate-50 rounded-xl p-4 text-sm font-bold outline-none resize-none" placeholder="Describe the property..."></textarea>
@@ -786,7 +826,6 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
                 )}
               </div>
 
-              {/* RESTORED FEATURED & BOOST LISTINGS */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-amber-50 p-6 rounded-2xl border border-amber-100 flex items-center justify-between">
                   <div>
@@ -819,7 +858,6 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
                 </div>
               </div>
 
-              {/* CONTACT SECTION (Newly Restored) */}
               <div className="pt-6 border-t border-slate-100">
                 <h3 className="font-bold text-slate-900 mb-4">Contact Information</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -850,77 +888,66 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
                 </div>
               </div>
             </div>
-          )}
+          </section>
 
           {/* STEP 7: Review & Publish */}
-          {activeStep === 7 && (
-            <div className="space-y-8 animate-in slide-in-from-right-4">
-              <div className="bg-slate-50 p-8 rounded-3xl border border-slate-100">
-                <h3 className="font-black text-xl text-slate-900 mb-6 text-center">Review Your Listing</h3>
-                
-                <div className="bg-white rounded-[24px] overflow-hidden shadow-lg border border-slate-100 max-w-sm mx-auto">
-                  <div className="h-56 relative bg-slate-200">
-                    {existingImages.length > 0 ? (
-                      <img src={existingImages[0]} alt="Cover" className="object-cover w-full h-full" />
-                    ) : formImages.length > 0 ? (
-                      <img src={URL.createObjectURL(formImages[0])} alt="Cover" className="object-cover w-full h-full" />
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-slate-400 font-bold">No Cover Image</div>
-                    )}
-                    <div className="absolute top-4 left-4 bg-[#0065eb] text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider shadow-md">
-                      For {formData.transactionType}
-                    </div>
-                    {formData.discount.enabled && formData.discount.originalPrice > formData.price && (
-                      <div className="absolute top-4 right-4 bg-rose-500 text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider shadow-md">
-                        Discounted
-                      </div>
-                    )}
+          <section id="step-7" ref={(el) => { sectionRefs.current[6] = el; }} className="bg-slate-50 p-8 rounded-3xl border border-slate-100 shadow-sm scroll-mt-28">
+            <h2 className="text-2xl font-black text-slate-900 mb-6 flex items-center justify-center gap-3">
+              <CheckCircle className="text-green-500" /> 7. Review & Publish
+            </h2>
+            <div className="space-y-8">
+              <div className="bg-white rounded-[24px] overflow-hidden shadow-lg border border-slate-100 max-w-sm mx-auto">
+                <div className="h-56 relative bg-slate-200">
+                  {existingImages.length > 0 ? (
+                    <img src={existingImages[0]} alt="Cover" className="object-cover w-full h-full" />
+                  ) : formImages.length > 0 ? (
+                    <img src={URL.createObjectURL(formImages[0])} alt="Cover" className="object-cover w-full h-full" />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-slate-400 font-bold">No Cover Image</div>
+                  )}
+                  <div className="absolute top-4 left-4 bg-[#0065eb] text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider shadow-md">
+                    For {formData.transactionType}
                   </div>
-                  <div className="p-6">
-                    <h4 className="font-black text-slate-900 text-lg mb-1 truncate">{formData.title || 'Untitled Property'}</h4>
-                    <p className="text-xs text-slate-500 font-bold mb-4 flex items-center gap-1"><MapPin size={14} className="text-[#0065eb]"/> {formData.location.area || 'Area'}, {formData.location.city || 'City'}</p>
-                    
-                    <div className="flex justify-between items-end mb-4 border-b border-slate-50 pb-4">
-                      <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Price</p>
-                        <div className="flex items-center gap-2">
-                          <span className="font-black text-slate-900 text-2xl">{formData.currency} {formData.price ? formData.price.toLocaleString() : '0'}</span>
-                          {formData.discount.enabled && formData.discount.originalPrice > formData.price && (
-                            <span className="text-xs text-slate-400 line-through font-bold">{formData.currency} {formData.discount.originalPrice.toLocaleString()}</span>
-                          )}
-                        </div>
+                  {formData.discount.enabled && formData.discount.originalPrice > formData.price && (
+                    <div className="absolute top-4 right-4 bg-rose-500 text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider shadow-md">
+                      Discounted
+                    </div>
+                  )}
+                </div>
+                <div className="p-6">
+                  <h4 className="font-black text-slate-900 text-lg mb-1 truncate">{formData.title || 'Untitled Property'}</h4>
+                  <p className="text-xs text-slate-500 font-bold mb-4 flex items-center gap-1"><MapPin size={14} className="text-[#0065eb]"/> {formData.location.area || 'Area'}, {formData.location.city || 'City'}</p>
+                  
+                  <div className="flex justify-between items-end mb-4 border-b border-slate-50 pb-4">
+                    <div>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Price</p>
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-slate-900 text-2xl">{formData.currency} {formData.price ? formData.price.toLocaleString() : '0'}</span>
+                        {formData.discount.enabled && formData.discount.originalPrice > formData.price && (
+                          <span className="text-xs text-slate-400 line-through font-bold">{formData.currency} {formData.discount.originalPrice.toLocaleString()}</span>
+                        )}
                       </div>
                     </div>
-                    
-                    <div className="flex gap-4 text-slate-600 font-bold text-xs">
-                      {['House', 'Apartment', 'Villa'].includes(formData.category) && (
-                        <>
-                          <span className="flex items-center gap-1.5"><Home size={14} className="text-slate-400"/> {formData.details.bedrooms} Beds</span>
-                        </>
-                      )}
-                      <span className="flex items-center gap-1.5"><Building size={14} className="text-slate-400"/> {formData.details.size} m²</span>
-                    </div>
+                  </div>
+                  
+                  <div className="flex gap-4 text-slate-600 font-bold text-xs">
+                    {['House', 'Apartment', 'Villa'].includes(formData.category) && (
+                      <>
+                        <span className="flex items-center gap-1.5"><Home size={14} className="text-slate-400"/> {formData.details.bedrooms} Beds</span>
+                      </>
+                    )}
+                    <span className="flex items-center gap-1.5"><Building size={14} className="text-slate-400"/> {formData.details.size} m²</span>
                   </div>
                 </div>
               </div>
+              
+              <div className="flex justify-center mt-6">
+                <button type="submit" disabled={isSaving} className="px-10 py-4 rounded-xl font-bold text-lg bg-[#0065eb] disabled:opacity-50 text-white shadow-xl shadow-blue-500/30 hover:bg-[#0052c1] transition-transform hover:scale-105 flex items-center gap-2">
+                  {isSaving ? <RefreshCw size={24} className="animate-spin" /> : <CheckCircle size={24} />} Publish Property Now
+                </button>
+              </div>
             </div>
-          )}
-
-          {/* Form Navigation */}
-          <div className="mt-10 pt-6 border-t border-slate-100 flex justify-between">
-            <button type="button" disabled={activeStep === 1} onClick={() => setActiveStep(prev => prev - 1)} className="px-6 py-3 rounded-xl font-bold text-sm text-slate-500 hover:bg-slate-50 disabled:opacity-30 transition-colors">
-              Previous Step
-            </button>
-            {activeStep < 7 ? (
-              <button type="button" onClick={() => setActiveStep(prev => prev + 1)} className="px-6 py-3 rounded-xl font-bold text-sm bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">
-                Next Step
-              </button>
-            ) : (
-              <button type="submit" disabled={isSaving} className="px-8 py-3 rounded-xl font-bold text-sm bg-[#0065eb] disabled:opacity-50 text-white shadow-lg shadow-blue-500/20 hover:bg-[#0052c1] transition-transform hover:scale-105 flex items-center gap-2">
-                {isSaving ? <RefreshCw size={18} className="animate-spin" /> : <CheckCircle size={18} />} Publish Property
-              </button>
-            )}
-          </div>
+          </section>
         </form>
       </main>
     </div>
