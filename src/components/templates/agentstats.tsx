@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 // IMPORT FIREBASE AUTH (Adjust path if your firebase config is elsewhere)
 import { auth } from '@/app/lib/firebase'; 
 import { onAuthStateChanged } from 'firebase/auth';
+import { supabase } from '@/app/lib/supabase'; // <-- ADDED SUPABASE
 
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -25,6 +26,7 @@ interface AnalyticsState {
   conversionRate: number;
   propertyCount: number;
   pipelineValue: number;
+  currency?: string; // <-- ADDED CURRENCY TRACKING
   viewsTimeline: { date: string; views: number }[];
   typeDistribution: { name: string; value: number }[];
   topProperties: any[];
@@ -45,6 +47,7 @@ export default function AgentAnalytics({ initialAgentId, isPro = false }: { init
     conversionRate: 0,
     propertyCount: 0,
     pipelineValue: 0,
+    currency: 'USD',
     viewsTimeline: [],
     typeDistribution: [],
     topProperties: [],
@@ -93,7 +96,43 @@ export default function AgentAnalytics({ initialAgentId, isPro = false }: { init
       const result = await response.json();
 
       if (result.success && result.data) {
-        setData(result.data);
+        // --- CUSTOM PIPELINE & CURRENCY CALCULATION ---
+        let computedPipeline = 0;
+        let currencyCode = 'USD';
+        
+        try {
+           // 1. Fetch only APPROVED tours directly from Supabase
+           const { data: toursData } = await supabase
+             .from('tour_requests')
+             .select('propertyId')
+             .eq('agentId', agentId)
+             .eq('status', 'approved'); // <-- ONLY COUNTS APPROVED
+             
+           // 2. Fetch properties to match exact prices and currencies
+           const propsRes = await fetch(`/api/properties?agentId=${agentId}`);
+           const propsJson = await propsRes.json();
+           const agentProps = propsJson.data || [];
+
+           if (agentProps.length > 0) {
+              currencyCode = agentProps[0].currency || 'USD'; // Defaults to agent's primary currency
+              
+              if (toursData && toursData.length > 0) {
+                 const approvedPropIds = toursData.map(t => t.propertyId).filter(Boolean);
+                 const pipelineProps = agentProps.filter((p: any) => approvedPropIds.includes(p.id) || approvedPropIds.includes(p._id));
+                 
+                 // Add up the exact prices of the approved properties
+                 computedPipeline = pipelineProps.reduce((sum: number, p: any) => sum + (Number(p.price) || 0), 0);
+              }
+           }
+        } catch (e) {
+           console.error("Pipeline calc error", e);
+        }
+
+        setData({
+          ...result.data,
+          pipelineValue: computedPipeline, // Overrides API data with exact approved sum
+          currency: currencyCode // Sets dynamic currency symbol
+        });
       } else {
         throw new Error(result.error || "Failed to retrieve analytics data from database.");
       }
