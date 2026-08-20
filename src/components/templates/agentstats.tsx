@@ -13,7 +13,7 @@ import {
   Users, Eye, Calendar, ArrowUpRight, 
   ArrowDownRight, Building2, MapPin, 
   LayoutGrid, ListFilter, DollarSign,
-  Activity, Target, RefreshCw, AlertCircle
+  Activity, Target, RefreshCw, AlertCircle, Lock
 } from 'lucide-react';
 
 const COLORS = ['#0065eb', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4'];
@@ -31,7 +31,7 @@ interface AnalyticsState {
   cityData: { name: string; value: number }[];
 }
 
-export default function AgentAnalytics({ initialAgentId }: { initialAgentId?: string }) {
+export default function AgentAnalytics({ initialAgentId, isPro = false }: { initialAgentId?: string, isPro?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -295,9 +295,23 @@ export default function AgentAnalytics({ initialAgentId }: { initialAgentId?: st
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
-        {/* Highest Performing Listings Table */}
+      {/* FREEMIUM PAYWALL WRAPPER */}
+      <div className="relative mt-8">
+        {!isPro && (
+          <div className="absolute inset-0 z-10 bg-slate-50/40 backdrop-blur-md rounded-[2.5rem] flex flex-col items-center justify-center border border-slate-200/60 shadow-sm">
+            <div className="bg-white p-4 rounded-full shadow-lg mb-5 border border-slate-100">
+               <Lock className="w-8 h-8 text-amber-500" />
+            </div>
+            <h3 className="text-2xl font-black text-slate-900 mb-2">Pro Analytics Locked</h3>
+            <p className="text-sm text-slate-600 font-medium mb-6 max-w-sm text-center">Upgrade to unlock portfolio rankings, geographic market reach, and advanced conversion insights.</p>
+            <button className="px-6 py-3 bg-slate-900 text-white text-sm font-black rounded-xl shadow-lg hover:scale-105 transition-transform">
+              Upgrade to Pro
+            </button>
+          </div>
+        )}
+        <div className={`grid grid-cols-1 lg:grid-cols-2 gap-8 ${!isPro ? 'opacity-30 pointer-events-none select-none' : ''}`}>
+          
+          {/* Highest Performing Listings Table */}
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
           <div className="flex justify-between items-center mb-8">
             <h3 className="font-black text-slate-900 text-lg flex items-center gap-2">
@@ -367,6 +381,7 @@ export default function AgentAnalytics({ initialAgentId }: { initialAgentId?: st
         </div>
 
       </div>
+      </div> {/* <-- ADDED: This closes the new freemium wrapper! */}
     </div>
   );
 }

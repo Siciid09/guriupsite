@@ -393,17 +393,36 @@ function mergeAndNormalize(p: any, liveAgentData: any) {
     createdAt = (createdAt as any).toDate().toISOString();
   }
 
-  const amenities: string[] = Array.isArray(p.amenities) ? [...p.amenities] : [];
+  // Handle both the old features flat array and the new grouped amenities object
+  let amenities: string[] = [];
+  if (Array.isArray(p.amenities)) {
+    amenities = [...p.amenities];
+  } else if (p.amenities && typeof p.amenities === 'object') {
+    amenities = [
+      ...(p.amenities.general || []), 
+      ...(p.amenities.utilities || []), 
+      ...(p.amenities.security || []),
+      ...(p.amenities.parking || []),
+      ...(p.amenities.kitchen || [])
+    ];
+  }
+
+  // Gracefully handle both old 'features' and new 'details' object
   const feats = p.features || {};
-  if ((p.isFurnished || feats.isFurnished) && !amenities.includes('Furnished')) amenities.push('Furnished');
+  const details = p.details || {};
+  
+  if ((p.isFurnished || feats.isFurnished || details.furnishing === 'Furnished') && !amenities.includes('Furnished')) amenities.push('Furnished');
   if ((p.hasPool || feats.hasPool) && !amenities.includes('Swimming Pool')) amenities.push('Swimming Pool');
-  if ((p.hasParking || feats.hasParking) && !amenities.includes('Parking')) amenities.push('Parking');
+  if ((p.hasParking || feats.hasParking || details.parkingSpaces > 0) && !amenities.includes('Parking')) amenities.push('Parking');
 
   const price = Number(p.price) || 0;
-  const discountPrice = Number(p.discountPrice || p.discount_price) || 0;
-  const hasValidDiscount = (p.hasDiscount === true || p.has_discount === true) && discountPrice > 0;
+  // Handle new nested discount object vs old flat discount
+  const discountObj = p.discount || {};
+  const discountPrice = Number(discountObj.originalPrice || p.discountPrice || p.discount_price) || 0;
+  const hasValidDiscount = (discountObj.enabled === true || p.hasDiscount === true || p.has_discount === true) && discountPrice > 0;
 
   const locationObj = typeof p.location === 'object' && p.location !== null ? p.location : {};
+  const contactObj = p.contact || {};
 
   return {
     id: p._id || p.id,
@@ -411,26 +430,38 @@ function mergeAndNormalize(p: any, liveAgentData: any) {
     title: p.title || p.name || 'Untitled Property',
     description: p.description || p.bio || p.details || '',
     price: price,
+    currency: p.currency || 'USD', // 🆕 Added
+    negotiable: p.negotiable || p.saleDetails?.negotiable || false, // 🆕 Added
     discountPrice: hasValidDiscount ? discountPrice : 0,
     hasDiscount: hasValidDiscount,
     displayPrice: hasValidDiscount ? discountPrice : price,
-    isForSale: p.isForSale ?? p.is_for_sale ?? true,
+    isForSale: p.isForSale ?? p.is_for_sale ?? (p.transactionType ? p.transactionType === 'Sale' : true),
     status: p.status || 'available',
     images: Array.isArray(p.images) && p.images.length > 0 ? p.images : ['https://placehold.co/600x400?text=No+Image'],
+    videoUrl: p.videoUrl || '', // 🆕 Added
     location: {
       city: locationObj.city || p.city || 'Unknown City',
       area: locationObj.area || p.area || 'Unknown Area',
       gpsCoordinates: locationObj.gpsCoordinates || locationObj.coordinates || null,
+      visibility: locationObj.visibility || 'Exact', // 🆕 Added
     },
-    bedrooms: Number(p.bedrooms || feats.bedrooms || 0),
-    bathrooms: Number(p.bathrooms || feats.bathrooms || 0),
-    area: Number(p.area || p.size || feats.size || 0),
-    type: p.type || p.propertyType || 'House',
+    // Map from either new details obj or old features obj
+    bedrooms: Number(details.bedrooms || p.bedrooms || feats.bedrooms || 0),
+    bathrooms: Number(details.bathrooms || p.bathrooms || feats.bathrooms || 0),
+    area: Number(details.size || p.area || p.size || feats.size || 0),
+    type: p.category || p.type || p.propertyType || 'House', // Map new category field
+    
+    // Pass the new specific details safely 
+    details: p.details || {},
+    rentalDetails: p.rentalDetails || {},
+    saleDetails: p.saleDetails || {},
+    highlights: p.highlights || [],
+    
     amenities: amenities,
     agentId: p.agentId || p.agent_id || '',
-    agentName: liveAgentData.agencyName || liveAgentData.businessName || liveAgentData.ownerName || liveAgentData.name || p.agentName || 'GuriUp Agent',
+    agentName: contactObj.person || liveAgentData.agencyName || liveAgentData.businessName || liveAgentData.ownerName || liveAgentData.name || p.agentName || 'GuriUp Agent',
     agentPhoto: liveAgentData.profileImageUrl || liveAgentData.logoUrl || p.agentPhoto || null,
-    agentPhone: finalVerifiedStatus ? (p.contactPhone || liveAgentData.whatsappNumber || liveAgentData.phone || p.agentPhone) : null,
+    agentPhone: finalVerifiedStatus ? (contactObj.phone || contactObj.whatsapp || p.contactPhone || liveAgentData.whatsappNumber || liveAgentData.phone || p.agentPhone) : null, // Prefer new contact object
     agentVerified: finalVerifiedStatus,
     agentPlanTier: livePlan,
     featured: p.featured || p.isFeatured || false,
