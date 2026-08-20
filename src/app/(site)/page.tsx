@@ -129,11 +129,15 @@ async function getHomePageData() {
 
     // 1. Fetch properties and hotels concurrently
     const [rawPropsRes, rawHotelsRes] = await Promise.all([
-      supabaseAdmin.from('property').select('*').in('status', ['available', 'active', 'rented_out']),
+      supabaseAdmin.from('property').select('*').order('created_at', { ascending: false }),
       supabaseAdmin.from('hotels').select('*').limit(50)
     ]);
 
-    const propertiesList = (rawPropsRes.data || []).filter(p => p.isArchived !== true && p.is_archived !== true);
+    const propertiesList = (rawPropsRes.data || []).filter(p => {
+      const isArchived = p.isArchived === true || p.is_archived === true;
+      const status = String(p.status || 'available').toLowerCase();
+      return !isArchived && ['available', 'active', 'rented_out', 'rented'].includes(status);
+    });
     const hotelsList = rawHotelsRes.data || [];
 
     // 2. Fetch Agents for properties
@@ -160,7 +164,7 @@ async function getHomePageData() {
       featuredProperties = allNormalizedProps.slice(0, 6);
     }
     
-    latestProperties = allNormalizedProps.slice(0, 8);
+    latestProperties = allNormalizedProps.slice(0, 12);
 
     // 4. Normalize Hotels
     const normalizedHotels = hotelsList.map(h => {
