@@ -1,13 +1,12 @@
 import { Metadata } from 'next';
 import { cache } from 'react';
-import { getPropertyBySlug } from '@/app/lib/data'; // Utilize established Supabase data fetcher
+import { getPropertyBySlug } from '@/app/lib/data'; 
 import PropertyDetailView, { Property, Agent } from '@/components/templates/PropertyClientView';
+import { supabaseAdmin } from '@/app/lib/supabase';
 
 type Props = {
   params: Promise<{ slug: string }>
 };
-
-import { supabaseAdmin } from '@/app/lib/supabase'; // Safe DB fallback
 
 // BULLETPROOF DATABASE FINDER FOR PROPERTIES
 async function getPropertySafely(identifier: string) {
@@ -29,28 +28,39 @@ async function getPropertySafely(identifier: string) {
   return null;
 }
 
-// 1. FETCH DATA HELPER (Runs on Server) - CACHED TO PREVENT DOUBLE BILLING
+// 1. FETCH DATA HELPER (Runs on Server) - CACHED
 const getPropertyData = cache(async (slug: string) => {
   try {
     const rawProperty = await getPropertySafely(slug) as any;
     
     if (!rawProperty) return null;
 
-    // Satisfy the strict Agent interface by adding uid and email, and cast via unknown
+    // FIX: Normalize nested objects so the Client Component NEVER receives nulls
+    const safeProperty = {
+      ...rawProperty,
+      details: rawProperty.details || {},
+      features: rawProperty.features || {},
+      location: rawProperty.location || {},
+      rentalDetails: rawProperty.rentalDetails || {},
+      saleDetails: rawProperty.saleDetails || {},
+      contact: rawProperty.contact || {},
+      amenities: Array.isArray(rawProperty.amenities) ? rawProperty.amenities : [],
+    };
+
     const agent = {
-        uid: rawProperty.agentId || 'unknown-agent-id',
-        email: rawProperty.agentEmail || 'contact@guriup.com',
-        name: rawProperty.agentName || 'GuriUp Agent',
-        photoUrl: rawProperty.agentPhoto || rawProperty.agentImage || null,
-        phone: rawProperty.agentPhone || null,
-        planTier: rawProperty.planTier || rawProperty.agentPlanTier || 'free',
-        isVerified: rawProperty.agentVerified || false,
+        uid: safeProperty.agentId || 'unknown-agent-id',
+        email: safeProperty.agentEmail || 'contact@guriup.com',
+        name: safeProperty.agentName || 'GuriUp Agent',
+        photoUrl: safeProperty.agentPhoto || safeProperty.agentImage || null,
+        phone: safeProperty.agentPhone || null,
+        planTier: safeProperty.planTier || safeProperty.agentPlanTier || 'free',
+        isVerified: safeProperty.agentVerified || false,
     } as unknown as Agent;
     
     return { 
-      property: rawProperty as Property,
+      property: safeProperty as Property,
       agent: agent,
-      rawProperty: rawProperty // Expose raw data for SEO fields not in the strict Property type
+      rawProperty: safeProperty 
     };
   } catch (error) {
     console.error("Error fetching property data from Supabase:", error);
@@ -69,12 +79,26 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const { property, rawProperty } = data;
   
-  // Safely access fields that might only exist on the raw data object
-  const price = rawProperty.displayPrice?.toLocaleString() || property.price?.toLocaleString() || 'Contact for Price';
-  const bedrooms = rawProperty.bedrooms || '?';
-  const bathrooms = rawProperty.bathrooms || '?';
+  // FIX: Safe bedroom/bathroom extraction checking all possible paths
+  const bedrooms = rawProperty.bedrooms || rawProperty.details?.bedrooms || rawProperty.features?.bedrooms || '?';
+  const bathrooms = rawProperty.bathrooms || rawProperty.details?.bathrooms || rawProperty.features?.bathrooms || '?';
   
-  const title = `${property.title} | $${price} | GuriUp`;
+  // FIX: Dynamic Currency Formatting for Meta Title
+  const currencyCode = property.currency || 'USD';
+  const priceValue = rawProperty.displayPrice || property.price || 0;
+  
+  let formattedPrice = `${currencyCode} ${priceValue.toLocaleString()}`;
+  try {
+    formattedPrice = new Intl.NumberFormat('en-US', { 
+      style: 'currency', 
+      currency: currencyCode, 
+      maximumFractionDigits: 0 
+    }).format(priceValue);
+  } catch (e) {
+    // Fallback if currency code is unusual (e.g., SLSH)
+  }
+  
+  const title = `${property.title} | ${formattedPrice} | GuriUp`;
   const description = `${property.type || 'Property'} for ${property.isForSale ? 'Sale' : 'Rent'} in ${property.location?.city || 'Somaliland'}. ${bedrooms} Bed, ${bathrooms} Bath. ${property.description ? property.description.substring(0, 100) : ''}...`;
   const image = property.images?.[0] || '';
 
@@ -97,7 +121,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       images: image ? [image] : [],
     },
     alternates: {
-      canonical: `https://guriup.com/properties/${slug}`, // SEO: Prevents duplicate content issues
+      canonical: `https://guriup.com/properties/${slug}`, 
     }
   };
 }
@@ -118,7 +142,7 @@ export default async function PropertyPage({ params }: Props) {
 
   const { property, agent, rawProperty } = data;
 
-  // SEO: Real Estate JSON-LD Schema for Google Search Rich Snippets
+  // FIX: Dynamic currency injected into Google Schema 
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'RealEstateListing',
@@ -128,8 +152,8 @@ export default async function PropertyPage({ params }: Props) {
     url: `https://guriup.com/properties/${slug}`,
     offers: {
       '@type': 'Offer',
-      price: rawProperty.displayPrice || property.price,
-      priceCurrency: 'USD',
+      price: rawProperty.displayPrice || property.price || 0,
+      priceCurrency: property.currency || 'USD',
       url: `https://guriup.com/properties/${slug}`,
       seller: {
         '@type': 'RealEstateAgent',
@@ -139,7 +163,6 @@ export default async function PropertyPage({ params }: Props) {
     }
   };
 
-  // Pass CLEAN, NORMALIZED data to Client Component
   return (
     <>
       <script

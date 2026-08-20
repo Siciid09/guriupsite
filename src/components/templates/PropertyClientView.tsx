@@ -20,20 +20,17 @@ export interface Property {
   slug?: string;
   title: string;
   price: number;
+  currency?: string; 
   videoUrl?: string; 
   description: string;
   images: string[];
   agentId: string;
   location: { city: string; area: string; address?: string; lat?: number; lng?: number; gpsCoordinates?: string };
-  features: { 
-    bedrooms?: number; 
-    bathrooms?: number; 
-    size?: number; 
-    isFurnished?: boolean; 
-    hasPool?: boolean; 
-    hasGate?: boolean;
-    [key: string]: any; 
-  };
+  features?: any;
+  details?: any; 
+  bedrooms?: number;
+  bathrooms?: number;
+  area?: number;
   type: string;
   isForSale: boolean;
   status: string;
@@ -267,7 +264,16 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
   const handleRestrictedAction = (action: string, callback: () => void) => { if (isAgentPro(agent)) { callback(); } else { setRestrictedFeature(action); } };
 
   const images = property.images?.length ? property.images : ['https://placehold.co/800x600?text=No+Image'];
-  const formattedPrice = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(property.price);
+  const formattedPrice = new Intl.NumberFormat('en-US', { 
+  style: 'currency', 
+  currency: property.currency || 'USD', 
+  maximumFractionDigits: 0 
+}).format(property.price || 0);
+
+// Safely extract beds/baths/size so it never shows 0 if the data exists elsewhere
+const displayBeds = property.details?.bedrooms || property.features?.bedrooms || property.bedrooms || 0;
+const displayBaths = property.details?.bathrooms || property.features?.bathrooms || property.bathrooms || 0;
+const displaySize = property.details?.size || property.features?.size || property.area || 0;
   const isVerified = isAgentPro(agent);
 
   return (
@@ -377,7 +383,7 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
                 <Link href={`/agents/${agent?.slug || agent?.uid || property.agentId}`} className="flex items-center gap-4 mb-6 group cursor-pointer hover:bg-slate-50 p-3 -ml-3 rounded-2xl transition-all">
                    <div className="w-16 h-16 rounded-2xl bg-slate-50 relative overflow-hidden border border-slate-200 shrink-0 shadow-sm group-hover:scale-105 transition-transform">
                       {agent?.photoUrl ? <Image src={agent.photoUrl} alt={agent.name} fill className="object-cover" /> : <div className="w-full h-full flex items-center justify-center text-slate-300 font-bold text-xl">{agent?.name?.[0]}</div>}
-                      {isVerified && <div className="absolute bottom-0 right-0 w-6 h-6 bg-[#0065eb] text-white flex items-center justify-center rounded-tl-xl"><CheckCircle size={14} fill="white" className="text-[#0065eb]"/></div>}
+                      {isVerified && <div className="absolute bottom-0 right-0 w-6 h-6 bg-[#0065eb] text-white flex items-center justify-center rounded-tl-xl"><CheckCircle size={14} className="text-[#0065eb] fill-white"/></div>}
                    </div>
                    <div className="min-w-0">
                       <h3 className="font-black text-slate-900 leading-tight text-sm truncate group-hover:text-[#0065eb] transition-colors">{agent?.name || 'Loading...'}</h3>
@@ -404,9 +410,9 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
            <div className="bg-white rounded-[2.5rem] p-8 md:p-10 border border-slate-100 shadow-sm flex flex-col h-full">
               <h3 className="text-2xl font-black text-slate-900 mb-8 tracking-tight">Property Details</h3>
               <div className="grid grid-cols-3 gap-4 mb-10">
-                  <div className="p-5 bg-slate-50 rounded-[1.5rem] border border-slate-100 text-center group"><Home size={24} className="mx-auto text-slate-300 group-hover:text-[#0065eb] mb-3 transition-colors"/><span className="block font-black text-slate-900 text-2xl mb-1">{property.features.bedrooms || 0}</span><span className="text-[10px] uppercase text-slate-400 font-black tracking-widest">Beds</span></div>
-                  <div className="p-5 bg-slate-50 rounded-[1.5rem] border border-slate-100 text-center group"><Waves size={24} className="mx-auto text-slate-300 group-hover:text-[#0065eb] mb-3 transition-colors"/><span className="block font-black text-slate-900 text-2xl mb-1">{property.features.bathrooms || 0}</span><span className="text-[10px] uppercase text-slate-400 font-black tracking-widest">Baths</span></div>
-                  <div className="p-5 bg-slate-50 rounded-[1.5rem] border border-slate-100 text-center group"><Ruler size={24} className="mx-auto text-slate-300 group-hover:text-[#0065eb] mb-3 transition-colors"/><span className="block font-black text-slate-900 text-2xl mb-1">{property.features.size || 0}</span><span className="text-[10px] uppercase text-slate-400 font-black tracking-widest">M²</span></div>
+                  <div className="p-5 bg-slate-50 rounded-[1.5rem] border border-slate-100 text-center group"><Home size={24} className="mx-auto text-slate-300 group-hover:text-[#0065eb] mb-3 transition-colors"/><span className="block font-black text-slate-900 text-2xl mb-1">{displayBeds}</span><span className="text-[10px] uppercase text-slate-400 font-black tracking-widest">Beds</span></div>
+                  <div className="p-5 bg-slate-50 rounded-[1.5rem] border border-slate-100 text-center group"><Waves size={24} className="mx-auto text-slate-300 group-hover:text-[#0065eb] mb-3 transition-colors"/><span className="block font-black text-slate-900 text-2xl mb-1">{displayBaths}</span><span className="text-[10px] uppercase text-slate-400 font-black tracking-widest">Baths</span></div>
+                  <div className="p-5 bg-slate-50 rounded-[1.5rem] border border-slate-100 text-center group"><Ruler size={24} className="mx-auto text-slate-300 group-hover:text-[#0065eb] mb-3 transition-colors"/><span className="block font-black text-slate-900 text-2xl mb-1">{displaySize}</span><span className="text-[10px] uppercase text-slate-400 font-black tracking-widest">M²</span></div>
               </div>
               <div className="mb-8"><h4 className="font-black text-xs text-slate-400 uppercase tracking-widest mb-4">About this home</h4><p className="text-slate-600 text-sm leading-8 whitespace-pre-line font-medium">{property.description}</p></div>
               <div className="mt-auto"><h4 className="font-black text-xs text-slate-400 uppercase tracking-widest mb-4">Amenities</h4><div className="flex flex-wrap gap-2.5">{Object.entries(property.features).filter(([key, val]) => val === true && !['bedrooms','bathrooms','size'].includes(key)).map(([key], i) => (<span key={i} className="px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2"><CheckCircle size={14} className="text-[#0065eb]"/> {key.replace(/([A-Z])/g, ' $1').trim()}</span>))}<span className="px-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-700 flex items-center gap-2"><Wifi size={14} className="text-[#0065eb]"/> Internet Ready</span></div></div>
@@ -485,7 +491,7 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
                       </div>
                       <div className="flex-1 py-1 flex flex-col justify-between min-w-0">
                          <div><h5 className="font-bold text-slate-900 text-sm line-clamp-1 group-hover:text-[#0065eb] transition-colors">{p.title}</h5><p className="text-[10px] text-slate-500 font-bold uppercase mt-1 flex items-center gap-1"><MapPin size={10} /> {p.location.area}</p></div>
-                         <div className="flex justify-between items-end"><span className="font-black text-slate-900 text-sm">${p.price}</span></div>
+                         <div className="flex justify-between items-end"><span className="font-black text-slate-900 text-sm">{p.currency || 'USD'} {p.price?.toLocaleString()}</span></div>
                       </div>
                    </Link>
                 ))}

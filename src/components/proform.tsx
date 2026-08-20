@@ -51,7 +51,7 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
     description: '', highlights: [] as string[],
     amenities: { general: [] as string[], utilities: [] as string[], security: [] as string[], parking: [] as string[], kitchen: [] as string[] },
     discount: { enabled: false, originalPrice: 0, percentage: 0 },
-    contact: { person: '', phone: '', whatsapp: '', email: '', preferredMethod: 'Both' },
+    
     documents: [] as any[],
     featured: false,
     boosted: false,
@@ -99,7 +99,7 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
           tenantPhone: existingProperty.tenantPhone || '',
         },
         saleDetails: existingProperty.saleDetails || prev.saleDetails,
-        contact: existingProperty.contact || prev.contact,
+        
         discount: {
           enabled: existingProperty.hasDiscount || false,
           originalPrice: existingProperty.discountPrice || 0,
@@ -245,7 +245,7 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
     { id: 3, label: 'Details', icon: Home },
     { id: 4, label: formData.transactionType === 'Rent' ? 'Rental Info' : 'Sale Info', icon: Tags },
     { id: 5, label: 'Media & Docs', icon: ImageIcon },
-    { id: 6, label: 'Promo & Contact', icon: Phone },
+    { id: 6, label: 'Promotions', icon: Phone },
     { id: 7, label: 'Review & Publish', icon: CheckCircle },
   ];
 
@@ -268,7 +268,7 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
       </div>
 
       {/* Sticky Navigation Bar */}
-      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm py-4 px-2 flex overflow-x-auto gap-2 no-scrollbar">
+      <nav className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm py-4 px-2 flex overflow-x-auto gap-2 no-scrollbar">
         {STEPS.map((step) => {
           const Icon = step.icon;
           const isActive = activeStep === step.id;
@@ -768,9 +768,9 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
 
           {/* STEP 6: Promo & Contact */}
           <section id="step-6" ref={(el) => { sectionRefs.current[5] = el; }} className="bg-white rounded-3xl shadow-sm border border-slate-100 p-8 scroll-mt-28">
-            <h2 className="text-2xl font-black text-slate-900 mb-6 flex items-center gap-3">
-              <Phone className="text-[#0065eb]" /> 6. Promo & Contact
-            </h2>
+         <h2 className="text-2xl font-black text-slate-900 mb-6 flex items-center gap-3">
+  <Phone className="text-[#0065eb]" /> 6. Promotions
+</h2>
             <div className="space-y-8">
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Description *</label>
@@ -858,35 +858,7 @@ export default function CompletePropertyForm({ currentUserUid, existingProperty,
                 </div>
               </div>
 
-              <div className="pt-6 border-t border-slate-100">
-                <h3 className="font-bold text-slate-900 mb-4">Contact Information</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Contact Person</label>
-                    <input type="text" value={formData.contact.person} onChange={e => setFormData({...formData, contact: {...formData.contact, person: e.target.value}})} className="w-full bg-slate-50 rounded-xl p-4 text-sm font-bold outline-none" placeholder="Agent or Owner Name" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Phone Number</label>
-                    <input type="tel" value={formData.contact.phone} onChange={e => setFormData({...formData, contact: {...formData.contact, phone: e.target.value}})} className="w-full bg-slate-50 rounded-xl p-4 text-sm font-bold outline-none" placeholder="+252..." />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">WhatsApp Number</label>
-                    <input type="tel" value={formData.contact.whatsapp} onChange={e => setFormData({...formData, contact: {...formData.contact, whatsapp: e.target.value}})} className="w-full bg-slate-50 rounded-xl p-4 text-sm font-bold outline-none" placeholder="+252..." />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Email Address</label>
-                    <input type="email" value={formData.contact.email} onChange={e => setFormData({...formData, contact: {...formData.contact, email: e.target.value}})} className="w-full bg-slate-50 rounded-xl p-4 text-sm font-bold outline-none" placeholder="agent@example.com" />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Preferred Contact Method</label>
-                    <select value={formData.contact.preferredMethod} onChange={e => setFormData({...formData, contact: {...formData.contact, preferredMethod: e.target.value}})} className="w-full bg-slate-50 rounded-xl p-4 text-sm font-bold outline-none cursor-pointer">
-                      <option value="Both">Phone & WhatsApp</option>
-                      <option value="Phone">Phone Only</option>
-                      <option value="WhatsApp">WhatsApp Only</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
+              
             </div>
           </section>
 

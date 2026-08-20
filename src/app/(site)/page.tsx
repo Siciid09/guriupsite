@@ -91,6 +91,7 @@ function mergeAndNormalize(p: any, liveAgentData: any) {
     title: p.title || p.name || 'Untitled Property',
     description: p.description || p.bio || p.details || '',
     price: price,
+    currency: p.currency || '$',
     discountPrice: hasValidDiscount ? discountPrice : 0,
     hasDiscount: hasValidDiscount,
     displayPrice: hasValidDiscount ? discountPrice : price,
