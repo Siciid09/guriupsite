@@ -83,6 +83,7 @@ interface Property {
   slug?: string;
   title: string;
   price: number;
+  currency?: string; // <-- Added currency field
   images: string[];
   location: LocationData | string;
   bedrooms?: number;
@@ -102,6 +103,7 @@ interface Hotel {
   slug?: string; // Added slug
   name: string;
   pricePerNight: number;
+  currency?: string; // <-- Added currency field
   images: string[];
   location: LocationData | string;
   rating: number;
@@ -236,7 +238,18 @@ const HomeUI = ({
     document.querySelectorAll('.reveal').forEach((el) => observer.observe(el));
   }, []);
 
-  const formatPrice = (price: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(price);
+  const formatPrice = (price: number, currencyCode: string = 'USD') => {
+    try {
+      return new Intl.NumberFormat('en-US', { 
+        style: 'currency', 
+        currency: currencyCode, 
+        maximumFractionDigits: 0 
+      }).format(price);
+    } catch (error) {
+      // Fallback for unrecognized currency codes
+      return `${currencyCode} ${price.toLocaleString()}`; 
+    }
+  };
 
 const getLocationString = (location: LocationData | string) => {
     if (typeof location === 'string') return location;
@@ -719,7 +732,7 @@ const getLocationString = (location: LocationData | string) => {
                 <h4 className="font-bold text-xs text-slate-900 truncate mb-1">{property.title}</h4>
                 <p className="text-xs text-slate-400 mb-2 truncate">{getLocationString(property.location)}</p>
                 <div className="flex items-center justify-between">
-                    <p className="text-[#0065eb] font-black text-xs">{formatPrice(property.price)}</p>
+                    <p className="text-[#0065eb] font-black text-xs">{formatPrice(property.price, property.currency || 'USD')}</p>
                     <div className="w-6 h-6 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-[#0065eb] group-hover:text-white transition-colors">
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
                     </div>
@@ -1018,7 +1031,7 @@ const PropertyCard = ({ property, favorites, toggleFavorite, handleShare, format
                 ) : (
                     <div className="unverified-card"><svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg><span>Unverified</span></div>
                 )}
-                <div className="price-badge">{formatPrice(finalPrice)} {!property.isForSale && <span className="text-sm font-normal text-gray-500">/mo</span>}</div>
+                <div className="price-badge">{formatPrice(finalPrice, property.currency || 'USD')} {!property.isForSale && <span className="text-sm font-normal text-gray-500">/mo</span>}</div>
                 <div className="card-actions">
                     <div className={`action-btn ${isFavorite ? 'active' : ''}`} onClick={(e) => toggleFavorite(e, pId)}>
                         <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
@@ -1139,7 +1152,7 @@ const HotelCard = ({ hotel, favorites, toggleFavorite, handleShare, formatPrice,
                 <div className="mt-5 flex items-center justify-between pointer-events-auto">
                     <div>
                         <span className="text-gray-400 text-[9px] font-bold uppercase block">From</span>
-                        <div className="text-slate-900 font-black text-lg">{formatPrice(finalPrice)}<span className="text-xs font-normal text-gray-400">/night</span></div>
+                        <div className="text-slate-900 font-black text-lg">{formatPrice(finalPrice, hotel.currency || 'USD')}<span className="text-xs font-normal text-gray-400">/night</span></div>
                     </div>
                     <Link href={hotelPath} className="bg-[#0065eb] text-white px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider hover:bg-black transition-colors shadow-lg shadow-blue-500/20 relative z-10">Book Now</Link>
                 </div>

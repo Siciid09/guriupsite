@@ -78,6 +78,7 @@ interface Property {
   title: string;
   description?: string;
   price: number;
+  currency?: string; // <-- Added currency field
   discountPrice?: number;
   hasDiscount?: boolean;
   isForSale: boolean; 
@@ -279,8 +280,8 @@ export default function PropertiesUI({
             <div className="p-8 flex-1 overflow-y-auto custom-scrollbar space-y-8">
                {/* PRICE */}
                <div>
-                  <h3 className="font-bold text-xs uppercase text-slate-400 mb-4">Price Range</h3>
-                  <div className="flex justify-between text-lg font-black mb-2 text-blue-600"><span>${(priceRange[0]/1000).toFixed(0)}k</span><span>${(priceRange[1]/1000).toFixed(0)}k+</span></div>
+                  <h3 className="font-bold text-xs uppercase text-slate-400 mb-4">Price Range (Any Currency)</h3>
+                  <div className="flex justify-between text-lg font-black mb-2 text-blue-600"><span>{(priceRange[0]/1000).toFixed(0)}k</span><span>{(priceRange[1]/1000).toFixed(0)}k+</span></div>
                   <input type="range" min="0" max="1000000" step="10000" value={priceRange[1]} onChange={(e) => setPriceRange([priceRange[0], parseInt(e.target.value)])} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
                </div>
 
@@ -591,7 +592,18 @@ export default function PropertiesUI({
 //  COMPACT, MODERN GLASSMORPHISM CARD COMPONENT WITH CAROUSEL
 // -------------------------------------------------------------
 function PropertyCard({ property, isFeatured = false, compact = false }: { property: Property, isFeatured?: boolean, compact?: boolean }) {
-  const formatPrice = (price: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(price);
+  const formatPrice = (price: number, currencyCode: string = 'USD') => {
+    try {
+      return new Intl.NumberFormat('en-US', { 
+        style: 'currency', 
+        currency: currencyCode, 
+        maximumFractionDigits: 0 
+      }).format(price);
+    } catch (error) {
+      // Fallback just in case a strange currency code gets saved
+      return `${currencyCode} ${price.toLocaleString()}`; 
+    }
+  };
   const isVerified = property.agentVerified || property.agentPlanTier === 'pro' || property.agentPlanTier === 'premium';
   const displayPrice = (property.hasDiscount && (property.discountPrice || 0) > 0) ? property.discountPrice : property.price;
 
@@ -625,7 +637,7 @@ function PropertyCard({ property, isFeatured = false, compact = false }: { prope
           {/* PRICE */}
           <div className="absolute bottom-3 left-4 text-white z-10 pointer-events-none">
              <div className="text-xl font-black drop-shadow-md flex items-end gap-1">
-               {formatPrice(displayPrice || 0)} 
+               {formatPrice(displayPrice || 0, property.currency || 'USD')} 
                {!property.isForSale && <span className="text-[10px] font-bold text-white/80 mb-0.5">/mo</span>}
              </div>
           </div>
