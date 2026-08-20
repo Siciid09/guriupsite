@@ -148,14 +148,6 @@ function DashboardContent() {
   }, [router]);
 
   const updateTab = (tab: TabType) => {
-    // Prevent free users from accessing core management tools
-    if (!isPro && ['properties', 'tenants', 'bookings'].includes(tab)) {
-      alert("This feature is locked for Free accounts. Please upgrade to a Pro plan in Settings.");
-      setActiveTab('settings');
-      router.push(`?tab=settings`, { scroll: false });
-      return;
-    }
-    
     setActiveTab(tab);
     router.push(`?tab=${tab}`, { scroll: false });
   };
@@ -215,13 +207,13 @@ function DashboardContent() {
         <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto custom-scrollbar">
           <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 mt-2">Core Hub</p>
           <SidebarItem icon={LayoutDashboard} label="Dashboard" active={activeTab === 'overview'} onClick={() => updateTab('overview')} />
-          <SidebarItem icon={Building} label="Properties" active={activeTab === 'properties'} onClick={() => updateTab('properties')} count={properties.length} isProLocked={!isPro} />
+          <SidebarItem icon={Building} label="Properties" active={activeTab === 'properties'} onClick={() => updateTab('properties')} count={properties.length} />
           <SidebarItem icon={UserIcon} label="Tenants" active={activeTab === 'tenants'} onClick={() => updateTab('tenants')} isProLocked={!isPro} />
-          <SidebarItem icon={CalendarIcon} label="Tour Requests" active={activeTab === 'bookings'} onClick={() => updateTab('bookings')} count={tours.filter(t=>t.status==='pending').length} isProLocked={!isPro} />
+          <SidebarItem icon={CalendarIcon} label="Tour Requests" active={activeTab === 'bookings'} onClick={() => updateTab('bookings')} count={tours.filter(t=>t.status==='pending').length} />
           <SidebarItem icon={MessageSquare} label="Messages" active={activeTab === 'inbox'} onClick={() => updateTab('inbox')} count={chats.reduce((acc, c) => acc + c.unreadCount, 0)} />
           
           <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 mt-6">Intelligence</p>
-          <SidebarItem icon={TrendingUp} label="Analytics" active={activeTab === 'analytics'} onClick={() => updateTab('analytics')} />
+          <SidebarItem icon={TrendingUp} label="Analytics" active={activeTab === 'analytics'} onClick={() => updateTab('analytics')} isProLocked={!isPro} />
           
           <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 mt-6">Account</p>
           <SidebarItem icon={Settings} label="Settings" active={activeTab === 'settings'} onClick={() => updateTab('settings')} />
@@ -449,7 +441,7 @@ function DashboardContent() {
           {/* --- TAB: ANALYTICS --- */}
           {activeTab === 'analytics' && (
              <motion.div key="analytics" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
-                <AgentAnalytics isPro={isPro} />
+                <AgentAnalytics />
              </motion.div>
           )}
 
