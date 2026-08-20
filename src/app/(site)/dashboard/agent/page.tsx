@@ -22,6 +22,7 @@ import {
 import AgentAnalytics from './../../../../components/templates/agentstats'; 
 import AgentPropertyManagement from '../../../../components/AgentPropertyManagement';
 import TenantManagement from '../../../../components/TenantManagement';
+import { supabase } from '@/app/lib/supabase';
 
 // ============================================================================
 // TYPES
@@ -121,11 +122,16 @@ function DashboardContent() {
          setProperties(data || []);
       }
 
-      // 3. Fetch Tour Requests (Bookings) from Supabase
-      const tourRes = await fetch('/api/bookings?agentId=' + user.uid, { headers: { Authorization: `Bearer ${idToken}` } });
-      if (tourRes.ok) {
-         const { data } = await tourRes.json();
-         setTours(data || []);
+      // 3. Fetch Tour Requests DIRECTLY from Supabase 'tour_requests' table
+      const { data: tourData } = await supabase
+        .from('tour_requests')
+        .select('*')
+        .eq('agentId', user.uid)
+        .order('timestamp', { ascending: false });
+        
+      if (tourData) {
+         // Map _id to id so the UI renders it correctly
+         setTours(tourData.map(t => ({ ...t, id: t._id || t.id })));
       }
 
       const qChats = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid), orderBy('updatedAt', 'desc'));
@@ -159,24 +165,16 @@ function DashboardContent() {
 
   const updateTourStatus = async (id: string, status: string) => {
     try {
-      const currentUser = auth.currentUser;
-      if (!currentUser) return;
-      const idToken = await currentUser.getIdToken();
-      
-      const res = await fetch('/api/bookings', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`
-        },
-        // We pass the agentId as the hotelId placeholder to satisfy the unified bookings API gatekeeper
-        body: JSON.stringify({ id, hotelId: profile?.uid, status }) 
-      });
-      
-      if (res.ok) {
+      // Update directly in Supabase using the _id column
+      const { error } = await supabase
+        .from('tour_requests')
+        .update({ status })
+        .eq('_id', id);
+        
+      if (!error) {
         setTours(prev => prev.map(t => t.id === id ? { ...t, status: status as any } : t));
       } else {
-         throw new Error("Update failed");
+         throw error;
       }
     } catch (e) {
       console.error(e);
