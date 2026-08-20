@@ -176,10 +176,11 @@ export default function CompletePropertyManagement({
 
   const openForm = (prop?: Property) => {
     if (prop && !isPro) {
-      const lastEdit = new Date(prop.updatedAt || prop.createdAt || Date.now());
-      const diffHours = (new Date().getTime() - lastEdit.getTime()) / (1000 * 60 * 60);
-      if (diffHours < 24) {
-        alert(`Editing Locked: Upgrade to Pro for unlimited edits.`);
+      const createdTime = new Date(prop.createdAt || Date.now());
+      const diffHours = (new Date().getTime() - createdTime.getTime()) / (1000 * 60 * 60);
+      
+      if (diffHours > 4) {
+        alert(`Edit Window Expired: Free users can only edit listings within the first 4 hours of publishing. Upgrade to Pro for unlimited edits.`);
         return;
       }
     }
