@@ -95,7 +95,7 @@ export async function GET(request: Request) {
 
       const pAgentId = pData.agentId || pData.agent_id;
       const isArchived = pData?.isArchived === true || pData?.is_archived === true;
-      const status = pData?.status || 'available';
+      const status = pData?.status?.toLowerCase() || 'available';
       const isPublic = !isArchived && ['available', 'rented_out', 'active'].includes(status);
       
       if (!isPublic && uid !== pAgentId) {
@@ -131,7 +131,7 @@ export async function GET(request: Request) {
     if (requestAgentId) {
       query = query.eq('agentId', requestAgentId);
     } else {
-      query = query.in('status', ['available', 'active', 'rented_out']);
+      query = query.in('status', ['available', 'active', 'rented_out']); // DB statuses are now forced lowercase
       if (isFeatured) {
         query = query.or('featured.eq.true,isFeatured.eq.true');
       }
@@ -204,7 +204,6 @@ export async function GET(request: Request) {
         }
       }
 
-      // Deep Location Sync (matches Hargeisa searches correctly whether it's in City or Area)
       if (city && city !== 'All Cities' && city !== 'All') {
         const cLow = city.toLowerCase();
         const propCity = p.location?.city?.toLowerCase() || '';
@@ -247,7 +246,6 @@ export async function POST(request: Request) {
     if (!uid) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
 
     const role = await getUserRoleStrict(uid);
-    
     if (role !== 'admin' && role !== 'sadmin' && role !== 'reagent') {
       return NextResponse.json({ error: 'Forbidden. Only Admins and Agents can post properties.' }, { status: 403 });
     }
@@ -255,7 +253,7 @@ export async function POST(request: Request) {
     const propertyData = await request.json();
     propertyData.agentId = uid;
 
-    // 👈 FIX: Destructure the camelCase fields causing the crash
+    // DESTRUCTURE: Pull out fields that Postgres expects in strict lowercase or nested formats
     const { 
       transactionType, 
       rentalDetails, 
@@ -265,12 +263,27 @@ export async function POST(request: Request) {
       ...safeDbData 
     } = propertyData;
 
+    // FIX 1: Prevent "Available" vs "available" mismatch hiding properties
+    if (safeDbData.status) {
+      safeDbData.status = safeDbData.status.toLowerCase();
+    }
+    
+    // FIX 2: Ensure the 'type' column is always populated for search filters
+    if (safeDbData.category) {
+      safeDbData.type = safeDbData.category; 
+    }
+    
+    // FIX 3: Safety net to ensure isForSale is always strictly tied to transactionType
+    if (transactionType !== undefined) {
+      safeDbData.isForSale = transactionType === 'Sale';
+    }
+
     const { data, error } = await supabaseAdmin
       .from('property')
       .insert([
         {
           ...safeDbData,
-          // 👈 FIX: Map them explicitly to the lowercase column names the database actually expects
+          // MAP TO EXACT LOWERCASE COLUMN NAMES from your database schema
           transactiontype: transactionType,
           rentaldetails: rentalDetails,
           saledetails: saleDetails,
@@ -305,7 +318,7 @@ export async function PATCH(request: Request) {
 
     const body = await request.json();
     
-    // 👈 FIX: Destructure the ID and the camelCase fields causing the crash
+    // DESTRUCTURE: Extract ID and fields requiring exact lowercase mapping
     const { 
       id, 
       _id, 
@@ -340,11 +353,26 @@ export async function PATCH(request: Request) {
        return NextResponse.json({ error: 'Forbidden. You do not own this property.' }, { status: 403 });
     }
 
+    // FIX 1: Enforce lowercase status on update
+    if (updateData.status) {
+      updateData.status = updateData.status.toLowerCase();
+    }
+    
+    // FIX 2: Keep type and category synchronized
+    if (updateData.category) {
+      updateData.type = updateData.category;
+    }
+
+    // FIX 3: Keep isForSale synchronized
+    if (transactionType !== undefined) {
+      updateData.isForSale = transactionType === 'Sale';
+    }
+
     const { data, error } = await supabaseAdmin
       .from('property')
       .update({ 
         ...updateData, 
-        // 👈 FIX: Map them to lowercase names during updates as well
+        // MAP TO LOWERCASE COLUMNS (only update them if they exist in the payload)
         transactiontype: transactionType !== undefined ? transactionType : undefined,
         rentaldetails: rentalDetails !== undefined ? rentalDetails : undefined,
         saledetails: saleDetails !== undefined ? saleDetails : undefined,
@@ -427,7 +455,6 @@ function mergeAndNormalize(p: any, liveAgentData: any) {
     createdAt = (createdAt as any).toDate().toISOString();
   }
 
-  // Handle both the old features flat array and the new grouped amenities object
   let amenities: string[] = [];
   if (Array.isArray(p.amenities)) {
     amenities = [...p.amenities];
@@ -441,7 +468,6 @@ function mergeAndNormalize(p: any, liveAgentData: any) {
     ];
   }
 
-  // Gracefully handle both old 'features' and new 'details' object
   const feats = p.features || {};
   const details = p.details || {};
   
@@ -450,7 +476,6 @@ function mergeAndNormalize(p: any, liveAgentData: any) {
   if ((p.hasParking || feats.hasParking || details.parkingSpaces > 0) && !amenities.includes('Parking')) amenities.push('Parking');
 
   const price = Number(p.price) || 0;
-  // Handle new nested discount object vs old flat discount
   const discountObj = p.discount || {};
   const discountPrice = Number(discountObj.originalPrice || p.discountPrice || p.discount_price) || 0;
   const hasValidDiscount = (discountObj.enabled === true || p.hasDiscount === true || p.has_discount === true) && discountPrice > 0;
@@ -458,10 +483,10 @@ function mergeAndNormalize(p: any, liveAgentData: any) {
   const locationObj = typeof p.location === 'object' && p.location !== null ? p.location : {};
   const contactObj = p.contact || {};
   
-  // 👈 FIX: Make sure the API reads out of the lowercase columns so the frontend gets the data back successfully!
+  // COMBINE READS: Look for both camelCase (legacy) and lowercase (new) database formats
   const rentalDetailsObj = p.rentalDetails || p.rentaldetails || {};
   const saleDetailsObj = p.saleDetails || p.saledetails || {};
-  const transactionType = p.transactionType || p.transactiontype || 'Rent';
+  const transactionType = p.transactionType || p.transactiontype || (p.isForSale ? 'Sale' : 'Rent');
 
   return {
     id: p._id || p.id,
@@ -475,10 +500,9 @@ function mergeAndNormalize(p: any, liveAgentData: any) {
     hasDiscount: hasValidDiscount,
     displayPrice: hasValidDiscount ? discountPrice : price,
     isForSale: p.isForSale ?? p.is_for_sale ?? (transactionType === 'Sale'),
-    status: p.status || 'available',
+    status: p.status?.toLowerCase() || 'available', // Guarantee frontend receives lowercase
     images: Array.isArray(p.images) && p.images.length > 0 ? p.images : ['https://placehold.co/600x400?text=No+Image'],
     
-    // 👈 FIX: Read media links out of lowercase columns if they exist
     videoUrl: p.videoUrl || p.videourl || '', 
     virtualTourUrl: p.virtualTourUrl || p.virtualtoururl || '', 
     floorPlanUrl: p.floorPlanUrl || p.floorplanurl || '',
@@ -490,11 +514,10 @@ function mergeAndNormalize(p: any, liveAgentData: any) {
       visibility: locationObj.visibility || 'Exact', 
     },
     
-    // Map from either new details obj or old features obj
     bedrooms: Number(details.bedrooms || p.bedrooms || feats.bedrooms || 0),
     bathrooms: Number(details.bathrooms || p.bathrooms || feats.bathrooms || 0),
     area: Number(details.size || p.area || p.size || feats.size || 0),
-    type: p.category || p.type || p.propertyType || 'House', 
+    type: p.category || p.type || p.propertyType || 'House', // Guaranteed to be populated 
     
     tenantId: p.tenantId || rentalDetailsObj.tenantId || '',
     tenantName: p.tenantName || rentalDetailsObj.tenantName || '',
@@ -504,6 +527,7 @@ function mergeAndNormalize(p: any, liveAgentData: any) {
     rentalDetails: rentalDetailsObj,
     saleDetails: saleDetailsObj,
     highlights: p.highlights || [],
+    transactionType: transactionType,
     
     amenities: amenities,
     agentId: p.agentId || p.agent_id || '',
