@@ -255,38 +255,27 @@ export async function POST(request: Request) {
     const propertyData = await request.json();
     propertyData.agentId = uid;
 
-    // Destructure out the unmapped root fields to stop Supabase crashing
+    // 👈 FIX: Destructure the camelCase fields causing the crash
     const { 
-      tenantId, 
-      tenantName, 
-      tenantPhone, 
-      boosted, 
+      transactionType, 
+      rentalDetails, 
+      saleDetails, 
       virtualTourUrl, 
       floorPlanUrl, 
       ...safeDbData 
     } = propertyData;
-
-    // Safely embed them into JSONB columns so they are written successfully
-    safeDbData.details = {
-      ...(safeDbData.details || {}),
-      boosted: boosted ?? false,
-      virtualTourUrl: virtualTourUrl ?? '',
-      floorPlanUrl: floorPlanUrl ?? '',
-    };
-    
-    // Ensure tenant fields exist inside rentalDetails
-    safeDbData.rentalDetails = {
-      ...(safeDbData.rentalDetails || {}),
-      tenantId: tenantId ?? '',
-      tenantName: tenantName ?? '',
-      tenantPhone: tenantPhone ?? '',
-    };
 
     const { data, error } = await supabaseAdmin
       .from('property')
       .insert([
         {
           ...safeDbData,
+          // 👈 FIX: Map them explicitly to the lowercase column names the database actually expects
+          transactiontype: transactionType,
+          rentaldetails: rentalDetails,
+          saledetails: saleDetails,
+          virtualtoururl: virtualTourUrl,
+          floorplanurl: floorPlanUrl,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         }
@@ -316,14 +305,13 @@ export async function PATCH(request: Request) {
 
     const body = await request.json();
     
-    // Destructure out the ID and unmapped root fields to stop crashes
+    // 👈 FIX: Destructure the ID and the camelCase fields causing the crash
     const { 
       id, 
       _id, 
-      tenantId, 
-      tenantName, 
-      tenantPhone, 
-      boosted, 
+      transactionType, 
+      rentalDetails, 
+      saleDetails, 
       virtualTourUrl, 
       floorPlanUrl, 
       ...updateData 
@@ -352,25 +340,18 @@ export async function PATCH(request: Request) {
        return NextResponse.json({ error: 'Forbidden. You do not own this property.' }, { status: 403 });
     }
 
-    // Safely embed new fields into existing JSONB column 
-    updateData.details = {
-      ...(updateData.details || {}),
-      boosted: boosted ?? updateData.details?.boosted ?? false,
-      virtualTourUrl: virtualTourUrl ?? updateData.details?.virtualTourUrl ?? '',
-      floorPlanUrl: floorPlanUrl ?? updateData.details?.floorPlanUrl ?? '',
-    };
-    
-    // Ensure tenant fields exist inside rentalDetails JSONB
-    updateData.rentalDetails = {
-      ...(updateData.rentalDetails || {}),
-      tenantId: tenantId ?? updateData.rentalDetails?.tenantId ?? '',
-      tenantName: tenantName ?? updateData.rentalDetails?.tenantName ?? '',
-      tenantPhone: tenantPhone ?? updateData.rentalDetails?.tenantPhone ?? '',
-    };
-
     const { data, error } = await supabaseAdmin
       .from('property')
-      .update({ ...updateData, updatedAt: new Date().toISOString() })
+      .update({ 
+        ...updateData, 
+        // 👈 FIX: Map them to lowercase names during updates as well
+        transactiontype: transactionType !== undefined ? transactionType : undefined,
+        rentaldetails: rentalDetails !== undefined ? rentalDetails : undefined,
+        saledetails: saleDetails !== undefined ? saleDetails : undefined,
+        virtualtoururl: virtualTourUrl !== undefined ? virtualTourUrl : undefined,
+        floorplanurl: floorPlanUrl !== undefined ? floorPlanUrl : undefined,
+        updatedAt: new Date().toISOString() 
+      })
       .or(`id.eq.${targetId},_id.eq.${targetId}`)
       .select()
       .single();
@@ -476,7 +457,11 @@ function mergeAndNormalize(p: any, liveAgentData: any) {
 
   const locationObj = typeof p.location === 'object' && p.location !== null ? p.location : {};
   const contactObj = p.contact || {};
-  const rentalDetailsObj = p.rentalDetails || {};
+  
+  // 👈 FIX: Make sure the API reads out of the lowercase columns so the frontend gets the data back successfully!
+  const rentalDetailsObj = p.rentalDetails || p.rentaldetails || {};
+  const saleDetailsObj = p.saleDetails || p.saledetails || {};
+  const transactionType = p.transactionType || p.transactiontype || 'Rent';
 
   return {
     id: p._id || p.id,
@@ -485,18 +470,18 @@ function mergeAndNormalize(p: any, liveAgentData: any) {
     description: p.description || p.bio || p.details?.description || p.details || '',
     price: price,
     currency: p.currency || 'USD', 
-    negotiable: p.negotiable || p.saleDetails?.negotiable || false, 
+    negotiable: p.negotiable || saleDetailsObj.negotiable || false, 
     discountPrice: hasValidDiscount ? discountPrice : 0,
     hasDiscount: hasValidDiscount,
     displayPrice: hasValidDiscount ? discountPrice : price,
-    isForSale: p.isForSale ?? p.is_for_sale ?? (p.transactionType ? p.transactionType === 'Sale' : true),
+    isForSale: p.isForSale ?? p.is_for_sale ?? (transactionType === 'Sale'),
     status: p.status || 'available',
     images: Array.isArray(p.images) && p.images.length > 0 ? p.images : ['https://placehold.co/600x400?text=No+Image'],
     
-    // Properly read media fields whether they are direct DB columns or nested in details JSONB
-    videoUrl: p.videoUrl || details.videoUrl || '', 
-    virtualTourUrl: p.virtualTourUrl || details.virtualTourUrl || '', 
-    floorPlanUrl: p.floorPlanUrl || details.floorPlanUrl || '',
+    // 👈 FIX: Read media links out of lowercase columns if they exist
+    videoUrl: p.videoUrl || p.videourl || '', 
+    virtualTourUrl: p.virtualTourUrl || p.virtualtoururl || '', 
+    floorPlanUrl: p.floorPlanUrl || p.floorplanurl || '',
     
     location: {
       city: locationObj.city || p.city || 'Unknown City',
@@ -511,28 +496,25 @@ function mergeAndNormalize(p: any, liveAgentData: any) {
     area: Number(details.size || p.area || p.size || feats.size || 0),
     type: p.category || p.type || p.propertyType || 'House', 
     
-    // Read tenant fields out of the rental details
     tenantId: p.tenantId || rentalDetailsObj.tenantId || '',
     tenantName: p.tenantName || rentalDetailsObj.tenantName || '',
     tenantPhone: p.tenantPhone || rentalDetailsObj.tenantPhone || '',
     
-    // Pass the new specific details safely 
     details: details,
     rentalDetails: rentalDetailsObj,
-    saleDetails: p.saleDetails || {},
+    saleDetails: saleDetailsObj,
     highlights: p.highlights || [],
     
     amenities: amenities,
     agentId: p.agentId || p.agent_id || '',
     agentName: contactObj.person || liveAgentData.agencyName || liveAgentData.businessName || liveAgentData.ownerName || liveAgentData.name || p.agentName || 'GuriUp Agent',
     agentPhoto: liveAgentData.profileImageUrl || liveAgentData.logoUrl || p.agentPhoto || null,
-    agentPhone: finalVerifiedStatus ? (contactObj.phone || contactObj.whatsapp || p.contactPhone || liveAgentData.whatsappNumber || liveAgentData.phone || p.agentPhone) : null, // Prefer new contact object
+    agentPhone: finalVerifiedStatus ? (contactObj.phone || contactObj.whatsapp || p.contactPhone || liveAgentData.whatsappNumber || liveAgentData.phone || p.agentPhone) : null,
     agentVerified: finalVerifiedStatus,
     agentPlanTier: livePlan,
     
-    // Properly map boosted alongside featured
     featured: p.featured || p.isFeatured || false,
-    boosted: p.boosted || details.boosted || false,
+    boosted: p.boosted || false,
     createdAt: createdAt,
   };
 }
