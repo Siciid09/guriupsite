@@ -127,9 +127,9 @@ async function getHomePageData() {
   try {
     if (!supabaseAdmin) throw new Error("Supabase Admin client missing.");
 
-    // 1. Fetch properties and hotels concurrently
+    // 1. Fetch properties and hotels concurrently (Removed SQL order to prevent crashes)
     const [rawPropsRes, rawHotelsRes] = await Promise.all([
-      supabaseAdmin.from('property').select('*').order('created_at', { ascending: false }),
+      supabaseAdmin.from('property').select('*'),
       supabaseAdmin.from('hotels').select('*').limit(50)
     ]);
 
@@ -154,6 +154,9 @@ async function getHomePageData() {
       const liveAgent = agentMap[p.agentId || p.agent_id] || {};
       return mergeAndNormalize(p, liveAgent);
     });
+
+    // Sort all normalized properties by date (newest first) safely in JavaScript
+    allNormalizedProps.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     // Separate Featured vs Latest Properties
     // Featured: Marked featured OR created by a Pro/Paid Agent
