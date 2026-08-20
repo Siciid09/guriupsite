@@ -92,6 +92,9 @@ interface Chat {
   participantName: string;
   unreadCount: number;
   updatedAt: any;
+  recipientId?: string;
+  propertyId?: string;
+  propertyTitle?: string;
 }
 
 interface Property {
@@ -142,6 +145,8 @@ function DashboardContent() {
   // --- UI STATE ---
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({ name: '', phone: '' });
+  const [profileImg, setProfileImg] = useState<{file: File | null, preview: string | null}>({file: null, preview: null});
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
 
@@ -295,8 +300,10 @@ function DashboardContent() {
             participantName: pName, 
             unreadCount: isMe ? 0 : unread, 
             updatedAt: data.lastMessageTime || data.updatedAt || new Date(),
-            recipientId: recId || 'unknown'
-          } as any;
+            recipientId: recId || 'unknown',
+            propertyId: data.propertyId || '',
+            propertyTitle: data.propertyTitle || 'Inquiry'
+          } as Chat;
         }).sort((a, b) => {
            const timeA = a.updatedAt?.toDate ? a.updatedAt.toDate().getTime() : new Date(a.updatedAt as any).getTime();
            const timeB = b.updatedAt?.toDate ? b.updatedAt.toDate().getTime() : new Date(b.updatedAt as any).getTime();
@@ -308,10 +315,22 @@ function DashboardContent() {
 
   const handleUpdateProfile = async () => {
     if (!currentUser || !userData) return;
+    setIsSavingProfile(true);
+    
     try {
+      let finalPhotoUrl = userData.photoUrl || "";
+
+      // 1. Upload new photo to Firebase Storage if selected
+      if (profileImg.file) {
+         const ext = profileImg.file.name.split('.').pop();
+         const sRef = ref(storage, `user_profiles/${currentUser.uid}_profile_${Date.now()}.${ext}`);
+         await uploadBytes(sRef, profileImg.file);
+         finalPhotoUrl = await getDownloadURL(sRef);
+      }
+
       const idToken = await currentUser.getIdToken();
       
-      // Update Supabase Users Table securely via API
+      // 2. Update Supabase Users Table securely via API
       const res = await fetch('/api/users', {
         method: 'PATCH',
         headers: {
@@ -321,19 +340,32 @@ function DashboardContent() {
         body: JSON.stringify({
           uid: currentUser.uid,
           name: editForm.name,
-          phone: editForm.phone
+          phone: editForm.phone,
+          photoUrl: finalPhotoUrl
         })
       });
       
       if (!res.ok) throw new Error('Failed to update Supabase profile');
 
-      await updateProfile(currentUser, { displayName: editForm.name });
-      setUserData({ ...userData, name: editForm.name, phoneNumber: editForm.phone });
+      // 3. Update Firebase Auth Profile
+      await updateProfile(currentUser, { displayName: editForm.name, photoURL: finalPhotoUrl });
+      
+      // 4. Update Local UI State
+      setUserData({ ...userData, name: editForm.name, phoneNumber: editForm.phone, photoUrl: finalPhotoUrl });
       setIsEditing(false);
+      setProfileImg({file: null, preview: null});
       alert("Profile updated successfully!");
     } catch (e) {
       console.error("Update failed", e);
       alert("Failed to update profile.");
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setProfileImg({ file: e.target.files[0], preview: URL.createObjectURL(e.target.files[0]) });
     }
   };
 
@@ -667,14 +699,37 @@ function DashboardContent() {
                 {activeTab === 'settings' && (
                   <motion.div key="settings" initial="hidden" animate="visible" exit="hidden" variants={fadeIn} className="max-w-3xl">
                      <div className="bg-white p-8 lg:p-12 rounded-[2.5rem] border border-slate-100 shadow-xl shadow-blue-900/5">
-                        <div className="flex justify-between items-center mb-10">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 gap-4">
                             <h3 className="text-2xl font-black tracking-tight">Profile Settings</h3>
                             <button 
                               onClick={() => isEditing ? handleUpdateProfile() : setIsEditing(true)}
-                              className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-sm transition-all shadow-lg ${isEditing ? 'bg-[#0065eb] text-white shadow-blue-500/20' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
+                              disabled={isSavingProfile}
+                              className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-sm transition-all shadow-lg w-full sm:w-auto justify-center ${isEditing ? 'bg-[#0065eb] text-white shadow-blue-500/20' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'} ${isSavingProfile ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
-                              {isEditing ? <><Save size={18}/> Update</> : <><Edit2 size={18}/> Edit Profile</>}
+                              {isSavingProfile ? <><Loader2 size={18} className="animate-spin"/> Saving...</> : (isEditing ? <><Save size={18}/> Save Changes</> : <><Edit2 size={18}/> Edit Profile</>)}
                             </button>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8 mb-10 border-b border-slate-50 pb-8 text-center sm:text-left">
+                           <div className="relative w-24 h-24 bg-slate-100 rounded-full overflow-hidden group border-4 border-white shadow-lg shrink-0">
+                             {profileImg.preview ? (
+                               <Image src={profileImg.preview} alt="Preview" fill className="object-cover" />
+                             ) : userData?.photoUrl ? (
+                               <Image src={userData.photoUrl} alt="Avatar" fill className="object-cover" />
+                             ) : (
+                               <div className="w-full h-full flex items-center justify-center text-4xl font-black text-slate-300 bg-slate-100">{userData?.name?.[0] || 'U'}</div>
+                             )}
+                             
+                             <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" id="user-pic-upload" disabled={!isEditing && !isSavingProfile} />
+                             <label htmlFor="user-pic-upload" className={`absolute inset-0 bg-black/40 flex items-center justify-center text-white transition-opacity ${isEditing ? 'opacity-0 group-hover:opacity-100 cursor-pointer' : 'opacity-0 cursor-not-allowed'}`}>
+                               <Camera size={20} />
+                             </label>
+                           </div>
+                           <div>
+                              <h3 className="text-xl md:text-2xl font-black text-slate-900">{userData?.name || 'User'}</h3>
+                              <p className="text-slate-500 font-medium text-sm mt-1">Update your personal information and photo.</p>
+                              {isEditing && <p className="text-[10px] font-bold text-[#0065eb] uppercase tracking-widest mt-2 bg-blue-50 w-max px-2 py-1 rounded-md mx-auto sm:mx-0">Edit Mode Active</p>}
+                           </div>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -756,8 +811,10 @@ function DashboardContent() {
                 <SharedChatComponent 
                   isOpen={true} 
                   onClose={() => setActiveChat(null)} 
-                  recipientId={(activeChat as any).recipientId || 'unknown'} 
+                  recipientId={activeChat.recipientId || 'unknown'} 
                   recipientName={activeChat.participantName} 
+                  propertyId={activeChat.propertyId || ''}
+                  propertyTitle={activeChat.propertyTitle || 'Inquiry'}
                 />
               )}
 
