@@ -90,7 +90,11 @@ const BookingModal = ({ isOpen, onClose, property, agent }: { isOpen: boolean; o
     setLoading(true);
     try {
       // FIX 1: Replaced Firestore addDoc with Supabase insert
+      // Future-proof ID generation (Math + Date ensures a unique string every time)
+      const generatedId = Date.now().toString(36) + Math.random().toString(36).substring(2, 10);
+
       const { error: tourError } = await supabase.from('tour_requests').insert([{
+        _id: generatedId, // FIX: Manually satisfies the not-null constraint
         propertyId: property.id,
         propertyName: property.title,
         agentId: property.agentId,
@@ -382,7 +386,7 @@ const displaySize = property.details?.size || property.features?.size || propert
                 <Link href={`/agents/${agent?.slug || agent?.uid || property.agentId}`} className="flex items-center gap-4 mb-6 group cursor-pointer hover:bg-slate-50 p-3 -ml-3 rounded-2xl transition-all">
                    <div className="w-16 h-16 rounded-2xl bg-slate-50 relative overflow-hidden border border-slate-200 shrink-0 shadow-sm group-hover:scale-105 transition-transform">
                       {agent?.photoUrl ? <Image src={agent.photoUrl} alt={agent.name} fill className="object-cover" /> : <div className="w-full h-full flex items-center justify-center text-slate-300 font-bold text-xl">{agent?.name?.[0]}</div>}
-                      {isVerified && <div className="absolute bottom-0 right-0 w-6 h-6 bg-[#0065eb] text-white flex items-center justify-center rounded-tl-xl"><CheckCircle size={14} className="text-[#0065eb] fill-white"/></div>}
+                      {isVerified && <div className="absolute bottom-0 right-0 w-6 h-6 bg-white text-[#0065eb] flex items-center justify-center rounded-tl-xl border border-slate-200"><CheckCircle size={14} /></div>}
                    </div>
                    <div className="min-w-0">
                       <h3 className="font-black text-slate-900 leading-tight text-sm truncate group-hover:text-[#0065eb] transition-colors">{agent?.name || 'Loading...'}</h3>
