@@ -18,6 +18,12 @@ const mapContainerStyle = { width: '100%', height: '300px' };
 const defaultCenter = { lat: 9.560, lng: 44.068 };
 
 // --- DATA CONSTANTS ---
+const CURRENCIES = [
+  'USD', 'SOS', 'SLSH', 'KES', 'ETB', 'DJF', 'AED', 'SAR', 'QAR', 'TRY',
+  'EUR', 'GBP', 'CAD', 'AUD', 'SEK', 'NOK', 'DKK', 'CHF', 'EGP', 'UGX',
+  'TZS', 'RWF', 'SDG', 'SSP', 'ZAR', 'NGN', 'GHS', 'KWD', 'OMR', 'CNY'
+];
+
 const HOTEL_TYPES = [
   'Hotel', 'Luxury Hotel', 'Boutique Hotel', 'Business Hotel', 'City Hotel', 
   'Resort', 'Lodge', 'Motel', 'Inn', 'Hostel', 'Bed & Breakfast', 'Apartment Hotel',
@@ -61,6 +67,7 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
   // --- STATE: Unified Form Data ---
   const [formData, setFormData] = useState({
     name: '', slug: '', type: 'Hotel', description: '', shortDescription: '',
+    currency: 'USD',
     pricePerNight: '', roomsCount: '', rating: '3', videoUrl: '',
     location: { country: 'Somalia', city: '', area: '', address: '', landmark: '', lat: '', lng: '' },
     contact: { phoneCall: '', reservationsPhone: '', phoneWhatsapp: '', phoneManager: '', email: '', website: '', contactPreferences: ['Phone', 'WhatsApp'], receptionAvailability: '24-hour reception', receptionOpens: '', receptionCloses: '' },
@@ -134,6 +141,7 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
               ...prev,
               name: data.name || '', slug: data.slug || '', type: data.type || 'Hotel',
               description: data.description || '', shortDescription: data.shortDescription || '',
+              currency: data.currency || 'USD',
               pricePerNight: data.pricePerNight?.toString() || '', roomsCount: data.roomsCount?.toString() || '',
               videoUrl: data.videoUrl || '',
               location: { ...prev.location, ...data.location, lat: data.location?.latDisplay || '', lng: data.location?.lngDisplay || '' },
@@ -467,7 +475,8 @@ export default function HotelForm({ hotelId }: HotelFormProps) {
                </>
              )}
 
-             <Input label="Base Price / Night ($) *" value={formData.pricePerNight} onChange={(e) => updateForm(null, 'pricePerNight', e.target.value)} required type="number" />
+             <Select label="Currency *" value={formData.currency} onChange={(e) => updateForm(null, 'currency', e.target.value)} options={CURRENCIES} />
+             <Input label={`Base Price / Night (${formData.currency || 'USD'}) *`} value={formData.pricePerNight} onChange={(e) => updateForm(null, 'pricePerNight', e.target.value)} required type="number" />
              <Select label="Deposit Required?" value={formData.payments.depositRequired} onChange={(e) => updateForm('payments', 'depositRequired', e.target.value)} options={['No', 'Yes']} />
              
              {formData.payments.depositRequired === 'Yes' && (
