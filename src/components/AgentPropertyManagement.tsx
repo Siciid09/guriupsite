@@ -7,9 +7,11 @@ import {
   Search, Plus, MapPin, Edit3, Trash2, X, 
   BarChart2, MoreVertical, Archive, RefreshCw,
   Building, CheckCircle, ArrowUpRight, Lock, 
-  Eye, Star, TrendingUp, Clock, Phone
+  Eye, Star, TrendingUp, Clock, Phone, Key
 } from 'lucide-react';
 import CompletePropertyForm from './proform';
+import LeaseAssignmentModal from './LeaseAssignmentModal';
+import PropertyDetailsModal from './PropertyDetailsModal';
 // Import your new separate form component
 
 // --- UPDATED TYPES TO MATCH NEW API ---
@@ -85,6 +87,8 @@ export default function CompletePropertyManagement({
 
   const [editingProp, setEditingProp] = useState<Property | null>(null);
   const [statsProp, setStatsProp] = useState<Property | null>(null); 
+  const [assignTarget, setAssignTarget] = useState<Property | null>(null);
+  const [viewingProp, setViewingProp] = useState<Property | null>(null); 
   
   const isPro = ['pro', 'premium', 'agent_pro', 'admin'].includes(userPlan?.toLowerCase() || 'free');
 
@@ -284,7 +288,7 @@ export default function CompletePropertyManagement({
 
             return (
               <div key={prop.id} className="bg-white rounded-[28px] overflow-hidden shadow-sm hover:shadow-xl border border-slate-100 group relative transition-all duration-300 flex flex-col">
-                <div className="h-52 relative bg-slate-200 cursor-pointer overflow-hidden" onClick={() => openForm(prop)}>
+                <div className="h-52 relative bg-slate-200 cursor-pointer overflow-hidden" onClick={() => setViewingProp(prop)}>
                   <Image 
                     src={prop.images?.[0] || 'https://placehold.co/600x400'} 
                     alt={prop.title} 
@@ -315,6 +319,7 @@ export default function CompletePropertyManagement({
                   
                   {activeMenu === prop.id && (
                     <div className="absolute top-14 right-4 w-44 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-100 py-2 z-20 animate-in zoom-in-95">
+                      <button onClick={() => { setAssignTarget(prop); setActiveMenu(null); }} className="w-full text-left px-5 py-3 text-sm font-bold text-[#0065eb] hover:bg-blue-50 flex items-center gap-3 transition-colors"><Key size={16} /> Assign Tenant</button>
                       <button onClick={() => toggleArchive(prop)} className="w-full text-left px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-100 flex items-center gap-3 transition-colors"><Archive size={16} /> {prop.isArchived ? 'Unarchive' : 'Archive'}</button>
                       <button onClick={() => deleteProperty(prop.id!)} className="w-full text-left px-5 py-3 text-sm font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-3 border-t border-slate-100 transition-colors"><Trash2 size={16} /> Delete</button>
                     </div>
@@ -322,7 +327,7 @@ export default function CompletePropertyManagement({
                 </div>
 
                 <div className="p-5 flex flex-col flex-grow">
-                  <h3 className="font-black text-slate-900 text-lg truncate mb-1 cursor-pointer hover:text-[#0065eb] transition-colors" onClick={() => openForm(prop)}>{prop.title}</h3>
+                  <h3 className="font-black text-slate-900 text-lg truncate mb-1 cursor-pointer hover:text-[#0065eb] transition-colors" onClick={() => setViewingProp(prop)}>{prop.title}</h3>
                   <p className="text-xs text-slate-500 font-bold mb-4 flex items-center gap-1.5"><MapPin size={14} className="text-[#0065eb]"/> {prop.location?.area || 'N/A'}, {prop.location?.city}</p>
                   
                   <div className="mt-auto">
@@ -425,6 +430,27 @@ export default function CompletePropertyManagement({
           </div>
         </div>
       )}
+
+      {assignTarget && (
+        <LeaseAssignmentModal
+          isOpen={!!assignTarget}
+          onClose={() => setAssignTarget(null)}
+          currentUserUid={currentUserUid}
+          mode="property-to-tenant"
+          preselectedData={assignTarget}
+          onSuccess={() => {
+            fetchDashboardData();
+            alert("Property successfully leased!");
+          }}
+        />
+      )}
+
+      <PropertyDetailsModal 
+        isOpen={!!viewingProp} 
+        onClose={() => setViewingProp(null)} 
+        property={viewingProp} 
+        onEdit={(prop) => { setViewingProp(null); openForm(prop); }} 
+      />
     </div>
   );
 

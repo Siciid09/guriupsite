@@ -4,9 +4,11 @@ import React, { useState, useEffect } from 'react';
 import { auth } from '../app/lib/firebase'; // Client auth for token generation
 import { 
   Search, Plus, Users, Edit3, Trash2, Phone, Building, 
-  Lock, ArrowRight, MoreVertical, Loader2 
+  Lock, ArrowRight, MoreVertical, Loader2, Key 
 } from 'lucide-react';
 import TenantForm from './TenantForm';
+import LeaseAssignmentModal from './LeaseAssignmentModal';
+import TenantDetailsModal from './TenantDetailsModal';
 
 export interface Tenant {
   id?: string;
@@ -49,6 +51,8 @@ export default function TenantManagement({ currentUserUid, userPlan, onUpgrade }
   const [viewMode, setViewMode] = useState<'list' | 'form'>('list');
   const [editingTenant, setEditingTenant] = useState<Tenant | undefined>(undefined);
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [assignTarget, setAssignTarget] = useState<Tenant | null>(null);
+  const [viewingTenant, setViewingTenant] = useState<Tenant | null>(null);
 
   // --- STRICT PRO CHECK ---
   const isPro = ['pro', 'premium', 'agent_pro', 'admin'].includes((userPlan || 'free').toLowerCase());
@@ -204,7 +208,7 @@ export default function TenantManagement({ currentUserUid, userPlan, onUpgrade }
             const tenantKey = tenant.id || tenant._id;
             
             return (
-              <div key={tenantKey} className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow relative group">
+              <div key={tenantKey} onClick={() => setViewingTenant(tenant)} className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow relative group cursor-pointer hover:border-[#0065eb]/30">
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex items-center gap-4">
                     <div className="w-14 h-14 bg-blue-50 text-[#0065eb] rounded-2xl flex items-center justify-center font-black text-xl">
@@ -221,13 +225,14 @@ export default function TenantManagement({ currentUserUid, userPlan, onUpgrade }
                   {/* Actions Menu */}
                   <div className="relative">
                     <button 
-                      onClick={() => setActiveMenu(activeMenu === tenantKey ? null : tenantKey!)} 
-                      className="p-2 text-slate-400 hover:bg-slate-50 rounded-xl"
+                      onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === tenantKey ? null : tenantKey!); }} 
+                      className="p-2 text-slate-400 hover:bg-slate-50 rounded-xl hover:text-slate-900 transition-colors"
                     >
                       <MoreVertical size={18} />
                     </button>
                     {activeMenu === tenantKey && (
-                      <div className="absolute top-10 right-0 w-40 bg-white border border-slate-100 shadow-xl rounded-2xl overflow-hidden z-20 py-1 animate-in zoom-in-95">
+                      <div className="absolute top-10 right-0 w-48 bg-white border border-slate-100 shadow-xl rounded-2xl overflow-hidden z-20 py-1 animate-in zoom-in-95">
+                        <button onClick={() => { setAssignTarget(tenant); setActiveMenu(null); }} className="w-full text-left px-4 py-2.5 text-sm font-bold text-[#0065eb] hover:bg-blue-50 flex items-center gap-2"><Key size={16}/> Assign to Property</button>
                         <button onClick={() => { setActiveMenu(null); openForm(tenant); }} className="w-full text-left px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"><Edit3 size={16}/> Edit Profile</button>
                         <a href={`tel:${tenant.phone}`} className="w-full text-left px-4 py-2.5 text-sm font-bold text-emerald-600 hover:bg-emerald-50 flex items-center gap-2"><Phone size={16}/> Call</a>
                         <button onClick={() => handleDelete(tenantKey!)} className="w-full text-left px-4 py-2.5 text-sm font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2 border-t border-slate-50"><Trash2 size={16}/> Remove</button>
@@ -259,6 +264,27 @@ export default function TenantManagement({ currentUserUid, userPlan, onUpgrade }
           <p className="text-slate-500 font-medium">Add your first tenant to start managing leases.</p>
         </div>
       )}
+
+      {assignTarget && (
+        <LeaseAssignmentModal
+          isOpen={!!assignTarget}
+          onClose={() => setAssignTarget(null)}
+          currentUserUid={currentUserUid}
+          mode="tenant-to-property"
+          preselectedData={assignTarget}
+          onSuccess={() => {
+            fetchTenants();
+            alert("Tenant successfully assigned to property!");
+          }}
+        />
+      )}
+
+      <TenantDetailsModal 
+        isOpen={!!viewingTenant} 
+        onClose={() => setViewingTenant(null)} 
+        tenant={viewingTenant} 
+        onEdit={(tenant) => { setViewingTenant(null); openForm(tenant); }} 
+      />
     </div>
   );
 }
