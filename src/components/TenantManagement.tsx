@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { auth } from '../app/lib/firebase'; // Client auth for token generation
 import { 
   Search, Plus, Users, Edit3, Trash2, Phone, Building, 
-  Lock, ArrowRight, MoreVertical, Loader2, Key 
+  Lock, ArrowRight, MoreVertical, Loader2, Key, Unlink 
 } from 'lucide-react';
 import TenantForm from './TenantForm';
 import LeaseAssignmentModal from './LeaseAssignmentModal';
@@ -20,6 +20,8 @@ export interface Tenant {
   idType: string;
   idNumber: string;
   unitNumber: string;
+  propertyId?: string;
+  propertyName?: string;
   rentAmount: number;
   depositAmount: number;
   leaseStart: any; 
@@ -46,6 +48,7 @@ export default function TenantManagement({ currentUserUid, userPlan, onUpgrade }
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'All' | 'Assigned' | 'Unassigned'>('All');
   
   // --- VIEW STATE ---
   const [viewMode, setViewMode] = useState<'list' | 'form'>('list');
@@ -91,6 +94,36 @@ export default function TenantManagement({ currentUserUid, userPlan, onUpgrade }
   useEffect(() => {
     fetchTenants();
   }, [currentUserUid, isPro]);
+
+  const handleUnassign = async (tenant: Tenant) => {
+    if (!window.confirm("Unassign this tenant? This will also mark the property as available.")) return;
+    try {
+      const currentUser = auth.currentUser;
+      const idToken = currentUser ? await currentUser.getIdToken() : '';
+
+      // 1. Remove property data from the Tenant
+      await fetch('/api/tenants', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+        body: JSON.stringify({ _id: tenant.id || tenant._id, propertyId: null, unitNumber: '', rentAmount: 0 })
+      });
+
+      // 2. Mark the Property as Available
+      if (tenant.propertyId) {
+        await fetch('/api/properties', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+          body: JSON.stringify({ id: tenant.propertyId, status: 'available', tenantId: null })
+        });
+      }
+
+      fetchTenants();
+      alert("Tenant successfully unassigned.");
+    } catch (error) {
+      console.error(error);
+      alert("Failed to unassign tenant.");
+    }
+  };
 
   const handleDelete = async (id: string) => {
     if (!window.confirm("Are you sure you want to permanently remove this tenant?")) return;
@@ -165,11 +198,16 @@ export default function TenantManagement({ currentUserUid, userPlan, onUpgrade }
   }
 
   // --- 4. MAIN DIRECTORY VIEW ---
-  const filteredTenants = tenants.filter(t => 
-    (t.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
-    (t.phone || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (t.unitNumber || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredTenants = tenants.filter(t => {
+    const matchesSearch = (t.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          (t.phone || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (t.unitNumber || '').toLowerCase().includes(searchQuery.toLowerCase());
+    
+    if (!matchesSearch) return false;
+    if (activeTab === 'Assigned') return !!t.propertyId;
+    if (activeTab === 'Unassigned') return !t.propertyId;
+    return true;
+  });
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 max-w-7xl mx-auto">
@@ -188,16 +226,31 @@ export default function TenantManagement({ currentUserUid, userPlan, onUpgrade }
         </button>
       </div>
 
-      {/* Search Bar */}
-      <div className="bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex items-center">
-        <div className="px-4 text-slate-400"><Search size={20} /></div>
-        <input 
-          type="text" 
-          placeholder="Search by name, phone, or unit..." 
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="flex-1 bg-transparent border-none outline-none py-3 font-bold text-slate-700"
-        />
+      {/* Search & Tabs */}
+      <div className="bg-white p-3 rounded-[24px] shadow-sm border border-slate-100 flex flex-col gap-3">
+        <div className="flex items-center bg-slate-50/50 rounded-2xl border border-slate-100 px-2">
+          <div className="px-4 text-slate-400"><Search size={20} /></div>
+          <input 
+            type="text" 
+            placeholder="Search by name, phone, or unit..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="flex-1 bg-transparent border-none outline-none py-3 font-bold text-slate-700"
+          />
+        </div>
+        <div className="flex gap-2 overflow-x-auto hide-scrollbar px-1">
+          {['All', 'Assigned', 'Unassigned'].map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab as any)}
+              className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 ${
+                activeTab === tab ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Tenant List */}
@@ -217,7 +270,7 @@ export default function TenantManagement({ currentUserUid, userPlan, onUpgrade }
                     <div>
                       <h3 className="font-black text-slate-900 text-lg truncate w-32">{tenant.name}</h3>
                       <p className="text-xs font-bold text-slate-500 flex items-center gap-1 mt-0.5">
-                        <Building size={12} /> Unit {tenant.unitNumber || 'N/A'}
+                        <Building size={12} /> {tenant.propertyId ? `Assigned to Unit ${tenant.unitNumber || ''}` : 'Not Assigned'}
                       </p>
                     </div>
                   </div>
@@ -232,10 +285,14 @@ export default function TenantManagement({ currentUserUid, userPlan, onUpgrade }
                     </button>
                     {activeMenu === tenantKey && (
                       <div className="absolute top-10 right-0 w-48 bg-white border border-slate-100 shadow-xl rounded-2xl overflow-hidden z-20 py-1 animate-in zoom-in-95">
-                        <button onClick={() => { setAssignTarget(tenant); setActiveMenu(null); }} className="w-full text-left px-4 py-2.5 text-sm font-bold text-[#0065eb] hover:bg-blue-50 flex items-center gap-2"><Key size={16}/> Assign to Property</button>
-                        <button onClick={() => { setActiveMenu(null); openForm(tenant); }} className="w-full text-left px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"><Edit3 size={16}/> Edit Profile</button>
-                        <a href={`tel:${tenant.phone}`} className="w-full text-left px-4 py-2.5 text-sm font-bold text-emerald-600 hover:bg-emerald-50 flex items-center gap-2"><Phone size={16}/> Call</a>
-                        <button onClick={() => handleDelete(tenantKey!)} className="w-full text-left px-4 py-2.5 text-sm font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2 border-t border-slate-50"><Trash2 size={16}/> Remove</button>
+                        {tenant.propertyId ? (
+                          <button onClick={(e) => { e.stopPropagation(); handleUnassign(tenant); setActiveMenu(null); }} className="w-full text-left px-4 py-2.5 text-sm font-bold text-amber-600 hover:bg-amber-50 flex items-center gap-2"><Unlink size={16}/> Unassign Property</button>
+                        ) : (
+                          <button onClick={(e) => { e.stopPropagation(); setAssignTarget(tenant); setActiveMenu(null); }} className="w-full text-left px-4 py-2.5 text-sm font-bold text-[#0065eb] hover:bg-blue-50 flex items-center gap-2"><Key size={16}/> Assign to Property</button>
+                        )}
+                        <button onClick={(e) => { e.stopPropagation(); setActiveMenu(null); openForm(tenant); }} className="w-full text-left px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"><Edit3 size={16}/> Edit Profile</button>
+                        <a href={`tel:${tenant.phone}`} onClick={(e) => e.stopPropagation()} className="w-full text-left px-4 py-2.5 text-sm font-bold text-emerald-600 hover:bg-emerald-50 flex items-center gap-2"><Phone size={16}/> Call</a>
+                        <button onClick={(e) => { e.stopPropagation(); handleDelete(tenantKey!); }} className="w-full text-left px-4 py-2.5 text-sm font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2 border-t border-slate-50"><Trash2 size={16}/> Remove</button>
                       </div>
                     )}
                   </div>

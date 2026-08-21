@@ -319,9 +319,9 @@ export default function CompletePropertyManagement({
                   
                   {activeMenu === prop.id && (
                     <div className="absolute top-14 right-4 w-44 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-100 py-2 z-20 animate-in zoom-in-95">
-                      <button onClick={() => { setAssignTarget(prop); setActiveMenu(null); }} className="w-full text-left px-5 py-3 text-sm font-bold text-[#0065eb] hover:bg-blue-50 flex items-center gap-3 transition-colors"><Key size={16} /> Assign Tenant</button>
-                      <button onClick={() => toggleArchive(prop)} className="w-full text-left px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-100 flex items-center gap-3 transition-colors"><Archive size={16} /> {prop.isArchived ? 'Unarchive' : 'Archive'}</button>
-                      <button onClick={() => deleteProperty(prop.id!)} className="w-full text-left px-5 py-3 text-sm font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-3 border-t border-slate-100 transition-colors"><Trash2 size={16} /> Delete</button>
+                      <button onClick={(e) => { e.stopPropagation(); setAssignTarget(prop); setActiveMenu(null); }} className="w-full text-left px-5 py-3 text-sm font-bold text-[#0065eb] hover:bg-blue-50 flex items-center gap-3 transition-colors"><Key size={16} /> Assign Tenant</button>
+                      <button onClick={(e) => { e.stopPropagation(); toggleArchive(prop); }} className="w-full text-left px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-100 flex items-center gap-3 transition-colors"><Archive size={16} /> {prop.isArchived ? 'Unarchive' : 'Archive'}</button>
+                      <button onClick={(e) => { e.stopPropagation(); deleteProperty(prop.id!); }} className="w-full text-left px-5 py-3 text-sm font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-3 border-t border-slate-100 transition-colors"><Trash2 size={16} /> Delete</button>
                     </div>
                   )}
                 </div>
@@ -341,13 +341,13 @@ export default function CompletePropertyManagement({
                     {/* Rad Action Buttons */}
                     <div className="flex flex-wrap gap-2">
                       <button 
-                        onClick={() => openForm(prop)} 
+                        onClick={(e) => { e.stopPropagation(); openForm(prop); }} 
                         className="flex-1 flex justify-center items-center gap-2 p-3 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-2xl font-bold text-xs transition-all hover:shadow-md"
                       >
                         <Edit3 size={16}/> Edit
                       </button>
                       <button 
-                        onClick={() => isPro ? setStatsProp(prop) : onUpgrade()} 
+                        onClick={(e) => { e.stopPropagation(); isPro ? setStatsProp(prop) : onUpgrade(); }} 
                         className="flex-1 flex justify-center items-center gap-2 p-3 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-2xl font-bold text-xs transition-all hover:shadow-md"
                       >
                         {isPro ? <BarChart2 size={16}/> : <Lock size={14}/>} Stats
@@ -356,17 +356,17 @@ export default function CompletePropertyManagement({
 
                     <div className="mt-2 flex gap-2">
                       {isInactive ? (
-                        <button onClick={() => updatePropertyStatus(prop, 'available')} className="w-full flex justify-center items-center gap-2 p-3 bg-gradient-to-r from-slate-800 to-slate-900 text-white hover:scale-[1.02] shadow-lg shadow-slate-900/20 rounded-2xl font-bold text-xs transition-all">
+                        <button onClick={(e) => { e.stopPropagation(); updatePropertyStatus(prop, 'available'); }} className="w-full flex justify-center items-center gap-2 p-3 bg-gradient-to-r from-slate-800 to-slate-900 text-white hover:scale-[1.02] shadow-lg shadow-slate-900/20 rounded-2xl font-bold text-xs transition-all">
                           <RefreshCw size={16}/> Relist as Active
                         </button>
                       ) : (
                         <>
                           {prop.isForSale ? (
-                            <button onClick={() => updatePropertyStatus(prop, 'sold')} className="flex-1 flex justify-center items-center gap-2 p-3 bg-gradient-to-r from-rose-500 to-pink-500 text-white hover:scale-[1.02] shadow-lg shadow-rose-500/30 rounded-2xl font-bold text-xs transition-all">
+                            <button onClick={(e) => { e.stopPropagation(); updatePropertyStatus(prop, 'sold'); }} className="flex-1 flex justify-center items-center gap-2 p-3 bg-gradient-to-r from-rose-500 to-pink-500 text-white hover:scale-[1.02] shadow-lg shadow-rose-500/30 rounded-2xl font-bold text-xs transition-all">
                               <CheckCircle size={16}/> Mark Sold
                             </button>
                           ) : (
-                            <button onClick={() => updatePropertyStatus(prop, 'rented_out')} className="flex-1 flex justify-center items-center gap-2 p-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:scale-[1.02] shadow-lg shadow-emerald-500/30 rounded-2xl font-bold text-xs transition-all">
+                            <button onClick={(e) => { e.stopPropagation(); updatePropertyStatus(prop, 'rented_out'); }} className="flex-1 flex justify-center items-center gap-2 p-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:scale-[1.02] shadow-lg shadow-emerald-500/30 rounded-2xl font-bold text-xs transition-all">
                               <CheckCircle size={16}/> Mark Rented
                             </button>
                           )}
