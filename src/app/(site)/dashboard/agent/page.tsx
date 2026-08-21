@@ -59,6 +59,7 @@ interface Property {
 
 interface TourRequest {
   id: string;
+  propertyId?: string;
   propertyName: string;
   userName: string;
   userPhone: string;
@@ -111,6 +112,7 @@ function DashboardContent() {
   
   // Modal State
   const [selectedTour, setSelectedTour] = useState<TourRequest | null>(null);
+  const [tourChatOpen, setTourChatOpen] = useState(false);
 
   const isPro = ['pro', 'premium', 'agent_pro'].includes(profile?.planTier || 'free');
 
@@ -482,7 +484,7 @@ function DashboardContent() {
                      <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 md:p-6">
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedTour(null)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
                         
-                        <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col border border-white/20">
+                        <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative w-full max-w-lg max-h-[90vh] bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col border border-white/20">
                            
                            {/* Header */}
                            <div className="bg-slate-50 p-6 md:p-8 flex justify-between items-center border-b border-slate-100">
@@ -516,11 +518,28 @@ function DashboardContent() {
                                        </div>
                                     </div>
                                     {isPro && (
-                                       <button onClick={() => window.open(`https://wa.me/${selectedTour.userPhone.replace(/[^0-9]/g, '')}`, '_blank')} className="w-10 h-10 bg-green-50 hover:bg-green-100 text-green-600 rounded-full flex items-center justify-center transition-colors shrink-0 shadow-sm" title="Message on WhatsApp">
-                                          <MessageSquare size={18} />
-                                       </button>
+                                       <div className="flex items-center gap-2 shrink-0">
+                                          <button onClick={(e) => { e.stopPropagation(); setTourChatOpen(true); }} className="w-10 h-10 bg-blue-50 hover:bg-blue-100 text-[#0065eb] rounded-full flex items-center justify-center transition-colors shadow-sm" title="In-App Chat">
+                                             <MessageSquare size={18} />
+                                          </button>
+                                          <button onClick={() => window.open(`https://wa.me/${selectedTour.userPhone.replace(/[^0-9]/g, '')}`, '_blank')} className="w-10 h-10 bg-green-50 hover:bg-green-100 text-green-600 rounded-full flex items-center justify-center transition-colors shadow-sm" title="Message on WhatsApp">
+                                             <Phone size={18} />
+                                          </button>
+                                       </div>
                                     )}
                                  </div>
+
+                                 {/* Shared Chat Modal for Tour Request */}
+                                 {tourChatOpen && selectedTour && (
+                                    <SharedChatComponent 
+                                       isOpen={tourChatOpen} 
+                                       onClose={() => setTourChatOpen(false)} 
+                                       recipientId={selectedTour.userId || ''} 
+                                       recipientName={selectedTour.userName} 
+                                       propertyId={selectedTour.propertyId || ''} 
+                                       propertyTitle={selectedTour.propertyName} 
+                                    />
+                                 )}
 
                                  {/* Upgrade Prompt if Free */}
                                  {!isPro && (
