@@ -114,7 +114,11 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [showVideoModal, setShowVideoModal] = useState(false);
   
-  const [property] = useState<Property>(initialProperty);
+  // FIX: Map legacy _id to id to prevent the component from crashing on direct database loads
+  const [property] = useState<Property>({
+    ...initialProperty,
+    id: initialProperty?.id || (initialProperty as any)?._id || ''
+  });
   const [agent] = useState<Agent | null>(initialAgent);
   const [related, setRelated] = useState<Property[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -243,7 +247,8 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
   const formattedPrice = new Intl.NumberFormat('en-US', { style: 'currency', currency: property.currency || 'USD', maximumFractionDigits: 0 }).format(property.price || 0);
   const isVerified = isAgentPro(agent);
 
-  if (!property || !property.id) return null; // Failsafe for invalid direct loads
+  // Relaxed failsafe to ensure it doesn't blank out valid legacy records
+  if (!property || (!property.id && !(property as any)._id)) return null; 
 
   return (
     <div className="bg-[#FAFBFC] min-h-screen font-sans text-slate-900 pb-20 pt-[180px]">
