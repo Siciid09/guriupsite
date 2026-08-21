@@ -72,10 +72,10 @@ export async function GET(request: Request) {
     
     // Optional query filters
     if (agentId) {
-      query = query.or(`agentId.eq.${agentId},agent_id.eq.${agentId}`);
+      query = query.eq('agentId', agentId);
     }
     if (propertyId) {
-      query = query.or(`propertyId.eq.${propertyId},property_id.eq.${propertyId}`);
+      query = query.eq('propertyId', propertyId);
     }
 
     const { data: tenants, error } = await query;

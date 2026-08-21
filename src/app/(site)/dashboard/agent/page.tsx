@@ -635,14 +635,12 @@ function DashboardContent() {
                 </div>
              </motion.div>
           )}
-
-          {/* --- TAB: ANALYTICS --- */}
+{/* --- TAB: ANALYTICS --- */}
           {activeTab === 'analytics' && (
              <motion.div key="analytics" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}>
-                <AgentAnalytics />
+                <AgentAnalytics isPro={isPro} initialAgentId={profile?.uid} />
              </motion.div>
           )}
-
           {/* --- TAB: SETTINGS --- */}
           {activeTab === 'settings' && (
              <motion.div key="settings" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="max-w-4xl mx-auto space-y-8">
