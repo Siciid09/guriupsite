@@ -131,6 +131,9 @@ export default function AddEditPhysicalRoom({ hotelId, physicalRoomId }: AddEdit
       notes: notes.trim(),
       operationalStatus,
       housekeepingStatus,
+      viewoverride: null, // ✅ Matches the DB lowercase 'o'
+      updatedAt: new Date().toISOString(),
+      ...( !isEditing && { createdAt: new Date().toISOString() } ) // ✅ Only adds createdAt if it's a new room
     };
 
     try {
