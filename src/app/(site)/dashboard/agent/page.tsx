@@ -214,11 +214,23 @@ function DashboardContent() {
 
   const updateTourStatus = async (id: string, status: string) => {
     try {
-      const { error } = await supabase.from('tour_requests').update({ status }).eq('_id', id);
-      if (!error) {
-        setTours(prev => prev.map(t => t.id === id ? { ...t, status: status as any } : t));
-      } else { throw error; }
-    } catch (e) { console.error(e); alert("Failed to update tour status."); }
+      const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      const res = await fetch('/api/tour_requests', {
+        method: 'PATCH',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({ id, status })
+      });
+      
+      if (!res.ok) throw new Error("Failed to update status on server.");
+      
+      setTours(prev => prev.map(t => t.id === id ? { ...t, status: status as any } : t));
+    } catch (e) { 
+      console.error(e); 
+      alert("Failed to update tour status."); 
+    }
   };
 
   // ADDED: Profile Save Logic

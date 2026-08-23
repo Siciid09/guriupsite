@@ -176,8 +176,70 @@ export async function POST(request: Request) {
       payload.userId = uid || payload.userId || 'guest'; 
     }
     
-    payload._id = crypto.randomUUID(); // 🛡️ CRITICAL FIX: Satisfy NOT NULL constraint
-    delete payload.id; // Prevent Supabase conflicts
+    // --- 1. IDEMPOTENCY FIX ---
+    // Use the client's idempotencyKey to prevent duplicate network retries
+    payload._id = payload.idempotencyKey || crypto.randomUUID(); 
+    delete payload.id; 
+    delete payload.idempotencyKey; // Remove before inserting into DB
+
+    // --- 2. SERVER-SIDE PRICING & AVAILABILITY FIX ---
+    if (type !== 'food_orders' && payload.roomId && payload.hotelId && payload.source !== 'admin_manual') {
+      
+      // A. Fetch Authoritative Room Data
+      const { data: roomData, error: roomError } = await supabaseAdmin
+        .from('rooms')
+        .select('basePrice, pricePerNight, price, numberOfRooms, capacity')
+        .or(`id.eq.${payload.roomId},_id.eq.${payload.roomId}`)
+        .maybeSingle();
+
+      if (roomError || !roomData) {
+        return NextResponse.json({ error: 'Invalid room selected.' }, { status: 400 });
+      }
+
+      // B. Recalculate Price Securely
+      const authoritativePrice = Number(roomData.basePrice || roomData.pricePerNight || roomData.price || 0);
+      const reqIn = new Date(payload.checkIn);
+      const reqOut = new Date(payload.checkOut);
+      reqIn.setHours(0,0,0,0);
+      reqOut.setHours(0,0,0,0);
+      
+      const diffDays = Math.round((reqOut.getTime() - reqIn.getTime()) / (1000 * 60 * 60 * 24));
+      const nights = diffDays > 0 ? diffDays : 1;
+      const requestedRooms = Number(payload.roomCount || 1);
+      
+      payload.totalAmount = authoritativePrice * requestedRooms * nights;
+
+      // C. Server-Side Overlap/Concurrency Check
+      const totalUnits = Number(roomData.numberOfRooms || roomData.capacity || 1);
+      
+      const { data: overlappingBookings } = await supabaseAdmin
+        .from('bookings')
+        .select('checkIn, checkOut, roomCount')
+        .eq('hotelId', payload.hotelId)
+        .or(`roomId.eq.${payload.roomId},roomTypeId.eq.${payload.roomId}`)
+        .in('status', ['pending', 'confirmed', 'checked-in']);
+
+      let occupiedCount = 0;
+      (overlappingBookings || []).forEach((b: any) => {
+        if (!b.checkIn || !b.checkOut) return;
+        
+        // Separate the Date creation from the setHours mutation to keep them as Date objects
+        const bIn = new Date(b.checkIn);
+        bIn.setHours(0,0,0,0);
+        
+        const bOut = new Date(b.checkOut);
+        bOut.setHours(0,0,0,0);
+        
+        // If dates overlap the requested window
+        if (bIn.getTime() < reqOut.getTime() && bOut.getTime() > reqIn.getTime()) {
+          occupiedCount += Number(b.roomCount || 1);
+        }
+      });
+
+      if (occupiedCount + requestedRooms > totalUnits) {
+        return NextResponse.json({ error: 'This room is now fully booked for these dates. Please try another.' }, { status: 409 });
+      }
+    }
 
     payload.status = payload.status || 'pending';
     payload.createdAt = new Date().toISOString();
@@ -189,7 +251,13 @@ export async function POST(request: Request) {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      // 3. UNIQUE CONSTRAINT HANDLING (Idempotency mapping caught a retry)
+      if (error.code === '23505') { 
+        return NextResponse.json({ error: 'Duplicate booking request detected. Please wait.' }, { status: 409 });
+      }
+      throw error;
+    }
     return NextResponse.json({ success: true, booking: data }, { status: 201 });
 
   } catch (error: any) {
@@ -276,6 +344,25 @@ export async function PATCH(request: Request) {
 
         if (hasConflict) {
           return NextResponse.json({ error: 'This physical room is already booked for the selected dates.' }, { status: 409 });
+        }
+      }
+    }
+
+    // --- STATE MACHINE ENFORCEMENT ---
+    if (updatePayload.status) {
+      const { data: existingRecord } = await supabaseAdmin
+        .from(table)
+        .select('status')
+        .or(`id.eq.${targetId},_id.eq.${targetId}`)
+        .maybeSingle();
+        
+      if (existingRecord) {
+        const currentStatus = existingRecord.status;
+        const newStatus = updatePayload.status;
+        
+        // Prevent transitioning OUT of terminal states to protect database integrity
+        if ((currentStatus === 'cancelled' || currentStatus === 'completed' || currentStatus === 'checked-out') && currentStatus !== newStatus) {
+          return NextResponse.json({ error: `Illegal transition: Cannot change booking status from '${currentStatus}' to '${newStatus}'.` }, { status: 400 });
         }
       }
     }

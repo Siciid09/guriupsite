@@ -8,7 +8,7 @@ import {
   Clock, Calendar, ShieldCheck, Sparkles, Upload, X, Plus, Trash2,
   Check, Eye, Save, FileText, ChevronRight, Info, Globe, Building,
   Bed, CreditCard, Coffee, Layers, AlertCircle, Image as ImageIcon,
-  CheckCircle2, DollarSign, Users, AlertTriangle, ChevronDown, CheckSquare, Square
+  CheckCircle2, DollarSign, Users, AlertTriangle, ChevronDown, CheckSquare, Square, Lock
 } from 'lucide-react';
 
 // ==========================================
@@ -229,6 +229,15 @@ export default function RestaurantForm({ hotelId, restaurantId, initialData, onS
   const [formData, setFormData] = useState<RestaurantFormData>({ ...INITIAL_FORM_DATA, hotelId });
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // --- FREEMIUM STATE ---
+  const [userPlan, setUserPlan] = useState('free');
+  const [upgradeModalFeature, setUpgradeModalFeature] = useState<string | null>(null);
+  const isPro = ['pro', 'premium', 'agent_pro', 'admin'].includes(userPlan.toLowerCase());
+
+  const triggerUpgrade = (feature: string) => {
+    if (!isPro) setUpgradeModalFeature(feature);
+  };
   const [activeTab, setActiveTab] = useState<'form' | 'preview'>('form');
   const [activeSection, setActiveSection] = useState<string>('identity');
 
@@ -251,11 +260,26 @@ export default function RestaurantForm({ hotelId, restaurantId, initialData, onS
     setIsLoading(true);
     try {
       const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      
+      // Fetch User Plan
+      const userRes = await fetch(`/api/users?uid=${auth.currentUser?.uid}`, { headers: { 'Authorization': `Bearer ${idToken}` } });
+      const userData = await userRes.json();
+      const currentPlan = userData.user?.planTier || userData.planTier || 'free';
+      setUserPlan(currentPlan);
+
       const res = await fetch(`/api/restaurants?hotelId=${hotelId}`, {
         headers: { 'Authorization': `Bearer ${idToken}` }
       });
       if (res.ok) {
         const list = await res.json();
+        
+        // 1 Restaurant Limit for Free Users
+        if (!restaurantId && !['pro', 'premium', 'agent_pro', 'admin'].includes(currentPlan.toLowerCase()) && list.length >= 1) {
+           alert("Free plan is limited to 1 restaurant. Please upgrade to Pro.");
+           if (onCancel) onCancel();
+           return;
+        }
+
         const existing = list.find((r: any) => r.id === restaurantId || r._id === restaurantId);
         if (existing) {
           setFormData(prev => ({ ...prev, ...existing, hotelId }));
@@ -300,6 +324,10 @@ export default function RestaurantForm({ hotelId, restaurantId, initialData, onS
 
   const handleGalleryChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return;
+    if (!isPro) {
+      triggerUpgrade("Unlimited Photo Gallery (Free Tier Limited to 1 Cover Photo)");
+      return;
+    }
     setGalleryUploading(true);
     const urls: string[] = [];
     for (let i = 0; i < e.target.files.length; i++) {
@@ -424,6 +452,31 @@ export default function RestaurantForm({ hotelId, restaurantId, initialData, onS
   return (
     <div className="max-w-7xl mx-auto pb-24 font-sans text-slate-800 animate-in fade-in duration-300">
       
+      {/* UPGRADE MODAL */}
+      {upgradeModalFeature && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-[#0055FF] w-full max-w-md rounded-3xl p-8 shadow-2xl relative overflow-hidden border-4 border-[#0055FF]">
+            <div className="absolute top-0 left-0 w-full h-full bg-white/5 pointer-events-none"></div>
+            <button onClick={() => setUpgradeModalFeature(null)} className="absolute top-4 right-4 text-white/70 hover:text-white"><X size={24}/></button>
+            <div className="flex flex-col items-center text-center relative z-10">
+              <div className="w-16 h-16 bg-amber-400 rounded-full flex items-center justify-center mb-4 shadow-[0_0_30px_rgba(251,191,36,0.4)]">
+                <Lock size={32} className="text-[#0055FF]" />
+              </div>
+              <h3 className="text-2xl font-black text-white mb-2">Unlock {upgradeModalFeature}</h3>
+              <p className="text-blue-100 font-medium mb-8">
+                Free plan members are limited to basic features and 1 restaurant. Upgrade to Pro for complete control, advanced policies, and unlimited media uploads.
+              </p>
+              <button onClick={() => window.location.href = '/dashboard/subscription'} className="w-full py-4 bg-amber-400 hover:bg-amber-300 text-[#0055FF] rounded-2xl font-black text-lg transition-transform hover:scale-105 shadow-lg">
+                Upgrade to Pro Now
+              </button>
+              <button onClick={() => setUpgradeModalFeature(null)} className="mt-4 text-white/70 hover:text-white font-bold text-sm">
+                Maybe Later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* HEADER SECTION */}
       <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200 py-4 px-6 mb-8 rounded-2xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
         <div>
@@ -860,28 +913,32 @@ export default function RestaurantForm({ hotelId, restaurantId, initialData, onS
               </div>
 
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 tracking-wider mb-2">
-                  Special Hours
+                <label className="block text-xs font-black uppercase text-slate-500 tracking-wider mb-2 flex items-center gap-2">
+                  Special Hours {!isPro && <Lock size={12} className="text-amber-500" />}
                 </label>
                 <input
                   type="text"
-                  placeholder="Example: Friday: Dinner begins at 6:00 PM."
+                  readOnly={!isPro}
+                  onClick={(e) => { if (!isPro) { e.preventDefault(); triggerUpgrade("Special Hours & Custom Notes"); } }}
+                  placeholder={isPro ? "Example: Friday: Dinner begins at 6:00 PM." : "Locked on Free Plan"}
                   value={formData.specialHours}
                   onChange={e => setFormData({ ...formData, specialHours: e.target.value })}
-                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-[#0065eb] outline-none"
+                  className={`w-full px-4 py-3.5 border border-slate-200 rounded-2xl text-sm font-bold text-slate-900 outline-none transition-all ${!isPro ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#0065eb]'}`}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-black uppercase text-slate-500 tracking-wider mb-2">
-                  Guest Hours Note
+                <label className="block text-xs font-black uppercase text-slate-500 tracking-wider mb-2 flex items-center gap-2">
+                  Guest Hours Note {!isPro && <Lock size={12} className="text-amber-500" />}
                 </label>
                 <input
                   type="text"
-                  placeholder="Example: Breakfast is served daily from 6:30 AM to 10:30 AM."
+                  readOnly={!isPro}
+                  onClick={(e) => { if (!isPro) { e.preventDefault(); triggerUpgrade("Special Hours & Custom Notes"); } }}
+                  placeholder={isPro ? "Example: Breakfast is served daily from 6:30 AM to 10:30 AM." : "Locked on Free Plan"}
                   value={formData.guestHoursNote}
                   onChange={e => setFormData({ ...formData, guestHoursNote: e.target.value })}
-                  className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-[#0065eb] outline-none"
+                  className={`w-full px-4 py-3.5 border border-slate-200 rounded-2xl text-sm font-bold text-slate-900 outline-none transition-all ${!isPro ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#0065eb]'}`}
                 />
                 <p className="text-[11px] text-slate-400 mt-2">
                   The system generates standard hours automatically; use this note for explicit guest clarification.
@@ -981,7 +1038,10 @@ export default function RestaurantForm({ hotelId, restaurantId, initialData, onS
               </div>
               <button
                 type="button"
-                onClick={() => setFormData({ ...formData, reservationsEnabled: !formData.reservationsEnabled })}
+                onClick={() => {
+                  if (!isPro) { triggerUpgrade("Advanced Table Reservations"); return; }
+                  setFormData({ ...formData, reservationsEnabled: !formData.reservationsEnabled });
+                }}
                 className={`w-14 h-7 rounded-full transition-colors relative p-0.5 ${
                   formData.reservationsEnabled ? 'bg-green-500' : 'bg-slate-300'
                 }`}
@@ -1094,7 +1154,10 @@ export default function RestaurantForm({ hotelId, restaurantId, initialData, onS
               </div>
               <button
                 type="button"
-                onClick={() => setFormData({ ...formData, roomServiceEnabled: !formData.roomServiceEnabled })}
+                onClick={() => {
+                  if (!isPro) { triggerUpgrade("Room Service Integration"); return; }
+                  setFormData({ ...formData, roomServiceEnabled: !formData.roomServiceEnabled });
+                }}
                 className={`w-14 h-7 rounded-full transition-colors relative p-0.5 ${
                   formData.roomServiceEnabled ? 'bg-green-500' : 'bg-slate-300'
                 }`}
@@ -1342,17 +1405,21 @@ export default function RestaurantForm({ hotelId, restaurantId, initialData, onS
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <input
                     type="url"
-                    placeholder="External Menu URL (e.g. https://...)"
+                    readOnly={!isPro}
+                    onClick={(e) => { if (!isPro) { e.preventDefault(); triggerUpgrade("Digital Menu Links"); } }}
+                    placeholder={isPro ? "External Menu URL (e.g. https://...)" : "External Menu URL (Locked)"}
                     value={formData.menuExternalUrl}
                     onChange={e => setFormData({ ...formData, menuExternalUrl: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white"
+                    className={`w-full px-4 py-3 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white ${!isPro ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-slate-50'}`}
                   />
                   <input
                     type="text"
-                    placeholder="Menu PDF Download URL"
+                    readOnly={!isPro}
+                    onClick={(e) => { if (!isPro) { e.preventDefault(); triggerUpgrade("Digital Menu Links"); } }}
+                    placeholder={isPro ? "Menu PDF Download URL" : "Menu PDF Download URL (Locked)"}
                     value={formData.menuPdfUrl}
                     onChange={e => setFormData({ ...formData, menuPdfUrl: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white"
+                    className={`w-full px-4 py-3 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white ${!isPro ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-slate-50'}`}
                   />
                 </div>
                 <p className="text-[11px] text-slate-400 mt-2 italic">
@@ -1415,13 +1482,16 @@ export default function RestaurantForm({ hotelId, restaurantId, initialData, onS
                     <span className="text-xs font-bold text-slate-800">{item.label}</span>
                     <button
                       type="button"
-                      onClick={() => setFormData({
-                        ...formData,
-                        publicDiscovery: {
-                          ...formData.publicDiscovery,
-                          [item.key]: !(formData.publicDiscovery as any)[item.key]
-                        }
-                      })}
+                      onClick={() => {
+                        if (!isPro) { triggerUpgrade("Advanced Public Discovery"); return; }
+                        setFormData({
+                          ...formData,
+                          publicDiscovery: {
+                            ...formData.publicDiscovery,
+                            [item.key]: !(formData.publicDiscovery as any)[item.key]
+                          }
+                        });
+                      }}
                       className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
                         (formData.publicDiscovery as any)[item.key] ? 'bg-green-500' : 'bg-slate-300'
                       }`}

@@ -403,8 +403,9 @@ export default function HotelDetailPage() {
       console.warn("Availability check failed, proceeding to manual approval", err);
     }
     
-    // 4. Final Total Price
+    // 4. Final Total Price (Estimated, backend will recalculate authoritatively)
     const totalPrice = roomPrice * Number(bookingData.roomCount || 1) * nights;
+    const idempotencyKey = crypto.randomUUID(); // Generates unique request ID
 
     try {
       const idToken = user ? await user.getIdToken() : '';
@@ -423,16 +424,28 @@ export default function HotelDetailPage() {
           guestPhone: bookingData.phone, 
           roomName: roomName,          
           totalAmount: totalPrice,      
+          idempotencyKey: idempotencyKey, // Send to backend to prevent duplicates
           status: 'pending',
           source: 'whatsapp_redirect'
         })
       });
-      if (!res.ok) console.error("Database save error", await res.text());
+      
+      const responseData = await res.json();
+      
+      if (!res.ok) {
+         alert(`❌ Booking Failed: ${responseData.error || 'Server error'}`);
+         setIsSubmitting(false);
+         return; // STOP execution, do not redirect to WhatsApp
+      }
     } catch (e) {
       console.error("Booking save error", e);
-    } finally {
+      alert("❌ A network error occurred while booking.");
       setIsSubmitting(false);
+      return; // STOP execution
     }
+
+    // Booking succeeded in database, now we can safely redirect
+    setIsSubmitting(false);
 
     const message = `Hello, I would like to book a stay at *${hotel.name}*.\n\n` +
       `👤 *Name:* ${bookingData.name}\n` +

@@ -191,26 +191,37 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
   const handleManualSlide = (idx: number) => { stopSlideTimer(); setActiveImg(idx); setTimeout(startSlideTimer, 5000); };
   const scroll = (direction: 'up' | 'down') => { if (scrollRef.current) { const amount = 320; scrollRef.current.scrollBy({ left: direction === 'down' ? amount : -amount, behavior: 'smooth' }); } };
 
-  // Booking Submit Logic (Verified endpoint)
+  // Booking Submit Logic (Migrated to secure API endpoint)
   const handleTourSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setTourLoading(true);
     try {
-      const generatedId = Date.now().toString(36) + Math.random().toString(36).substring(2, 10);
-      const { error: tourError } = await supabase.from('tour_requests').insert([{
-        _id: generatedId,
-        propertyId: property.id,
-        propertyName: property.title,
-        agentId: property.agentId,
-        userName: tourData.name,
-        userPhone: tourData.phone,
-        userId: currentUser?.uid || 'anonymous_web',
-        date: tourData.date,
-        time: tourData.time,
-        timestamp: new Date().toISOString(),
-        status: 'pending'
-      }]);
-      if (tourError) throw tourError;
+      const idToken = currentUser ? await currentUser.getIdToken() : '';
+      const idempotencyKey = crypto.randomUUID();
+
+      const res = await fetch('/api/tour_requests', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(idToken ? { 'Authorization': `Bearer ${idToken}` } : {}) 
+        },
+        body: JSON.stringify({
+          propertyId: property.id,
+          propertyName: property.title,
+          agentId: property.agentId,
+          userName: tourData.name,
+          userPhone: tourData.phone,
+          userId: currentUser?.uid || 'anonymous_web',
+          date: tourData.date,
+          time: tourData.time,
+          idempotencyKey: idempotencyKey
+        })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to submit booking.");
+      }
 
       const agentPhone = isAgentPro(agent) ? (property.contactPhone || agent?.phone || "+252653227084") : "+252653227084";
       const msg = `Salaam, waxan rabaa inan dalbado booqasho guri: '${property.title}'.\nTaariikhda: ${tourData.date}\nSaacada: ${tourData.time}\nMagacaygu waa: ${tourData.name}`;
@@ -218,8 +229,8 @@ export default function PropertyDetailView({ initialProperty, initialAgent }: { 
       setTourSuccess(true);
       setTimeout(() => setTourSuccess(false), 5000);
       setTourData({ name: '', phone: '', date: '', time: '' });
-    } catch (error) { 
-      alert("Failed to submit booking."); 
+    } catch (error: any) { 
+      alert(error.message); 
     } finally { 
       setTourLoading(false); 
     }

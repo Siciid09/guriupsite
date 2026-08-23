@@ -34,24 +34,41 @@ export async function POST(request: Request) {
     const { 
       planId, 
       planName, 
-      amount, 
+      amount, // Ignored from client to prevent price tampering
       customerName, 
       businessName, 
       businessType, 
       contactPhone, 
-      location 
+      location,
+      idempotencyKey 
     } = body;
 
-    if (!planId || !amount) {
+    if (!planId) {
       return NextResponse.json({ error: 'Missing required order fields.' }, { status: 400 });
+    }
+
+    // Server-side authoritative pricing map
+    const PLAN_PRICES: Record<string, number> = {
+      'free': 0,
+      'pro': 49.99,
+      'premium': 99.99,
+      'agent_pro': 149.99
+    };
+
+    // Calculate authoritative amount based on planId
+    const authoritativeAmount = PLAN_PRICES[planId.toLowerCase()] ?? 0;
+
+    if (authoritativeAmount === 0 && planId.toLowerCase() !== 'free') {
+       return NextResponse.json({ error: 'Invalid plan selected.' }, { status: 400 });
     }
 
     // 2. Build Order Payload for Supabase
     const orderPayload = {
+      _id: idempotencyKey || crypto.randomUUID(), // Enforce idempotency
       userId: decodedToken.uid,
       planId,
       planName: planName || 'Premium Plan',
-      amount: Number(amount),
+      amount: authoritativeAmount, // Use server-calculated amount
       customerName: customerName || decodedToken.name || 'Valued Customer',
       businessName: businessName || '',
       businessType: businessType || 'Independent Agent',

@@ -152,6 +152,7 @@ export default function RoomInventory({
       const targetPhysicalRoom = physicalRooms.find(pr => (pr._id || pr.id) === physicalRoomId);
       const actualRoomNumber = targetPhysicalRoom?.roomNumber || contextRoomName;
       
+      const idempotencyKey = crypto.randomUUID();
       const payload = {
         hotelId,
         roomId: contextRoomTypeId, // 🔥 FIX: The database column is 'roomId', not 'roomTypeId'
@@ -165,6 +166,7 @@ export default function RoomInventory({
         status: 'checked-in', // Instantly occupy
         paymentStatus: paymentReceived ? 'paid' : 'pending',
         totalAmount: 0, // 🔥 FIXED: Changed from totalPrice to totalAmount
+        idempotencyKey: idempotencyKey, // Prevent double-clicks causing dual entries
         source: 'admin_manual'
       };
 
