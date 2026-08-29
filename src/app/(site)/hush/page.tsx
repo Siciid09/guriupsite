@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -12,6 +14,8 @@ import {
   Title,
   Tooltip,
   Legend,
+  LineController, // Added to fix the Uncaught Error
+  BarController,  // Added to fix the Uncaught Error
 } from 'chart.js';
 import { Bar, Doughnut } from 'react-chartjs-2';
 
@@ -25,7 +29,9 @@ ChartJS.register(
   ArcElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  LineController,
+  BarController
 );
 
 // --- TYPES ---
@@ -42,7 +48,6 @@ interface ExpenseItem {
 }
 
 // --- INITIAL CORRECTED DATA ---
-// Added the 11 missing sales and corrected the Masaariif expense to perfectly balance at $190
 const initialInventory: InventoryItem[] = [
   { id: 1, name: 'Cabaayd', price: 21 }, { id: 2, name: 'Cabaayd', price: 20 },
   { id: 3, name: 'Toob', price: 13 }, { id: 4, name: 'Cabaayd', price: 20 },
@@ -99,7 +104,6 @@ const initialInventory: InventoryItem[] = [
   { id: 105, name: 'cabaayad yar', price: 17 }, { id: 106, name: 'cabaayad yar', price: 18 },
   { id: 107, name: 'cabaayad', price: 17 }, { id: 108, name: 'toob', price: 13 },
   { id: 109, name: 'cabaayad yar', price: 17 },
-  // RECOVERED SALES ADDED BELOW
   { id: 110, name: 'Toob', price: 14 }, { id: 111, name: 'Toob', price: 15 },
   { id: 112, name: 'Toob', price: 16 }, { id: 113, name: 'Dirac Wil', price: 16 },
   { id: 114, name: 'Cabaayad', price: 23 }, { id: 115, name: 'Cabaayad', price: 21 },
@@ -120,13 +124,17 @@ const initialExpenses: ExpenseItem[] = [
   { id: 9, name: 'Bir salax', amount: 6 },
   { id: 10, name: 'Xaqal ciid', amount: 30 },
   { id: 11, name: 'Masaariif (15 Apr - 17 Jun)', amount: 833 },
-  { id: 12, name: 'Masaariif (17 Jun - 29 Jul)', amount: 546 } // Corrected minus $63
+  { id: 12, name: 'Masaariif (17 Jun - 29 Jul)', amount: 546 }
 ];
 
 export default function Tracker() {
   const [inventory, setInventory] = useState<InventoryItem[]>(initialInventory);
   const [expenses, setExpenses] = useState<ExpenseItem[]>(initialExpenses);
   const [activeTab, setActiveTab] = useState<'inventory' | 'expenses' | 'analytics'>('inventory');
+  
+  // PDF Printing State
+  const [isPrinting, setIsPrinting] = useState(false);
+  const printRef = useRef<HTMLDivElement>(null);
 
   // Form states
   const [newInvName, setNewInvName] = useState('');
@@ -180,9 +188,50 @@ export default function Tracker() {
 
   const deleteExpense = (id: number) => setExpenses(expenses.filter(e => e.id !== id));
 
+  // PDF Download Logic
+  const handleDownloadPDF = () => {
+    setIsPrinting(true);
+    // Allow DOM to update and render all tabs fully
+    setTimeout(async () => {
+      if (!printRef.current) return;
+      try {
+        const canvas = await html2canvas(printRef.current, { 
+          scale: 2, 
+          backgroundColor: '#0f172a',
+          useCORS: true 
+        });
+        const imgData = canvas.toDataURL('image/png');
+        
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        
+        let heightLeft = pdfHeight;
+        let position = 0;
+
+        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+        heightLeft -= pageHeight;
+
+        // Create new pages if the content overflows A4 size
+        while (heightLeft >= 0) {
+          position = heightLeft - pdfHeight;
+          pdf.addPage();
+          pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+          heightLeft -= pageHeight;
+        }
+
+        pdf.save('Dashboard_Report.pdf');
+      } catch (err) {
+        console.error("PDF Generation Failed", err);
+      } finally {
+        setIsPrinting(false);
+      }
+    }, 800);
+  };
+
   // Chart Data Preparation
   const chartData = useMemo(() => {
-    // Inventory Chart Data
     const groupedInv = inventory.reduce((acc: any, item) => {
       let key = item.name.trim().toLowerCase();
       if (key === 'cabaayd') key = 'cabaayad'; 
@@ -196,7 +245,6 @@ export default function Tracker() {
     const invVals = Object.values(groupedInv).map((d: any) => d.totalValue);
     const invCounts = Object.values(groupedInv).map((d: any) => d.count);
 
-    // Expense Chart Data
     const expLabels = expenses.map(e => e.name);
     const expData = expenses.map(e => e.amount);
     const expColors = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1'];
@@ -242,10 +290,6 @@ export default function Tracker() {
 
   return (
     <>
-      {/* 
-        Injecting the CSS directly into the component ensures 100% visual match 
-        with your original HTML, without needing to configure global files.
-      */}
       <style dangerouslySetInnerHTML={{ __html: `
         :root {
             --bg-color: #0f172a;
@@ -265,9 +309,14 @@ export default function Tracker() {
         }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
         body { background-color: var(--bg-color); color: var(--text-main); min-height: 100vh; padding: 2rem 1rem; display: flex; justify-content: center; }
-        .app-container { width: 100%; max-width: 950px; background: var(--surface-color); border-radius: var(--radius); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); overflow: hidden; border: 1px solid var(--border); }
+        .app-container { width: 100%; max-width: 950px; background: var(--surface-color); border-radius: var(--radius); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); overflow: hidden; border: 1px solid var(--border); position: relative; }
         .header { padding: 2rem; text-align: center; background: linear-gradient(to right bottom, #1e293b, #0f172a); border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 1.5rem; }
-        .stats-row { display: flex; justify-content: space-around; flex-wrap: wrap; gap: 1.5rem; }
+        
+        .pdf-btn { position: absolute; top: 1rem; right: 1rem; background: var(--primary-color); color: white; padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; transition: var(--transition); z-index: 10; }
+        .pdf-btn:hover { background: var(--primary-hover); transform: translateY(-2px); }
+        .pdf-btn:disabled { opacity: 0.7; cursor: wait; transform: none; }
+
+        .stats-row { display: flex; justify-content: space-around; flex-wrap: wrap; gap: 1.5rem; margin-top: 1.5rem; }
         .stat-box { display: flex; flex-direction: column; align-items: center; background: rgba(15, 23, 42, 0.4); padding: 1rem 2rem; border-radius: var(--radius); border: 1px solid var(--border); flex: 1; min-width: 200px; }
         .stat-label { color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.5rem; }
         .stat-value { font-size: 2.25rem; font-weight: 800; }
@@ -290,24 +339,62 @@ export default function Tracker() {
         button.btn-add:hover { background: var(--primary-hover); transform: translateY(-2px); }
         button.btn-add-expense { background: var(--danger); }
         button.btn-add-expense:hover { background: var(--danger-hover); }
+        
         .item-list { list-style: none; display: flex; flex-direction: column; gap: 0.75rem; max-height: 400px; overflow-y: auto; padding-right: 0.5rem; }
+        .item-list.print-mode { max-height: none; overflow: visible; } /* Removes scrollbar for full printing */
         .item-list::-webkit-scrollbar { width: 6px; }
         .item-list::-webkit-scrollbar-track { background: var(--bg-color); border-radius: 4px; }
         .item-list::-webkit-scrollbar-thumb { background: var(--surface-hover); border-radius: 4px; }
+        
         .list-item { display: grid; grid-template-columns: 2fr 1fr auto; gap: 1rem; background: var(--bg-color); padding: 0.75rem; border-radius: var(--radius); align-items: center; border: 1px solid transparent; transition: var(--transition); }
         .list-item:hover { border-color: var(--border); background: var(--surface-color); }
-        .list-item input { background: transparent; border: 1px solid transparent; padding: 0.5rem; }
+        .list-item input { background: transparent; border: 1px solid transparent; padding: 0.5rem; width: 100%; }
         .list-item input:hover { background: var(--surface-hover); }
         .list-item input:focus { background: var(--bg-color); border-color: var(--primary-color); }
+        
         .btn-delete { background: rgba(244, 63, 94, 0.1); color: var(--danger); border: none; width: 36px; height: 36px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: var(--transition); }
         .btn-delete:hover { background: var(--danger); color: white; }
         .chart-container { position: relative; height: 450px; width: 100%; margin-bottom: 2rem; }
         .chart-wrapper-dual { display: flex; flex-direction: column; gap: 2rem; }
+        .tab-title-print { display: none; color: var(--text-main); font-size: 1.5rem; margin-bottom: 1rem; font-weight: bold; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;}
+
+        /* Media Queries for full Responsiveness */
+        @media (max-width: 768px) {
+          .stats-row { flex-direction: column; }
+          .stat-box { width: 100%; }
+          .add-form { grid-template-columns: 1fr; }
+          button.btn-add { padding: 1rem; }
+          .list-item { grid-template-columns: 1fr; position: relative; padding-right: 50px; }
+          .btn-delete { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); }
+          .tabs { flex-direction: column; }
+          .pdf-btn { position: relative; top: 0; right: 0; width: 100%; justify-content: center; margin-bottom: 1rem; }
+          .header { padding: 1.5rem 1rem; }
+          .tab-content { padding: 1rem; }
+        }
+
+        /* Print Specific Overrides */
+        .printing-active .tabs, .printing-active .pdf-btn, .printing-active .add-form, .printing-active .btn-delete { display: none !important; }
+        .printing-active .tab-title-print { display: block; }
+        .printing-active .tab-content { padding: 1rem 2rem; border-bottom: 2px dashed var(--border); animation: none; }
       `}} />
 
-      <div className="app-container">
+      <div 
+        ref={printRef} 
+        className={`app-container ${isPrinting ? 'printing-active' : ''}`}
+        style={isPrinting ? { maxWidth: '1000px', width: '1000px' } : undefined}
+      >
+        {!isPrinting && (
+          <button className="pdf-btn" onClick={handleDownloadPDF} disabled={isPrinting}>
+            <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            {isPrinting ? 'Generating PDF...' : 'Download PDF Report'}
+          </button>
+        )}
+
         {/* Header & Live Totals */}
         <div className="header">
+          {isPrinting && <h2>Comprehensive Financial Report</h2>}
           <div className="stats-row">
             <div className="stat-box">
               <div className="stat-label">Total Items</div>
@@ -340,7 +427,7 @@ export default function Tracker() {
           </div>
         </div>
 
-        {/* Navigation Tabs */}
+        {/* Navigation Tabs (Hidden during print) */}
         <div className="tabs">
           <button 
             className={`tab-btn ${activeTab === 'inventory' ? 'active' : ''}`} 
@@ -362,9 +449,10 @@ export default function Tracker() {
           </button>
         </div>
 
-        {/* Tab 1: Inventory */}
-        {activeTab === 'inventory' && (
+        {/* Tab 1: Inventory (Always visible if printing) */}
+        {(activeTab === 'inventory' || isPrinting) && (
           <div className="tab-content">
+            <h3 className="tab-title-print">Sales Record</h3>
             <form className="add-form" onSubmit={handleAddInventory}>
               <input 
                 type="text" 
@@ -383,19 +471,21 @@ export default function Tracker() {
               />
               <button type="submit" className="btn-add">Add Sale</button>
             </form>
-            <ul className="item-list">
+            <ul className={`item-list ${isPrinting ? 'print-mode' : ''}`}>
               {inventory.map(item => (
                 <li key={item.id} className="list-item">
                   <input 
                     type="text" 
                     value={item.name} 
                     onChange={(e) => updateInventory(item.id, 'name', e.target.value)} 
+                    readOnly={isPrinting}
                   />
                   <input 
                     type="number" 
                     step="0.01" 
                     value={item.price} 
                     onChange={(e) => updateInventory(item.id, 'price', e.target.value)} 
+                    readOnly={isPrinting}
                   />
                   <button type="button" className="btn-delete" onClick={() => deleteInventory(item.id)}>
                     <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -408,9 +498,10 @@ export default function Tracker() {
           </div>
         )}
 
-        {/* Tab 2: Expenses */}
-        {activeTab === 'expenses' && (
+        {/* Tab 2: Expenses (Always visible if printing) */}
+        {(activeTab === 'expenses' || isPrinting) && (
           <div className="tab-content">
+            <h3 className="tab-title-print">Expenses Record</h3>
             <form className="add-form" onSubmit={handleAddExpense}>
               <input 
                 type="text" 
@@ -431,7 +522,7 @@ export default function Tracker() {
               />
               <button type="submit" className="btn-add btn-add-expense">Add Expense</button>
             </form>
-            <ul className="item-list">
+            <ul className={`item-list ${isPrinting ? 'print-mode' : ''}`}>
               {expenses.map(exp => (
                 <li key={exp.id} className="list-item">
                   <input 
@@ -439,6 +530,7 @@ export default function Tracker() {
                     className="expense-input" 
                     value={exp.name} 
                     onChange={(e) => updateExpense(exp.id, 'name', e.target.value)} 
+                    readOnly={isPrinting}
                   />
                   <input 
                     type="number" 
@@ -446,6 +538,7 @@ export default function Tracker() {
                     step="0.01" 
                     value={exp.amount} 
                     onChange={(e) => updateExpense(exp.id, 'amount', e.target.value)} 
+                    readOnly={isPrinting}
                   />
                   <button type="button" className="btn-delete" onClick={() => deleteExpense(exp.id)}>
                     <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -458,9 +551,10 @@ export default function Tracker() {
           </div>
         )}
 
-        {/* Tab 3: Analytics */}
-        {activeTab === 'analytics' && (
+        {/* Tab 3: Analytics (Always visible if printing) */}
+        {(activeTab === 'analytics' || isPrinting) && (
           <div className="tab-content">
+            <h3 className="tab-title-print">Analytics Overview</h3>
             <div className="chart-wrapper-dual">
               <div className="chart-container" style={{ height: '300px' }}>
                 <h3 style={{ color: 'var(--text-muted)', textAlign: 'center', marginBottom: '10px' }}>Sales Breakdown</h3>
