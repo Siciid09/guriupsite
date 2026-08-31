@@ -1,8 +1,6 @@
 'use client';
 
 import React, { useState, useMemo, useRef } from 'react';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -14,8 +12,8 @@ import {
   Title,
   Tooltip,
   Legend,
-  LineController, // Added to fix the Uncaught Error
-  BarController,  // Added to fix the Uncaught Error
+  LineController,
+  BarController,
 } from 'chart.js';
 import { Bar, Doughnut } from 'react-chartjs-2';
 
@@ -188,46 +186,14 @@ export default function Tracker() {
 
   const deleteExpense = (id: number) => setExpenses(expenses.filter(e => e.id !== id));
 
-  // PDF Download Logic
+  // PDF Download Logic (Updated for lightweight, selectable PDF generation)
   const handleDownloadPDF = () => {
     setIsPrinting(true);
-    // Allow DOM to update and render all tabs fully
-    setTimeout(async () => {
-      if (!printRef.current) return;
-      try {
-        const canvas = await html2canvas(printRef.current, { 
-          scale: 2, 
-          backgroundColor: '#0f172a',
-          useCORS: true 
-        });
-        const imgData = canvas.toDataURL('image/png');
-        
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-        const pageHeight = pdf.internal.pageSize.getHeight();
-        
-        let heightLeft = pdfHeight;
-        let position = 0;
-
-        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
-        heightLeft -= pageHeight;
-
-        // Create new pages if the content overflows A4 size
-        while (heightLeft >= 0) {
-          position = heightLeft - pdfHeight;
-          pdf.addPage();
-          pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
-          heightLeft -= pageHeight;
-        }
-
-        pdf.save('Dashboard_Report.pdf');
-      } catch (err) {
-        console.error("PDF Generation Failed", err);
-      } finally {
-        setIsPrinting(false);
-      }
-    }, 800);
+    // Allow React time to render all tabs, then trigger native print
+    setTimeout(() => {
+      window.print();
+      setIsPrinting(false);
+    }, 400);
   };
 
   // Chart Data Preparation
@@ -341,7 +307,6 @@ export default function Tracker() {
         button.btn-add-expense:hover { background: var(--danger-hover); }
         
         .item-list { list-style: none; display: flex; flex-direction: column; gap: 0.75rem; max-height: 400px; overflow-y: auto; padding-right: 0.5rem; }
-        .item-list.print-mode { max-height: none; overflow: visible; } /* Removes scrollbar for full printing */
         .item-list::-webkit-scrollbar { width: 6px; }
         .item-list::-webkit-scrollbar-track { background: var(--bg-color); border-radius: 4px; }
         .item-list::-webkit-scrollbar-thumb { background: var(--surface-hover); border-radius: 4px; }
@@ -372,23 +337,67 @@ export default function Tracker() {
           .tab-content { padding: 1rem; }
         }
 
-        /* Print Specific Overrides */
-        .printing-active .tabs, .printing-active .pdf-btn, .printing-active .add-form, .printing-active .btn-delete { display: none !important; }
-        .printing-active .tab-title-print { display: block; }
-        .printing-active .tab-content { padding: 1rem 2rem; border-bottom: 2px dashed var(--border); animation: none; }
+        /* NATIVE PDF & PRINT OVERRIDES */
+        @media print {
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          body { 
+            background-color: var(--bg-color); 
+            padding: 0;
+            margin: 0;
+          }
+          .app-container { 
+            box-shadow: none; 
+            border: none; 
+            max-width: 100%; 
+            width: 100%; 
+          }
+          .printing-active .tabs, 
+          .printing-active .pdf-btn, 
+          .printing-active .add-form, 
+          .printing-active .btn-delete,
+          .tabs, 
+          .pdf-btn, 
+          .add-form, 
+          .btn-delete { 
+            display: none !important; 
+          }
+          .printing-active .tab-title-print,
+          .tab-title-print { 
+            display: block !important; 
+          }
+          .printing-active .tab-content,
+          .tab-content { 
+            padding: 1rem 2rem; 
+            border-bottom: 2px dashed var(--border); 
+            animation: none; 
+          }
+          .item-list { 
+            max-height: none !important; 
+            overflow: visible !important; 
+          }
+          .list-item {
+            page-break-inside: avoid;
+          }
+          .chart-container {
+            page-break-inside: avoid;
+          }
+        }
       `}} />
 
       <div 
         ref={printRef} 
         className={`app-container ${isPrinting ? 'printing-active' : ''}`}
-        style={isPrinting ? { maxWidth: '1000px', width: '1000px' } : undefined}
       >
         {!isPrinting && (
           <button className="pdf-btn" onClick={handleDownloadPDF} disabled={isPrinting}>
             <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
-            {isPrinting ? 'Generating PDF...' : 'Download PDF Report'}
+            {isPrinting ? 'Preparing Document...' : 'Print / Save PDF Report'}
           </button>
         )}
 
@@ -471,7 +480,7 @@ export default function Tracker() {
               />
               <button type="submit" className="btn-add">Add Sale</button>
             </form>
-            <ul className={`item-list ${isPrinting ? 'print-mode' : ''}`}>
+            <ul className="item-list">
               {inventory.map(item => (
                 <li key={item.id} className="list-item">
                   <input 
@@ -522,7 +531,7 @@ export default function Tracker() {
               />
               <button type="submit" className="btn-add btn-add-expense">Add Expense</button>
             </form>
-            <ul className={`item-list ${isPrinting ? 'print-mode' : ''}`}>
+            <ul className="item-list">
               {expenses.map(exp => (
                 <li key={exp.id} className="list-item">
                   <input 
