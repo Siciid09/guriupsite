@@ -92,11 +92,12 @@ export default function Step2Questions({ roleData }: { roleData: any }) {
       </div>
 
       {/* 2. SCROLLABLE CONTENT */}
+      {/* ADDED: overscroll-contain to stop scroll chaining */}
       <motion.div 
         variants={containerVariants} 
         initial="hidden" 
         animate="show" 
-        className="space-y-10 overflow-y-auto max-h-[60vh] w-full pr-2 md:pr-4 pb-10 custom-scrollbar"
+        className="space-y-10 overflow-y-auto overscroll-contain max-h-[60vh] w-full pr-2 md:pr-4 pb-10 custom-scrollbar"
       >
         
         {/* Render Grouped Questions */}
@@ -134,11 +135,12 @@ export default function Step2Questions({ roleData }: { roleData: any }) {
                       <span className={`flex-1 ${isAnswered ? 'text-white' : ''}`}>{qData.display}</span>
                     </label>
                     <div className="w-full mt-3 sm:pl-10">
+                      {/* ADDED: overscroll-contain */}
                       <textarea 
                         rows={3}
                         value={answers[qData.original] || ''}
                         onChange={(e) => setAnswer(qData.original, e.target.value)}
-                        className="w-full bg-black/40 border border-white/10 focus:border-indigo-400 focus:bg-[#131b2f] focus:ring-2 focus:ring-indigo-500/20 rounded-xl p-4 text-white placeholder-gray-500 resize-y overflow-y-auto min-h-[100px] max-h-[400px] transition-all outline-none"
+                        className="w-full bg-black/40 border border-white/10 focus:border-indigo-400 focus:bg-[#131b2f] focus:ring-2 focus:ring-indigo-500/20 rounded-xl p-4 text-white placeholder-gray-500 resize-y overflow-y-auto overscroll-contain min-h-[100px] max-h-[400px] transition-all outline-none"
                         placeholder="Type your workflow details here..."
                       />
                     </div>
@@ -158,11 +160,12 @@ export default function Step2Questions({ roleData }: { roleData: any }) {
               <div className="p-2 bg-amber-500/20 rounded-lg text-amber-400 flex-shrink-0"><AlertCircle className="w-5 h-5" /></div>
               <label className="text-base sm:text-lg font-medium text-amber-100 flex-1">Anything missing? (Optional)</label>
             </div>
+            {/* ADDED: overscroll-contain */}
             <textarea 
               rows={2}
               value={missingRequirements}
               onChange={(e) => setMissingRequirements(e.target.value)}
-              className="w-full bg-black/40 border border-amber-500/20 focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 rounded-xl p-4 text-white placeholder-amber-700/50 resize-y overflow-y-auto min-h-[80px] max-h-[300px] outline-none"
+              className="w-full bg-black/40 border border-amber-500/20 focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 rounded-xl p-4 text-white placeholder-amber-700/50 resize-y overflow-y-auto overscroll-contain min-h-[80px] max-h-[300px] outline-none"
               placeholder="Explain any extra requirements or unlisted forms here..."
             />
           </div>
