@@ -60,80 +60,85 @@ export default function Step2Questions({ roleData }: { roleData: any }) {
   };
 
   return (
-    <div className="flex flex-col h-full relative">
+    <div className="flex flex-col h-full relative w-full">
       
       {/* 1. STICKY HEADER & PROGRESS */}
-      <div className="sticky top-0 z-20 bg-[#0f172a]/90 backdrop-blur-xl pb-4 border-b border-white/10 mb-6 pt-2 rounded-t-3xl -mx-2 px-2">
+      <div className="sticky top-0 z-20 bg-[#0f172a]/90 backdrop-blur-xl pb-4 border-b border-white/10 mb-6 pt-2 rounded-t-3xl -mx-2 px-2 w-full">
         <div className="flex flex-col md:flex-row md:justify-between md:items-end gap-4 mb-4">
-          <div>
+          <div className="w-full">
             <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-              <MessageSquare className="w-6 h-6 text-indigo-400" />
+              <MessageSquare className="w-6 h-6 text-indigo-400 flex-shrink-0" />
               Workflow Requirements
             </h2>
             <p className="text-gray-400 text-sm mt-1">Answer at least {minRequired} questions to proceed.</p>
           </div>
           
-          <div className="text-right">
+          <div className="text-left md:text-right w-full md:w-auto">
             <p className={`text-sm font-bold mb-2 transition-colors ${isReady ? 'text-green-400' : 'text-indigo-300'}`}>
               {isReady ? "Awesome! You hit the minimum." : `Keep going! ${minRequired - answeredCount} more required.`}
             </p>
             <div className="flex items-center gap-3">
-              <div className="w-48 h-2.5 bg-gray-800 rounded-full overflow-hidden border border-gray-700">
+              <div className="w-full md:w-48 h-2.5 bg-gray-800 rounded-full overflow-hidden border border-gray-700">
                 <motion.div 
                   className={`h-full rounded-full ${isReady ? 'bg-green-500' : 'bg-gradient-to-r from-indigo-500 to-blue-400'}`}
                   initial={{ width: 0 }}
                   animate={{ width: `${progressPercentage}%` }}
                 />
               </div>
-              <span className="text-sm font-medium text-gray-300 w-12">{answeredCount} / {minRequired}</span>
+              <span className="text-sm font-medium text-gray-300 w-12 flex-shrink-0">{answeredCount} / {minRequired}</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* 2. SCROLLABLE CONTENT */}
-      <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-10 overflow-y-auto max-h-[55vh] pr-4 pb-10 custom-scrollbar">
+      <motion.div 
+        variants={containerVariants} 
+        initial="hidden" 
+        animate="show" 
+        className="space-y-10 overflow-y-auto max-h-[60vh] w-full pr-2 md:pr-4 pb-10 custom-scrollbar"
+      >
         
         {/* Render Grouped Questions */}
-        {Object.entries(groupedQuestions).map(([category, questions], groupIdx) => {
+        {Object.entries(groupedQuestions).map(([category, questions]) => {
           const isCollapsed = collapsedGroups[category];
           return (
-          <div key={category} className="space-y-6">
-            <motion.div variants={itemVariants} className="flex items-center justify-between border-b border-white/10 pb-2 mt-4">
-              <h3 className="text-xl font-bold text-indigo-300">
+          <div key={category} className="space-y-6 w-full">
+            <motion.div variants={itemVariants} className="flex items-center justify-between border-b border-white/10 pb-2 mt-4 w-full">
+              <h3 className="text-xl font-bold text-indigo-300 truncate pr-4">
                 {category}
               </h3>
               <button 
                 onClick={() => setCollapsedGroups(prev => ({ ...prev, [category]: !prev[category] }))}
-                className="text-xs font-medium text-gray-400 hover:text-white px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg transition-colors border border-white/5"
+                className="text-xs font-medium text-gray-400 hover:text-white px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg transition-colors border border-white/5 flex-shrink-0"
               >
                 {isCollapsed ? "Show section" : "Hide section"}
               </button>
             </motion.div>
             
             {!isCollapsed && (
-              <div className="space-y-6">
+              <div className="space-y-6 w-full">
                 {questions.map((qData, idx) => {
                   const isAnswered = (answers[qData.original] || '').trim().length > 0;
               return (
-                <motion.div key={idx} variants={itemVariants} className="relative">
-                  <div className={`transition-all duration-300 p-5 rounded-2xl border ${
+                <motion.div key={idx} variants={itemVariants} className="relative w-full">
+                  <div className={`transition-all duration-300 p-4 sm:p-5 rounded-2xl border w-full ${
                     isAnswered ? 'bg-indigo-900/10 border-indigo-500/40 shadow-[0_0_15px_rgba(99,102,241,0.1)]' : 'bg-white/5 border-white/10 hover:border-white/20'
                   }`}>
-                    <label className="flex items-start gap-3 text-base md:text-lg font-medium text-gray-200 mb-3 cursor-pointer">
+                    <label className="flex items-start gap-3 text-base md:text-lg font-medium text-gray-200 mb-2 cursor-pointer w-full">
                       <span className={`flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold mt-0.5 transition-colors ${
                         isAnswered ? 'bg-indigo-500 text-white' : 'bg-white/10 text-gray-400'
                       }`}>
                         {isAnswered ? <CheckCircle2 className="w-4 h-4" /> : idx + 1}
                       </span>
-                      <span className={isAnswered ? 'text-white' : ''}>{qData.display}</span>
+                      <span className={`flex-1 ${isAnswered ? 'text-white' : ''}`}>{qData.display}</span>
                     </label>
-                    <div className="pl-10">
+                    <div className="w-full mt-3 sm:pl-10">
                       <textarea 
                         rows={3}
                         value={answers[qData.original] || ''}
                         onChange={(e) => setAnswer(qData.original, e.target.value)}
-                        className="w-full bg-black/40 border border-white/10 focus:border-indigo-400 focus:bg-[#131b2f] focus:ring-2 focus:ring-indigo-500/20 rounded-xl p-4 text-white placeholder-gray-500 resize-none transition-all outline-none"
+                        className="w-full bg-black/40 border border-white/10 focus:border-indigo-400 focus:bg-[#131b2f] focus:ring-2 focus:ring-indigo-500/20 rounded-xl p-4 text-white placeholder-gray-500 resize-y overflow-y-auto min-h-[100px] max-h-[400px] transition-all outline-none"
                         placeholder="Type your workflow details here..."
                       />
                     </div>
@@ -147,25 +152,25 @@ export default function Step2Questions({ roleData }: { roleData: any }) {
         )})}
 
         {/* 3. MISSING REQUIREMENTS */}
-        <motion.div variants={itemVariants} className="pt-8 border-t border-white/10">
-          <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/5 p-6 rounded-2xl border border-amber-500/20 group hover:border-amber-500/40 transition-all">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-amber-500/20 rounded-lg text-amber-400"><AlertCircle className="w-5 h-5" /></div>
-              <label className="text-lg font-medium text-amber-100">Anything missing? (Optional)</label>
+        <motion.div variants={itemVariants} className="pt-8 border-t border-white/10 w-full">
+          <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/5 p-4 sm:p-6 rounded-2xl border border-amber-500/20 group hover:border-amber-500/40 transition-all w-full">
+            <div className="flex items-center gap-3 mb-4 w-full">
+              <div className="p-2 bg-amber-500/20 rounded-lg text-amber-400 flex-shrink-0"><AlertCircle className="w-5 h-5" /></div>
+              <label className="text-base sm:text-lg font-medium text-amber-100 flex-1">Anything missing? (Optional)</label>
             </div>
             <textarea 
               rows={2}
               value={missingRequirements}
               onChange={(e) => setMissingRequirements(e.target.value)}
-              className="w-full bg-black/40 border border-amber-500/20 focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 rounded-xl p-4 text-white placeholder-amber-700/50 resize-none outline-none"
+              className="w-full bg-black/40 border border-amber-500/20 focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 rounded-xl p-4 text-white placeholder-amber-700/50 resize-y overflow-y-auto min-h-[80px] max-h-[300px] outline-none"
               placeholder="Explain any extra requirements or unlisted forms here..."
             />
           </div>
         </motion.div>
 
         {/* 4. FILE UPLOAD ZONE */}
-        <motion.div variants={itemVariants} className="pt-4">
-          <div className="bg-white/5 border border-dashed border-white/20 hover:border-indigo-400 transition-colors rounded-2xl p-6 text-center group">
+        <motion.div variants={itemVariants} className="pt-4 w-full">
+          <div className="bg-white/5 border border-dashed border-white/20 hover:border-indigo-400 transition-colors rounded-2xl p-6 text-center group w-full">
             <input 
               type="file" 
               multiple 
@@ -187,15 +192,15 @@ export default function Step2Questions({ roleData }: { roleData: any }) {
 
             {/* List of uploaded files */}
             {attachments.length > 0 && (
-              <div className="mt-6 space-y-2 text-left">
+              <div className="mt-6 space-y-2 text-left w-full">
                 {attachments.map((file, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 bg-black/40 rounded-xl border border-white/5">
-                    <div className="flex items-center gap-3 overflow-hidden">
+                  <div key={idx} className="flex items-center justify-between p-3 bg-black/40 rounded-xl border border-white/5 w-full">
+                    <div className="flex items-center gap-3 overflow-hidden pr-2">
                       <FileIcon className="w-5 h-5 text-indigo-400 flex-shrink-0" />
                       <span className="text-sm text-gray-200 truncate">{file.name}</span>
                       <span className="text-xs text-gray-500 flex-shrink-0">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
                     </div>
-                    <button onClick={() => removeAttachment(idx)} className="p-1.5 hover:bg-red-500/20 text-gray-400 hover:text-red-400 rounded-lg transition-colors">
+                    <button onClick={() => removeAttachment(idx)} className="p-1.5 hover:bg-red-500/20 text-gray-400 hover:text-red-400 rounded-lg transition-colors flex-shrink-0">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
@@ -207,14 +212,14 @@ export default function Step2Questions({ roleData }: { roleData: any }) {
       </motion.div>
 
       {/* 5. NAVIGATION FOOTER */}
-      <div className="mt-auto pt-6 border-t border-white/10 flex justify-between items-center z-10 bg-transparent">
-        <button onClick={() => setStep(1)} className="flex items-center px-6 py-3 text-gray-400 hover:text-white rounded-xl transition-all">
+      <div className="mt-auto pt-6 border-t border-white/10 flex justify-between items-center z-10 bg-transparent w-full">
+        <button onClick={() => setStep(1)} className="flex items-center px-4 md:px-6 py-3 text-gray-400 hover:text-white rounded-xl transition-all">
           <ArrowLeft className="mr-2 w-5 h-5" /> Back
         </button>
         <button
           disabled={!isReady}
           onClick={() => setStep(3)}
-          className={`flex items-center px-8 py-3.5 rounded-xl font-bold transition-all ${
+          className={`flex items-center px-6 md:px-8 py-3.5 rounded-xl font-bold transition-all ${
             isReady ? 'bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 text-white shadow-lg' : 'bg-white/5 text-gray-500 cursor-not-allowed'
           }`}
         >
