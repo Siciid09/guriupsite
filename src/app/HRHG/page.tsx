@@ -8,12 +8,12 @@ import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 
 // Imports from your lib files
 import { allRoles } from '@/app/lib/questionsData';
-import { useFormStore } from '@/app//lib/store';
+import { useFormStore } from '@/app/lib/store'; // Fixed double slash here
 
 // Imports for your step components (ensure they are in the ./components/ folder)
 import Step1BasicInfo from '../../components/Step1BasicInfo';
-import Step2Questions from '../..//components/Step2Questions';
-import Step3Preview from '../..//components/Step3Preview';
+import Step2Questions from '../../components/Step2Questions'; // Fixed double slash here
+import Step3Preview from '../../components/Step3Preview'; // Fixed double slash here
 
 // Main content component that uses URL parameters to switch views (Tabs)
 function SystemRequirementsManager() {
@@ -46,18 +46,19 @@ function SystemRequirementsManager() {
     return (
       <motion.div 
         initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
-        className="w-full max-w-4xl z-10 mx-auto"
+        // FIX: Removed max-w-4xl so it takes the full width available
+        className="w-full z-10 flex flex-col flex-1" 
       >
         <button 
           onClick={handleClearRole} 
-          className="inline-flex items-center text-gray-400 hover:text-white mb-8 transition-colors"
+          className="inline-flex items-center text-gray-400 hover:text-white mb-8 transition-colors self-start"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Departments
         </button>
 
         {/* Header Section */}
-        <div className="glass-panel rounded-3xl p-8 mb-8 flex items-center justify-between">
+        <div className="glass-panel rounded-3xl p-8 mb-8 flex items-center justify-between w-full">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-indigo-500/20 rounded-xl">
               <roleData.icon className="w-8 h-8 text-indigo-300" />
@@ -80,7 +81,7 @@ function SystemRequirementsManager() {
         </div>
 
         {/* Multi-Step Form Container */}
-        <div className="glass-panel rounded-3xl overflow-hidden relative min-h-[500px]">
+        <div className="glass-panel rounded-3xl overflow-hidden relative min-h-[500px] w-full flex-1 flex flex-col">
           <AnimatePresence mode="wait">
             {step === 1 && (
               <StepWrapper key="step1">
@@ -126,7 +127,7 @@ function SystemRequirementsManager() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 w-full max-w-7xl">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 w-full max-w-full">
         {allRoles.map((role, index) => {
           const Icon = role.icon;
           return (
@@ -167,7 +168,7 @@ function StepWrapper({ children }: { children: React.ReactNode }) {
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
       transition={{ duration: 0.3 }}
-      className="p-8 h-full"
+      className="p-4 md:p-8 h-full w-full flex flex-col flex-1"
     >
       {children}
     </motion.div>
@@ -177,7 +178,7 @@ function StepWrapper({ children }: { children: React.ReactNode }) {
 // The Success Screen
 function SuccessStep({ onReturn }: { onReturn: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center h-full py-16 text-center">
+    <div className="flex flex-col items-center justify-center h-full py-16 text-center w-full">
       <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", bounce: 0.5 }}>
         <CheckCircle2 className="w-24 h-24 text-green-400 mb-6 drop-shadow-[0_0_15px_rgba(74,222,128,0.5)]" />
       </motion.div>
@@ -200,14 +201,15 @@ function SuccessStep({ onReturn }: { onReturn: () => void }) {
 // ==========================================
 export default function Page() {
   return (
-    <main className="min-h-screen p-6 md:p-12 lg:p-24 flex flex-col items-center relative overflow-hidden">
+    // FIX: Reduced lg:p-24 to lg:p-8 so it doesn't compress the main container on large screens
+    <main className="min-h-screen p-4 md:p-8 lg:p-8 flex flex-col items-center relative overflow-hidden w-full max-w-[1920px] mx-auto">
       {/* Universal Background Orbs */}
       <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-600/30 rounded-full blur-[120px] pointer-events-none" />
       <div className="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-600/20 rounded-full blur-[120px] pointer-events-none" />
       
       {/* Suspense is required by Next.js when using useSearchParams() */}
       <Suspense fallback={
-        <div className="h-screen flex items-center justify-center">
+        <div className="h-screen flex items-center justify-center w-full">
           <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
         </div>
       }>

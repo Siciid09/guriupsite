@@ -60,10 +60,10 @@ export default function Step2Questions({ roleData }: { roleData: any }) {
   };
 
   return (
-    <div className="flex flex-col h-full relative w-full">
+    <div className="flex flex-col h-full relative w-full max-w-full flex-1">
       
       {/* 1. STICKY HEADER & PROGRESS */}
-      <div className="sticky top-0 z-20 bg-[#0f172a]/90 backdrop-blur-xl pb-4 border-b border-white/10 mb-6 pt-2 rounded-t-3xl -mx-2 px-2 w-full">
+      <div className="sticky top-0 z-20 bg-[#0f172a]/90 backdrop-blur-xl pb-4 border-b border-white/10 mb-6 pt-2 rounded-t-3xl w-full">
         <div className="flex flex-col md:flex-row md:justify-between md:items-end gap-4 mb-4">
           <div className="w-full">
             <h2 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -92,7 +92,6 @@ export default function Step2Questions({ roleData }: { roleData: any }) {
       </div>
 
       {/* 2. SCROLLABLE CONTENT */}
-      {/* ADDED: overscroll-contain to stop scroll chaining */}
       <motion.div 
         variants={containerVariants} 
         initial="hidden" 
@@ -123,7 +122,7 @@ export default function Step2Questions({ roleData }: { roleData: any }) {
                   const isAnswered = (answers[qData.original] || '').trim().length > 0;
               return (
                 <motion.div key={idx} variants={itemVariants} className="relative w-full">
-                  <div className={`transition-all duration-300 p-4 sm:p-5 rounded-2xl border w-full ${
+                  <div className={`transition-all duration-300 p-4 sm:p-5 rounded-2xl border w-full flex flex-col ${
                     isAnswered ? 'bg-indigo-900/10 border-indigo-500/40 shadow-[0_0_15px_rgba(99,102,241,0.1)]' : 'bg-white/5 border-white/10 hover:border-white/20'
                   }`}>
                     <label className="flex items-start gap-3 text-base md:text-lg font-medium text-gray-200 mb-2 cursor-pointer w-full">
@@ -135,11 +134,13 @@ export default function Step2Questions({ roleData }: { roleData: any }) {
                       <span className={`flex-1 ${isAnswered ? 'text-white' : ''}`}>{qData.display}</span>
                     </label>
                     <div className="w-full mt-3 sm:pl-10">
-                      {/* ADDED: overscroll-contain */}
+                      {/* Added stopPropagation to prevent parent scroll when scrolling textarea */}
                       <textarea 
                         rows={3}
                         value={answers[qData.original] || ''}
                         onChange={(e) => setAnswer(qData.original, e.target.value)}
+                        onWheel={(e) => e.stopPropagation()}
+                        onTouchMove={(e) => e.stopPropagation()}
                         className="w-full bg-black/40 border border-white/10 focus:border-indigo-400 focus:bg-[#131b2f] focus:ring-2 focus:ring-indigo-500/20 rounded-xl p-4 text-white placeholder-gray-500 resize-y overflow-y-auto overscroll-contain min-h-[100px] max-h-[400px] transition-all outline-none"
                         placeholder="Type your workflow details here..."
                       />
@@ -155,16 +156,18 @@ export default function Step2Questions({ roleData }: { roleData: any }) {
 
         {/* 3. MISSING REQUIREMENTS */}
         <motion.div variants={itemVariants} className="pt-8 border-t border-white/10 w-full">
-          <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/5 p-4 sm:p-6 rounded-2xl border border-amber-500/20 group hover:border-amber-500/40 transition-all w-full">
+          <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/5 p-4 sm:p-6 rounded-2xl border border-amber-500/20 group hover:border-amber-500/40 transition-all w-full flex flex-col">
             <div className="flex items-center gap-3 mb-4 w-full">
               <div className="p-2 bg-amber-500/20 rounded-lg text-amber-400 flex-shrink-0"><AlertCircle className="w-5 h-5" /></div>
               <label className="text-base sm:text-lg font-medium text-amber-100 flex-1">Anything missing? (Optional)</label>
             </div>
-            {/* ADDED: overscroll-contain */}
+            {/* Added stopPropagation to prevent parent scroll when scrolling textarea */}
             <textarea 
               rows={2}
               value={missingRequirements}
               onChange={(e) => setMissingRequirements(e.target.value)}
+              onWheel={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
               className="w-full bg-black/40 border border-amber-500/20 focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 rounded-xl p-4 text-white placeholder-amber-700/50 resize-y overflow-y-auto overscroll-contain min-h-[80px] max-h-[300px] outline-none"
               placeholder="Explain any extra requirements or unlisted forms here..."
             />
@@ -173,7 +176,7 @@ export default function Step2Questions({ roleData }: { roleData: any }) {
 
         {/* 4. FILE UPLOAD ZONE */}
         <motion.div variants={itemVariants} className="pt-4 w-full">
-          <div className="bg-white/5 border border-dashed border-white/20 hover:border-indigo-400 transition-colors rounded-2xl p-6 text-center group w-full">
+          <div className="bg-white/5 border border-dashed border-white/20 hover:border-indigo-400 transition-colors rounded-2xl p-6 text-center group w-full flex flex-col items-center justify-center">
             <input 
               type="file" 
               multiple 
