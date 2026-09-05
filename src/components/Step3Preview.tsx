@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useFormStore } from '@/app/lib/store'; 
 import { Send, Edit3, AlertCircle, Loader2, User, Phone, Briefcase, FileText, ShieldCheck } from 'lucide-react';
 import { motion, Variants } from 'framer-motion'; 
-
+ 
 // FIREBASE IMPORTS
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '@/app/lib/firebase'; // Adjust path if your firebase.ts is elsewhere
