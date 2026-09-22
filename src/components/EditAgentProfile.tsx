@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 
 import { supabase } from '@/app/lib/supabase';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 /* ============================================================================
    TYPES
@@ -40,8 +41,7 @@ export type AgentPlanTier =
   | 'free'
   | 'pro'
   | 'premium'
-  | 'agent_pro'
-  | string;
+  | 'agent_pro';
 
 export type BusinessHoursDay = {
   enabled: boolean;
@@ -248,6 +248,16 @@ function stringToArray(value: string): string[] {
     .filter(Boolean);
 }
 
+function normalizePlanTier(value: unknown): AgentPlanTier {
+  const tier = stringValue(value).toLowerCase().trim();
+
+  if (tier === 'pro') return 'pro';
+  if (tier === 'premium') return 'premium';
+  if (tier === 'agent_pro' || tier === 'agentpro') return 'agent_pro';
+
+  return 'free';
+}
+
 function normalizeBusinessHours(
   value: unknown,
 ): AgentBusinessHours {
@@ -320,7 +330,7 @@ function normalizeProfile(
       'Real Estate Agent',
 
     planTier:
-      stringValue(profile.planTier) || 'free',
+      normalizePlanTier(profile.planTier),
 
     isVerified:
       booleanValue(profile.isVerified) ||
@@ -494,6 +504,8 @@ export default function EditAgentProfile({
 
   const [saving, setSaving] = useState(false);
 
+  const [uploadingPhoto, setUploadingPhoto] = useState<'profile' | 'cover' | null>(null);
+
   const [error, setError] = useState('');
 
   const [success, setSuccess] = useState('');
@@ -546,6 +558,109 @@ export default function EditAgentProfile({
         },
       },
     }));
+  };
+
+  const uploadAgentPhoto = async (
+    file: File,
+    type: 'profile' | 'cover',
+  ) => {
+    setError('');
+    setSuccess('');
+
+    if (!form.uid) {
+      setError('Agent account ID is missing. Please refresh the page and try again.');
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setError('Please select a valid image file.');
+      return;
+    }
+
+    const maxSize = type === 'profile' ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
+
+    if (file.size > maxSize) {
+      setError(
+        type === 'profile'
+          ? 'Profile photo must be 5MB or smaller.'
+          : 'Cover photo must be 10MB or smaller.',
+      );
+      return;
+    }
+
+    setUploadingPhoto(type);
+
+    try {
+      const storage = getStorage();
+      const extension =
+        file.name.split('.').pop()?.toLowerCase() || 'jpg';
+
+      const safeExtension = extension.replace(/[^a-z0-9]/g, '') || 'jpg';
+      const fileName = `${type}-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}.${safeExtension}`;
+
+      const storagePath = `agent-profiles/${form.uid}/${fileName}`;
+      const storageRef = ref(storage, storagePath);
+
+      await uploadBytes(storageRef, file, {
+        contentType: file.type,
+        cacheControl: 'public,max-age=31536000,immutable',
+      });
+
+      const downloadUrl = await getDownloadURL(storageRef);
+
+      if (type === 'profile') {
+        updateField('profileImageUrl', downloadUrl);
+
+        // Keep the existing agent profile record synchronized immediately.
+        const { error: profileImageError } = await supabase
+          .from('agents')
+          .update({
+            profileImageUrl: downloadUrl,
+            photoUrl: downloadUrl,
+            lastUpdated: new Date().toISOString(),
+          })
+          .eq('_id', form.uid);
+
+        if (profileImageError) {
+          throw profileImageError;
+        }
+
+        setSuccess('Profile photo uploaded successfully.');
+      } else {
+        updateField('coverPhoto', downloadUrl);
+
+        const { error: coverImageError } = await supabase
+          .from('agents')
+          .update({
+            coverPhoto: downloadUrl,
+            lastUpdated: new Date().toISOString(),
+          })
+          .eq('_id', form.uid);
+
+        if (coverImageError) {
+          throw coverImageError;
+        }
+
+        setSuccess('Cover photo uploaded successfully.');
+      }
+    } catch (uploadError) {
+      console.error('Agent photo upload failed:', uploadError);
+
+      const message =
+        uploadError instanceof Error
+          ? uploadError.message
+          : 'Failed to upload photo.';
+
+      setError(
+        message.includes('storage')
+          ? 'Photo upload failed. Please check Firebase Storage configuration and rules.'
+          : message,
+      );
+    } finally {
+      setUploadingPhoto(null);
+    }
   };
 
   const validateForm = (): string | null => {
@@ -1142,31 +1257,37 @@ export default function EditAgentProfile({
                   ]}
                 />
 
-                <div className="md:col-span-2">
-                  <Field
-                    label="Profile Photo URL"
-                    value={form.profileImageUrl}
-                    onChange={(value) =>
-                      updateField(
-                        'profileImageUrl',
-                        value,
-                      )
+                <div className="md:col-span-2 grid grid-cols-1 gap-6 lg:grid-cols-2">
+                  <PhotoUploadCard
+                    label="Profile Photo"
+                    description="Upload the main photo customers see on your agent profile."
+                    imageUrl={form.profileImageUrl}
+                    uploading={uploadingPhoto === 'profile'}
+                    accept="image/jpeg,image/png,image/webp,image/avif"
+                    aspectClass="aspect-square"
+                    onFileSelected={(file) =>
+                      uploadAgentPhoto(file, 'profile')
                     }
-                    placeholder="https://..."
+                    onRemove={() => {
+                      updateField('profileImageUrl', '');
+                      setSuccess('');
+                    }}
                   />
-                </div>
 
-                <div className="md:col-span-2">
-                  <Field
-                    label="Cover Photo URL"
-                    value={form.coverPhoto}
-                    onChange={(value) =>
-                      updateField(
-                        'coverPhoto',
-                        value,
-                      )
+                  <PhotoUploadCard
+                    label="Cover Photo"
+                    description="Upload a wide professional image for your profile header."
+                    imageUrl={form.coverPhoto}
+                    uploading={uploadingPhoto === 'cover'}
+                    accept="image/jpeg,image/png,image/webp,image/avif"
+                    aspectClass="aspect-[16/6]"
+                    onFileSelected={(file) =>
+                      uploadAgentPhoto(file, 'cover')
                     }
-                    placeholder="https://..."
+                    onRemove={() => {
+                      updateField('coverPhoto', '');
+                      setSuccess('');
+                    }}
                   />
                 </div>
               </div>
@@ -1949,6 +2070,143 @@ function SectionCard({
         {children}
       </div>
     </section>
+  );
+}
+
+/* ============================================================================
+   PHOTO UPLOAD
+============================================================================ */
+
+function PhotoUploadCard({
+  label,
+  description,
+  imageUrl,
+  uploading,
+  accept,
+  aspectClass,
+  onFileSelected,
+  onRemove,
+}: {
+  label: string;
+  description: string;
+  imageUrl: string;
+  uploading: boolean;
+  accept: string;
+  aspectClass: string;
+  onFileSelected: (file: File) => void;
+  onRemove: () => void;
+}) {
+  const inputId = `agent-photo-${label.toLowerCase().replace(/\s+/g, '-')}`;
+
+  return (
+    <div className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white">
+      <div className="border-b border-slate-100 bg-slate-50/70 p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-black text-slate-950">
+              {label}
+            </p>
+            <p className="mt-1 text-xs font-medium leading-5 text-slate-500">
+              {description}
+            </p>
+          </div>
+
+          <div className="rounded-xl bg-blue-50 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-widest text-[#0065EB]">
+            Firebase
+          </div>
+        </div>
+      </div>
+
+      <div className="p-5">
+        <div
+          className={`relative ${aspectClass} overflow-hidden rounded-2xl border border-dashed border-slate-200 bg-slate-50`}
+        >
+          {imageUrl ? (
+            <img
+              src={imageUrl}
+              alt={label}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm">
+                <User size={22} />
+              </div>
+              <p className="text-sm font-black text-slate-700">
+                No {label.toLowerCase()} uploaded
+              </p>
+              <p className="mt-1 text-xs font-medium text-slate-400">
+                JPG, PNG, WEBP or AVIF
+              </p>
+            </div>
+          )}
+
+          {uploading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm">
+              <div className="flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-xs font-black text-slate-900 shadow-xl">
+                <Loader2 size={16} className="animate-spin text-[#0065EB]" />
+                Uploading...
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          <label
+            htmlFor={inputId}
+            className={`flex flex-1 cursor-pointer items-center justify-center rounded-xl bg-[#0065EB] px-4 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-blue-500/20 transition hover:bg-[#0052C1] ${
+              uploading ? 'pointer-events-none opacity-60' : ''
+            }`}
+          >
+            {uploading ? (
+              <>
+                <Loader2 size={15} className="mr-2 animate-spin" />
+                Uploading
+              </>
+            ) : (
+              <>
+                <Store size={15} className="mr-2" />
+                Upload Photo
+              </>
+            )}
+          </label>
+
+          <input
+            id={inputId}
+            type="file"
+            accept={accept}
+            className="hidden"
+            disabled={uploading}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+
+              if (file) {
+                onFileSelected(file);
+              }
+
+              event.currentTarget.value = '';
+            }}
+          />
+
+          {imageUrl && (
+            <button
+              type="button"
+              onClick={onRemove}
+              disabled={uploading}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-black uppercase tracking-widest text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Remove
+            </button>
+          )}
+        </div>
+
+        <p className="mt-3 text-[10px] font-semibold leading-5 text-slate-400">
+          {label === 'Profile Photo'
+            ? 'Maximum 5MB. The uploaded Firebase URL is saved to your agent profile.'
+            : 'Maximum 10MB. The uploaded Firebase URL is saved to your agent profile.'}
+        </p>
+      </div>
+    </div>
   );
 }
 
