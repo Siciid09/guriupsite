@@ -618,7 +618,6 @@ export default function EditAgentProfile({
           .from('agents')
           .update({
             profileImageUrl: downloadUrl,
-            photoUrl: downloadUrl,
             lastUpdated: new Date().toISOString(),
           })
           .eq('_id', form.uid);
@@ -701,136 +700,26 @@ export default function EditAgentProfile({
 
   const buildDatabasePayload = () => {
     /*
-      These are real database values generated directly
-      from the form. Nothing is hardcoded as an agent value.
+      Only send columns that are present in the current `agents`
+      database structure. The UI can still contain the additional
+      profile fields, but unsupported columns must not be sent to
+      Supabase because PostgREST will reject the request.
     */
-
     return {
       name: form.name.trim(),
-
       ownerName: form.name.trim(),
-
-      displayName: form.name.trim(),
-
-      agencyName:
-        form.agencyName.trim(),
-
-      email:
-        form.email.trim(),
-
-      phone:
-        form.phone.trim(),
-
-      whatsappNumber:
-        form.whatsappNumber.trim(),
-
-      secondaryPhone:
-        form.secondaryPhone.trim(),
-
-      professionalTitle:
-        form.professionalTitle.trim(),
-
-      accountType:
-        form.accountType.trim(),
-
-      website:
-        form.website.trim(),
-
-      country:
-        form.country.trim(),
-
-      region:
-        form.region.trim(),
-
-      city:
-        form.city.trim(),
-
-      district:
-        form.district.trim(),
-
-      officeAddress:
-        form.officeAddress.trim(),
-
-      address:
-        form.officeAddress.trim(),
-
-      bio:
-        form.bio.trim(),
-
-      yearsOfExperience:
-        form.yearsOfExperience.trim(),
-
-      specialties:
-        stringToArray(form.specialties),
-
-      services:
-        stringToArray(form.services),
-
-      languages:
-        stringToArray(form.languages),
-
-      serviceAreas:
-        stringToArray(form.serviceAreas),
-
-      responseTime:
-        form.responseTime,
-
-      availableForTours:
-        form.availableForTours,
-
-      acceptingClients:
-        form.acceptingClients,
-
-      licenseNumber:
-        form.licenseNumber.trim(),
-
-      businessRegistrationNumber:
-        form.businessRegistrationNumber.trim(),
-
-      certifications:
-        stringToArray(form.certifications),
-
-      facebook:
-        form.facebook.trim(),
-
-      instagram:
-        form.instagram.trim(),
-
-      tiktok:
-        form.tiktok.trim(),
-
-      linkedin:
-        form.linkedin.trim(),
-
-      businessHours:
-        form.businessHours,
-
-      showPhone:
-        form.showPhone,
-
-      showWhatsApp:
-        form.showWhatsApp,
-
-      showEmail:
-        form.showEmail,
-
-      showAddress:
-        form.showAddress,
-
-      showBusinessHours:
-        form.showBusinessHours,
-
-      profileImageUrl:
-        form.profileImageUrl.trim(),
-
-      photoUrl:
-        form.profileImageUrl.trim(),
-
-      coverPhoto:
-        form.coverPhoto.trim(),
-
-      lastUpdated:
-        new Date().toISOString(),
+      agencyName: form.agencyName.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      whatsappNumber: form.whatsappNumber.trim(),
+      city: form.city.trim(),
+      bio: form.bio.trim(),
+      specialties: stringToArray(form.specialties),
+      languages: stringToArray(form.languages),
+      licenseNumber: form.licenseNumber.trim(),
+      profileImageUrl: form.profileImageUrl.trim(),
+      coverPhoto: form.coverPhoto.trim(),
+      lastUpdated: new Date().toISOString(),
     };
   };
 
