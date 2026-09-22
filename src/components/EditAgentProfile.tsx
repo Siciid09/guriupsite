@@ -723,78 +723,76 @@ export default function EditAgentProfile({
     };
   };
 
-  const handleSubmit = async (
-    event: FormEvent<HTMLFormElement>,
-  ) => {
-    event.preventDefault();
+const handleSubmit = async (
+  event: FormEvent<HTMLFormElement>,
+) => {
+  event.preventDefault();
 
-    setError('');
+  setError('');
+  setSuccess('');
 
-    setSuccess('');
+  const validationError =
+    validateForm();
 
-    const validationError =
-      validateForm();
+  if (validationError) {
+    setError(validationError);
 
-    if (validationError) {
-      setError(validationError);
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    });
 
-      window.scrollTo({
-        top: 0,
-        behavior: 'smooth',
-      });
+    return;
+  }
 
-      return;
+  setSaving(true);
+
+  try {
+    const payload =
+      buildDatabasePayload();
+
+    const { error: updateError } = await supabase
+      .from('agents')
+      .update(payload)
+      .eq('_id', form.uid);
+
+    if (updateError) {
+      throw updateError;
     }
 
-    setSaving(true);
+    const updatedProfile = normalizeProfile({
+      ...form,
+      uid: form.uid,
+    });
 
-    try {
-      const payload =
-        buildDatabasePayload();
+    setForm(updatedProfile);
 
-const { error: updateError } = await supabase
-  .from('agents')
-  .update(payload)
-  .eq('_id', form.uid);
+    setSuccess(
+      'Your agent profile has been updated successfully.',
+    );
 
-if (updateError) {
-  throw updateError;
-}
+    onSaved?.(updatedProfile);
 
-const updatedProfile = normalizeProfile({
-  ...form,
-  ...payload,
-  uid: form.uid,
-});
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    });
+  } catch (saveError) {
+    console.error(
+      'Agent profile update failed:',
+      saveError,
+    );
 
-setForm(updatedProfile);
+    const message =
+      saveError instanceof Error
+        ? saveError.message
+        : 'Failed to save agent profile.';
 
-      setSuccess(
-        'Your agent profile has been updated successfully.',
-      );
-
-      onSaved?.(updatedProfile);
-
-      window.scrollTo({
-        top: 0,
-        behavior: 'smooth',
-      });
-    } catch (saveError) {
-      console.error(
-        'Agent profile update failed:',
-        saveError,
-      );
-
-      const message =
-        saveError instanceof Error
-          ? saveError.message
-          : 'Failed to save agent profile.';
-
-      setError(message);
-    } finally {
-      setSaving(false);
-    }
-  };
+    setError(message);
+  } finally {
+    setSaving(false);
+  }
+};
 
   return (
     <div
