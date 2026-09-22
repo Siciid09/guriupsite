@@ -24,6 +24,7 @@ import AgentPropertyManagement from '../../../../components/AgentPropertyManagem
 import TenantManagement from '../../../../components/TenantManagement';
 import SharedChatComponent from '@/components/sharedchat'; // <-- ADDED
 import { supabase } from '@/app/lib/supabase';
+import EditAgentProfile from '@/components/EditAgentProfile';
 
 // ============================================================================
 // TYPES
@@ -655,79 +656,21 @@ function DashboardContent() {
           )}
           {/* --- TAB: SETTINGS --- */}
           {activeTab === 'settings' && (
-             <motion.div key="settings" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="max-w-4xl mx-auto space-y-8">
-                <h1 className="text-3xl font-black tracking-tight">Account Settings</h1>
-                <div className="bg-white p-6 md:p-10 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                   <div className="flex items-center gap-6 md:gap-8 mb-10 border-b border-slate-50 pb-8">
-                      <div className="w-20 h-20 md:w-24 md:h-24 bg-slate-100 rounded-full relative overflow-hidden group border-4 border-white shadow-lg shrink-0">
-                        {profile?.profileImageUrl ? <img src={profile.profileImageUrl} className="w-full h-full object-cover" /> : <UserIcon size={40} className="text-slate-300 mx-auto mt-6" />}
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity cursor-pointer"><Camera size={20}/></div>
-                      </div>
-                      <div>
-                         <div className="flex items-center gap-3 mb-1">
-                           <h3 className="text-xl md:text-2xl font-black text-slate-900">{profile?.name}</h3>
-                           {profile?.planTier !== 'free' ? (
-                             <span className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest shadow-sm">Pro</span>
-                           ) : (
-                             <span className="bg-slate-100 text-slate-500 px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest border border-slate-200">Free</span>
-                           )}
-                         </div>
-                         <p className="text-slate-500 font-medium text-sm">Update your public information.</p>
-                         {profile?.isVerified && <span className="inline-flex items-center gap-1.5 text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full uppercase mt-2">✓ Verified Entity</span>}
-                      </div>
-                   </div>
-                   
-                   <form onSubmit={handleSaveProfile} className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Display Name *</label>
-                          <input required type="text" value={profileForm.name || ''} onChange={e => setProfileForm({...profileForm, name: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold text-sm outline-none focus:border-[#0065eb]" />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Agency / Business Name</label>
-                          <input type="text" value={profileForm.agencyName || ''} onChange={e => setProfileForm({...profileForm, agencyName: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold text-sm outline-none focus:border-[#0065eb]" />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Email Address</label>
-                          <input type="email" value={profileForm.email || ''} onChange={e => setProfileForm({...profileForm, email: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold text-sm outline-none focus:border-[#0065eb]" />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Phone Number</label>
-                          <input type="tel" value={profileForm.phone || ''} onChange={e => setProfileForm({...profileForm, phone: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold text-sm outline-none focus:border-[#0065eb]" />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">WhatsApp Number</label>
-                          <input type="tel" value={profileForm.whatsappNumber || ''} onChange={e => setProfileForm({...profileForm, whatsappNumber: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold text-sm outline-none focus:border-[#0065eb]" placeholder="e.g. 25263..." />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">City / Location</label>
-                          <input type="text" value={profileForm.city || ''} onChange={e => setProfileForm({...profileForm, city: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold text-sm outline-none focus:border-[#0065eb]" />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Agent Bio / Description</label>
-                        <textarea rows={4} value={profileForm.bio || ''} onChange={e => setProfileForm({...profileForm, bio: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold text-sm outline-none focus:border-[#0065eb] resize-none" placeholder="Tell clients about your experience..." />
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Specialties (Comma Separated)</label>
-                          <input type="text" value={profileForm.specialties || ''} onChange={e => setProfileForm({...profileForm, specialties: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold text-sm outline-none focus:border-[#0065eb]" placeholder="e.g. Residential, Commercial" />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Languages (Comma Separated)</label>
-                          <input type="text" value={profileForm.languages || ''} onChange={e => setProfileForm({...profileForm, languages: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 font-bold text-sm outline-none focus:border-[#0065eb]" placeholder="e.g. Somali, English, Arabic" />
-                        </div>
-                      </div>
-
-                      <div className="flex justify-end pt-4 border-t border-slate-100">
-                         <button type="submit" disabled={isSavingProfile} className="bg-[#0065eb] hover:bg-[#0052c1] disabled:opacity-50 text-white px-10 py-4 rounded-xl font-black text-sm uppercase tracking-widest shadow-lg shadow-blue-500/20 transition-all flex items-center gap-2">
-                           {isSavingProfile ? <Loader2 size={18} className="animate-spin" /> : 'Save Profile Changes'}
-                         </button>
-                      </div>
-                   </form>
-                </div>
+             <motion.div
+               key="settings"
+               initial={{opacity:0, y:10}}
+               animate={{opacity:1, y:0}}
+               exit={{opacity:0}}
+             >
+               {profile && (
+                 <EditAgentProfile
+                   profile={profile}
+                   onSaved={(updatedProfile) => {
+                     setProfile(updatedProfile);
+                     setProfileForm(updatedProfile);
+                   }}
+                 />
+               )}
              </motion.div>
           )}
 
