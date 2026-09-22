@@ -752,31 +752,22 @@ export default function EditAgentProfile({
       const payload =
         buildDatabasePayload();
 
-      const { data, error: updateError } =
-        await supabase
-          .from('agents')
-          .update(payload)
-          .eq('_id', form.uid)
-          .select('*')
-          .single();
+const { error: updateError } = await supabase
+  .from('agents')
+  .update(payload)
+  .eq('_id', form.uid);
 
-      if (updateError) {
-        throw updateError;
-      }
+if (updateError) {
+  throw updateError;
+}
 
-      if (!data) {
-        throw new Error(
-          'Profile was not returned after saving.',
-        );
-      }
+const updatedProfile = normalizeProfile({
+  ...form,
+  ...payload,
+  uid: form.uid,
+});
 
-      const updatedProfile =
-        normalizeProfile({
-          ...(data as Partial<AgentProfileData>),
-          uid: form.uid,
-        });
-
-      setForm(updatedProfile);
+setForm(updatedProfile);
 
       setSuccess(
         'Your agent profile has been updated successfully.',
