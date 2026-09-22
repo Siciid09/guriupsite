@@ -665,10 +665,10 @@ function DashboardContent() {
                {profile && (
                  <EditAgentProfile
                    profile={profile}
-                   onSaved={(updatedProfile) => {
-                     setProfile(updatedProfile);
-                     setProfileForm(updatedProfile);
-                   }}
+                 onSaved={(updatedProfile) => {
+  setProfile(updatedProfile as AgentProfile);
+  setProfileForm(updatedProfile);
+}}
                  />
                )}
              </motion.div>
