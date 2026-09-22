@@ -667,7 +667,7 @@ function DashboardContent() {
                    profile={profile}
                  onSaved={(updatedProfile) => {
   setProfile(updatedProfile as AgentProfile);
-  setProfileForm(updatedProfile);
+setProfileForm(updatedProfile as Partial<AgentProfile>);
 }}
                  />
                )}
