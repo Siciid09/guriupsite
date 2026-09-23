@@ -751,14 +751,22 @@ const handleSubmit = async (
     const payload =
       buildDatabasePayload();
 
-    const { error: updateError } = await supabase
-      .from('agents')
-      .update(payload)
-      .eq('_id', form.uid);
+  const { error: updateError, count } = await supabase
+  .from('agents')
+  .update(payload, {
+    count: 'exact',
+  })
+  .eq('_id', form.uid);
 
-    if (updateError) {
-      throw updateError;
-    }
+if (updateError) {
+  throw updateError;
+}
+
+if (count !== 1) {
+  throw new Error(
+    'Profile was not saved. No agent record was updated. Please check your permissions or agent ID.'
+  );
+}
 
     const updatedProfile = normalizeProfile({
       ...form,
